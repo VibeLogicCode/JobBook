@@ -41,7 +41,7 @@ The reasoning: Power Apps on a free license cannot generate branded PDFs, cannot
 
 One system is better. The client owns hardware. The application is built as a self-hosted TypeScript web app; SharePoint is demoted from datastore to backup target and accountant handoff, which is what it is genuinely good at.
 
-**Accepted cost of this decision:** uptime and maintenance move from Microsoft to us. Power loss, ISP outage, disk failure, unattended reboots, and dependency CVEs become our responsibility, and the client cannot resolve any of them. Mitigations are containerization (section 3.4) and backup (section 7), but the bus-factor risk is real and is accepted knowingly.
+**Accepted cost of this decision:** uptime and maintenance move from Microsoft to us. Power loss, ISP outage, disk failure, unattended reboots, and dependency CVEs become our responsibility, and the client cannot resolve any of them. Mitigations are containerization (section 3.4) and backup (section 8), but the bus-factor risk is real and is accepted knowingly.
 
 ### 3.2 Stack
 
@@ -288,14 +288,14 @@ These are built in from Phase 1 because retrofitting them is expensive.
 
 Commercial tenant improvement work, which the site advertises, does not price by square foot. Phase 1 supports it through flat and hourly line types assembled by trade. A dedicated commercial bid mode is deferred until the owner confirms he wants one.
 
-## 7. SharePoint mirror, sync, and recovery
+## 7. SharePoint mirror and sync
 
 The client's records are tax records. SharePoint is not a dump target — it holds a structured, queryable replica of the database with matching tables and column names.
 
 ### 7.1 What the mirror is for
 
 - **Readable fallback.** If the mini PC dies on a Friday, the owner still opens SharePoint and sees his quotes, customers, and projects in a familiar UI. Not a database file he cannot open.
-- **Recovery source.** The mirror is complete enough to rebuild the entire system onto new hardware. See section 7.7.
+- **Recovery source.** The mirror is complete enough to rebuild the entire system onto new hardware. See section 8.4.
 - **Accountant handoff.** Year-end becomes a shared folder and a list view, not an export request.
 - **Reporting.** Power BI Desktop and Excel both connect to SharePoint lists natively, at no additional license cost.
 - **Exit path.** Structured data in his own tenant, in his own format. No lock-in to a self-hosted app that one person maintains.
@@ -316,7 +316,7 @@ Document libraries are the exception — PDFs, receipts, and exports are written
 
 Runs inside the app container on a schedule, default **every 1 hour**, configurable, plus an on-demand trigger in the admin UI.
 
-The interval is the recovery point objective. Since the mirror is a recovery source (section 7.7), a four-hour interval means losing up to four hours of quoting work when hardware fails. Hourly costs almost nothing — a working day changes tens of rows, far below any throttling concern — so hourly is the default.
+The interval is the recovery point objective. Since the mirror is a recovery source (section 8.4), a four-hour interval means losing up to four hours of quoting work when hardware fails. Hourly costs almost nothing — a working day changes tens of rows, far below any throttling concern — so hourly is the default.
 
 Per table:
 
@@ -406,18 +406,58 @@ The client secret lives in a Docker secret, never in the image and never in git,
 
 > The exact PnP cmdlet names for app registration differ across PnP.PowerShell major versions. They are verified against the installed module at implementation time rather than assumed.
 
-### 7.7 Recovery — rebuilding from SharePoint
+## 8. Backup and recovery
 
-The mirror must be able to rebuild the system onto new hardware. This is a Phase 1 deliverable.
+### 8.1 Three copies, two media, one offsite
 
-Two recovery paths, with different characteristics:
-
-| Path | Source | Recovery point | Fidelity |
+| Copy | Medium | Location | Survives |
 |---|---|---|---|
-| **Primary** | `pg_dump` from the `Backups` library | Up to 24 hours old | Byte-exact, includes audit log and sync state |
-| **Secondary** | Rebuild from SharePoint lists | Up to 1 hour old | Complete business data; audit log and sync state regenerate |
+| Live Postgres | Internal SSD | Mini PC | Nothing; it is the thing being protected |
+| Hourly dump | Internal SSD | Mini PC | Bad data, dropped table, botched migration |
+| Hourly dump | **USB HDD** | Mini PC, external | Internal disk failure, filesystem corruption |
+| Hourly list sync | SharePoint | Microsoft | Fire, theft, flood, the whole site going away |
+| Nightly dump | SharePoint | Microsoft | Same, byte-exact |
 
-The secondary path has the better recovery point. If the mini PC fails at 4pm, the nightly dump is from 2am, but the list mirror is from 3pm. Rebuilding from lists therefore is not a last resort — it is often the right choice, and both paths are first-class and both are tested.
+One artifact, three destinations. The same encrypted `pg_dump` file is written to the internal volume, copied to the USB drive, and uploaded to the `Backups` library. Not three separate backup implementations.
+
+### 8.2 Local and USB backup
+
+**Hourly, not nightly.** A `pg_dump` of this database is a few megabytes and stays that way for years. Writing it hourly to the USB drive costs nothing and takes the USB recovery point from 24 hours down to 1, matching the SharePoint mirror. There is no reason to accept a worse recovery point to save a few megabytes.
+
+Retention on the USB drive is grandfather-father-son:
+
+| Kept | Retention |
+|---|---|
+| Hourly dumps | 48 hours |
+| Nightly snapshot (last dump of the day) | 30 days |
+| Monthly snapshot (last dump of the month) | 12 months |
+
+**Receipts, quote PDFs, and uploaded files are backed up too**, not just the database. A restored database whose `files` rows point at missing images is only half a recovery.
+
+Five requirements, each of which is a way this silently fails in practice:
+
+1. **Verify the mount before writing.** If the USB drive unmounts or spins down, writing to `/mnt/backup` succeeds against the internal disk at that same path, and there is no backup at all while everything looks healthy. The script checks `mountpoint -q` and confirms a sentinel file on the volume, and aborts loudly if either fails.
+2. **ext4, not NTFS or exFAT.** Permissions and reliability under Linux.
+3. **Encrypt the dump, not the disk.** Dump files are encrypted with `age` to a public key; the private key lives in the password manager alongside the other secrets. This is the same artifact and the same key as the SharePoint copy — one mechanism. Full-disk LUKS was considered and rejected: unattended boot needs a keyfile on the internal disk, so stealing the whole machine defeats it, and the realistic threat is the external drive alone walking out of an office.
+4. **Prune on a schedule.** A full disk stops backups silently. Retention is enforced every run, not hoped for.
+5. **Verify the artifact.** Every run checks the dump parses with `pg_restore --list`. Weekly, a scheduled job actually restores it into a scratch database and counts rows. A dump that has never been read is a file, not a backup.
+
+### 8.3 Restore paths, in order
+
+Pick by failure mode, not by habit:
+
+| Failure | Use | Recovery point |
+|---|---|---|
+| Bad data, dropped table, bad migration — hardware fine | Hourly dump, internal volume | 1 hour |
+| Internal disk failed, machine and USB intact | Hourly dump, USB drive | 1 hour |
+| Machine dead, USB intact | USB drive on new hardware | 1 hour |
+| Machine and USB both gone — fire, theft, flood | Nightly dump from SharePoint | 24 hours |
+| Dumps missing, corrupt, or stale | **Rebuild from SharePoint lists** | 1 hour |
+
+The USB drive is the working restore path and handles almost every realistic failure. SharePoint is the disaster path. Note the last row: if the dumps themselves are bad, the list rebuild still has a 1-hour recovery point and is the better option than an old dump.
+
+### 8.4 Rebuilding from SharePoint
+The last resort, and the only path that survives loss of the site itself. This is a Phase 1 deliverable.
 
 `npm run restore:sharepoint` performs the rebuild:
 
@@ -432,22 +472,18 @@ Restoring UUIDs rather than generating new ones is what makes this work — ever
 
 **What SharePoint does not hold, and what must therefore be stored elsewhere:** the Cloudflare Tunnel token, the Postgres password, the Graph client secret, and the Cloudflare Access configuration. None of these belong in the client's SharePoint. They go in a password manager, and the recovery runbook names them explicitly. A perfect data restore is useless if nobody can bring the tunnel back up.
 
-### 7.8 Backup, distinct from sync
 
-The mirror is a replica, not a backup — it holds current state, so a bad write propagates to it. Point-in-time recovery is separate.
+### 8.5 Monitoring
 
-| Cadence | Action | Retention |
-|---|---|---|
-| Hourly | `pg_dump` to a local volume | 48 hours |
-| Nightly | Encrypted dump to the `Backups` library via Graph | 30 days, rotating |
-| Hourly | Structured sync to SharePoint lists (section 7.3) | Current state |
-| Monthly | Accountant `.xlsx` to the `Exports` library | Indefinite |
+Silent backup failure is the normal way backups fail. Every mechanism reports staleness:
+
+- Last USB backup older than 2 hours, last SharePoint sync older than 2 hours, or last nightly upload older than 26 hours raises a banner in the admin UI and sends an email.
+- `sync_state` records `consecutive_failures`; three in a row escalates.
+- The weekly restore verification writes its result where a failure is visible, not only to a log file nobody opens.
 
 **A backup that has never been restored is not a backup.** A scripted restore drill against a clean container is part of the Phase 1 definition of done, not a follow-up task.
 
-Power Automate was considered for the push and rejected: it adds a connector dependency, cannot be tested in CI, and fails silently. Direct Graph calls from Node are testable and log properly.
-
-## 8. Testing
+## 9. Testing
 
 - **Unit** — quote calculation engine. Line type math, percent-line ordering, margin against markup, HST rounding, template quantity derivation. This is where money bugs live, so coverage here is high.
 - **Integration** — Drizzle queries against a real Postgres in a test container. Rate snapshot immutability is explicitly asserted: change a rate item, confirm existing quote lines do not move.
@@ -455,9 +491,10 @@ Power Automate was considered for the push and rejected: it adds a connector dep
 - **Sync** — against a real SharePoint dev site. Covers upsert idempotency (running the same batch twice produces no duplicates), void propagation, watermark non-advancement on partial failure, chunked upload of a file over 4MB, and 429 backoff behaviour.
 - **Round trip** — the decisive test. Seed a database, sync it, drop it entirely, restore from SharePoint, and assert the result is equivalent row for row and file for file. This is the test that proves the recovery story is real rather than aspirational.
 - **E2E (Playwright)** — build a quote from a template, adjust lines, generate the PDF, assert it renders with the correct total.
-- **Restore drill** — scripted, run against a clean container, verified in CI.
+- **Backup** — mount-detection is tested by unmounting the target and asserting the job aborts loudly rather than writing to the underlying path. Retention pruning, dump verification, and `age` round-trip encryption are each covered.
+- **Restore drill** — scripted, run against a clean container, verified in CI. Covers both the dump path and the SharePoint rebuild path.
 
-## 9. Definition of done, Phase 1
+## 10. Definition of done, Phase 1
 
 1. Owner signs in with his Microsoft account through Cloudflare Access and reaches the app on both phone and desktop.
 2. He creates a customer and a project.
@@ -475,8 +512,12 @@ Power Automate was considered for the push and rejected: it adds a connector dep
 14. A quote PDF and an uploaded file over 4MB both land in their libraries with correct metadata columns.
 15. The database is dropped and rebuilt from SharePoint alone via `npm run restore:sharepoint`, and every quote, line, file, and total matches. Performed on a second machine, not the original.
 16. The recovery runbook exists and names every secret that SharePoint does not hold.
+17. An hourly encrypted dump lands on the USB drive with the retention ladder applied, and a restore from it succeeds.
+18. The USB drive is unmounted mid-schedule; the backup job aborts with a visible error rather than silently writing to the internal disk.
+19. Uploaded files and generated PDFs are present on the USB drive, not only the database dump.
+20. Staleness alerting fires: stop the sync, confirm the admin banner and the email arrive.
 
-## 10. Open items
+## 11. Open items
 
 - **Real rate figures.** The seed rate card ships with clearly marked placeholder GTA numbers so the app is usable on first run. The owner overwrites them in the UI. No code change required.
 - **Commercial bid mode.** Deferred pending confirmation that square-foot pricing is genuinely inadequate for his tenant improvement work.
