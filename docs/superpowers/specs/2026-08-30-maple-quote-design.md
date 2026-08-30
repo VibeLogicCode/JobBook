@@ -79,14 +79,26 @@ Everything runs from one `docker-compose.yml`: app, postgres, cloudflared. The m
 
 PostgreSQL. All primary keys are UUIDs. All money columns are `numeric`, never floating point.
 
-Every synced table carries four columns, and the sync in section 7 depends on all of them:
+Every synced table carries these columns, and the sync in section 7 depends on all of them:
 
 - `created_at timestamptz`
 - `updated_at timestamptz` — maintained by trigger, drives the sync watermark
 - `created_by uuid`
-- `is_deleted boolean DEFAULT false` plus `deleted_at timestamptz`
+- `record_status ENUM('active','void') DEFAULT 'active'`
+- `voided_at timestamptz`, `voided_by uuid`, `void_reason text`
 
-**Deletes are soft, never hard.** A watermark-based sync cannot detect a row that no longer exists. Hard deleting a record would orphan its SharePoint mirror permanently. All destructive operations set `is_deleted`; the sync propagates the flag and the UI filters on it.
+**Nothing is ever deleted. There is no DELETE statement in the application.**
+
+Two reasons, and both are load-bearing:
+
+1. A watermark-based sync (`WHERE updated_at > watermark`) physically cannot observe a row that no longer exists. A hard delete would orphan its SharePoint mirror permanently, leaving a phantom record that outlives the real one.
+2. These are financial and tax records. A voided quote that leaves no trace is an audit gap. A voided one with a stated reason is a record.
+
+Voiding sets `record_status = 'void'` with `voided_at`, `voided_by`, and a required `void_reason`. The change syncs like any other field update; the SharePoint row is updated in place, never removed. The UI filters to `record_status = 'active'` by default, with a toggle to show voided records.
+
+`record_status` is named distinctly so it never collides with the business `status` column on `quotes`, which tracks draft/sent/accepted and is a different concept entirely.
+
+Database-level enforcement: the application role is granted `SELECT`, `INSERT`, and `UPDATE` on all tables and is not granted `DELETE`. An accidental delete fails as a permission error rather than destroying a record.
 
 ```
 users
@@ -155,6 +167,18 @@ app_settings   -- single row
   quote_validity_days int DEFAULT 30,
   default_holdback_pct numeric(5,4) DEFAULT 0.10,
   quote_number_prefix, next_quote_seq
+
+files        -- polymorphic attachment table, one row per stored file
+  id, entity_type ENUM('quote','project','customer','receipt',
+                       'vendor_invoice','purchase_order'),
+  entity_id uuid,                -- the record this file belongs to
+  file_name, mime_type, size_bytes bigint,
+  storage_path text,             -- local disk, authoritative
+  sp_drive_item_id text,         -- Graph driveItem id once mirrored
+  sp_web_url text,               -- browser link for the accountant
+  sp_synced_at timestamptz,
+  uploaded_by, uploaded_at
+  INDEX (entity_type, entity_id)
 
 audit_log
   id, table_name, record_id, action, changed_by, changed_at, diff jsonb
@@ -271,9 +295,12 @@ The client's records are tax records. SharePoint is not a dump target — it hol
 ### 7.1 What the mirror is for
 
 - **Readable fallback.** If the mini PC dies on a Friday, the owner still opens SharePoint and sees his quotes, customers, and projects in a familiar UI. Not a database file he cannot open.
+- **Recovery source.** The mirror is complete enough to rebuild the entire system onto new hardware. See section 7.7.
 - **Accountant handoff.** Year-end becomes a shared folder and a list view, not an export request.
 - **Reporting.** Power BI Desktop and Excel both connect to SharePoint lists natively, at no additional license cost.
 - **Exit path.** Structured data in his own tenant, in his own format. No lock-in to a self-hosted app that one person maintains.
+
+Because the mirror is a recovery source and not merely a convenience, **every column of every table is mirrored.** Partial mirroring would make a rebuild lossy in ways nobody would discover until the day it mattered.
 
 ### 7.2 Direction and authority
 
@@ -287,14 +314,16 @@ Document libraries are the exception — PDFs, receipts, and exports are written
 
 ### 7.3 Sync job
 
-Runs inside the app container on a schedule, default **every 4 hours**, configurable, plus an on-demand trigger in the admin UI.
+Runs inside the app container on a schedule, default **every 1 hour**, configurable, plus an on-demand trigger in the admin UI.
+
+The interval is the recovery point objective. Since the mirror is a recovery source (section 7.7), a four-hour interval means losing up to four hours of quoting work when hardware fails. Hourly costs almost nothing — a working day changes tens of rows, far below any throttling concern — so hourly is the default.
 
 Per table:
 
 1. Read the watermark from `sync_state` for that list.
 2. `SELECT * FROM <table> WHERE updated_at > watermark ORDER BY updated_at`.
 3. Upsert into SharePoint matched on `pg_id`, using the Graph `$batch` endpoint at 20 requests per batch.
-4. Rows with `is_deleted = true` are written with the flag set. They are not removed from SharePoint — the list keeps the tombstone so the accountant can see that a record existed and was voided.
+4. Rows with `record_status = 'void'` are written with the status, reason, and timestamp set. Nothing is ever removed from SharePoint, matching the no-delete rule in section 4.
 5. Advance the watermark to the highest `updated_at` in the committed batch, in the same transaction as the batch result.
 
 Correctness requirements:
@@ -325,22 +354,85 @@ The generator also emits indexes on `pg_id` and on every foreign key column. Wit
 | Library | Contents |
 |---|---|
 | `QuoteDocuments` | Generated quote PDFs, foldered by project number |
+| `ProjectFiles` | Plans, permits, site photos, signed contracts |
 | `Receipts` | Receipt images (Phase 3) |
+| `VendorInvoices` | Vendor invoices and purchase orders (Phase 4) |
 | `Backups` | Encrypted `pg_dump` archives |
 | `Exports` | Accountant-ready `.xlsx` files |
 
-### 7.5 Authentication
+### 7.5 Attachments — libraries, never list attachments
 
-Two identities, two purposes:
+SharePoint lists support per-item attachments. This design does not use them. The decision is forced by a hard technical constraint and confirmed by the storage model.
 
-- **Provisioning** — interactive delegated auth, run once by an administrator, needs site collection administrator rights. Runs from a workstation, not from the server.
-- **Sync job** — app-only, unattended, Entra app registration with Graph `Sites.Selected` and a site-scoped `write` grant. `Sites.Selected` is specifically chosen over `Sites.ReadWrite.All` so a leaked credential reaches exactly one site and nothing else in the tenant.
+**Microsoft Graph cannot read or write SharePoint list item attachments.** There is no `attachments` relationship on `listItem` in Graph v1.0. Libraries are fully supported through `driveItem`; list attachments are simply absent from the API.
 
-The client secret lives in a Docker secret, never in the image or in git, and is rotated annually. Certificate authentication is the hardening upgrade if the client wants it later.
+Using them would require:
 
-**This requires a new Entra app registration in the client's own tenant.** The existing MapleQuote PnP registration belongs to a different tenant and cannot be reused. The `Sites.Selected` site grant needs a one-time administrator consent.
+- A second API surface — SharePoint REST (`_api/web/lists/.../AttachmentFiles/add`) alongside Graph
+- A second token audience — `https://<tenant>.sharepoint.com/.default` rather than Graph
+- **Certificate authentication.** Azure AD app-only against SharePoint REST does not accept a client secret; a certificate is mandatory. That means generating, mounting, and rotating a certificate on the mini PC, purely to reach a worse storage model.
 
-### 7.6 Backup, distinct from sync
+The storage model is worse regardless of the API:
+
+| | List attachment | Document library |
+|---|---|---|
+| Graph support | None | Full |
+| Metadata columns | None | Yes — project, vendor, amount, date |
+| Versioning | No | Yes |
+| Folder structure | No | Yes |
+| Accountant workflow | Open each item individually | Filter and bulk download |
+| One file referenced by many records | Impossible | Link by id |
+
+**Design:** the polymorphic `files` table routes each file to a library by `entity_type`. Local disk is authoritative and is what the application serves — no Graph round-trip to display a receipt. SharePoint holds the mirror, with `pg_id`, `entity_type`, `entity_id`, and human-readable metadata as library columns so the accountant can filter by project.
+
+Two implementation constraints:
+
+- **Graph simple upload caps at 4MB.** Phone receipt photos routinely exceed this, so a chunked upload session is required, not optional.
+- File metadata is set with a second call — `PATCH /sites/{id}/lists/{listId}/items/{itemId}/fields` — after the upload completes. Upload and metadata are not atomic; a file with unset metadata must be retried on the next sync rather than treated as done.
+
+### 7.6 Authentication
+
+Two identities, two purposes. Neither requires touching the Azure portal.
+
+**Provisioning — interactive.** Run manually against the client's tenant using his credentials, from a workstation, not the server. `Connect-PnPOnline -Interactive`. Needs site collection administrator rights. Run once, and again after any schema change.
+
+**Sync job — app-only.** This cannot be interactive. The sync runs unattended in a container every hour, indefinitely; there is no human present to complete a login, and delegated refresh tokens expire and are invalidated by a password change or an MFA policy change. A background daemon requires app-only credentials. There is no alternative that is not fragile.
+
+The manual work is removed rather than the registration: `Provision-MapleQuote.ps1` bootstraps the app registration itself through PnP, requests Graph `Sites.Selected`, applies the site-scoped `write` grant, and prints the resulting client id and secret for the operator to store. One script run against his tenant, no portal navigation, no manual consent screens beyond the administrator approval prompt PnP raises.
+
+`Sites.Selected` is chosen over `Sites.ReadWrite.All` deliberately: a leaked secret reaches exactly one site, not the whole tenant.
+
+The client secret lives in a Docker secret, never in the image and never in git, and is rotated annually. Certificate authentication remains available as a hardening step but is not required, because this design never calls SharePoint REST.
+
+> The exact PnP cmdlet names for app registration differ across PnP.PowerShell major versions. They are verified against the installed module at implementation time rather than assumed.
+
+### 7.7 Recovery — rebuilding from SharePoint
+
+The mirror must be able to rebuild the system onto new hardware. This is a Phase 1 deliverable.
+
+Two recovery paths, with different characteristics:
+
+| Path | Source | Recovery point | Fidelity |
+|---|---|---|---|
+| **Primary** | `pg_dump` from the `Backups` library | Up to 24 hours old | Byte-exact, includes audit log and sync state |
+| **Secondary** | Rebuild from SharePoint lists | Up to 1 hour old | Complete business data; audit log and sync state regenerate |
+
+The secondary path has the better recovery point. If the mini PC fails at 4pm, the nightly dump is from 2am, but the list mirror is from 3pm. Rebuilding from lists therefore is not a last resort — it is often the right choice, and both paths are first-class and both are tested.
+
+`npm run restore:sharepoint` performs the rebuild:
+
+1. Authenticate app-only, same credentials as the sync.
+2. Read every list, paging through Graph.
+3. Insert in foreign-key dependency order: `users`, `app_settings`, `customers`, `projects`, `rate_cards`, `rate_items`, `scope_templates`, `scope_template_items`, `quotes`, `quote_lines`, `files`, `audit_log`.
+4. Download every library file to local disk and reconcile `files.storage_path` against `sp_drive_item_id`.
+5. Rebuild `sync_state` watermarks from the maximum `pg_updated_at` per table, so the first sync after recovery does not resend the entire database.
+6. Verify: compare row counts per table against the source lists, and report any mismatch as a failure rather than a warning.
+
+Restoring UUIDs rather than generating new ones is what makes this work — every foreign key is a UUID stored as text on both sides, so relationships survive the round trip intact. This is the payoff for the no-lookup-columns rule in section 4.3.
+
+**What SharePoint does not hold, and what must therefore be stored elsewhere:** the Cloudflare Tunnel token, the Postgres password, the Graph client secret, and the Cloudflare Access configuration. None of these belong in the client's SharePoint. They go in a password manager, and the recovery runbook names them explicitly. A perfect data restore is useless if nobody can bring the tunnel back up.
+
+### 7.8 Backup, distinct from sync
 
 The mirror is a replica, not a backup — it holds current state, so a bad write propagates to it. Point-in-time recovery is separate.
 
@@ -348,7 +440,7 @@ The mirror is a replica, not a backup — it holds current state, so a bad write
 |---|---|---|
 | Hourly | `pg_dump` to a local volume | 48 hours |
 | Nightly | Encrypted dump to the `Backups` library via Graph | 30 days, rotating |
-| Every 4 hours | Structured sync to SharePoint lists (section 7.3) | Current state |
+| Hourly | Structured sync to SharePoint lists (section 7.3) | Current state |
 | Monthly | Accountant `.xlsx` to the `Exports` library | Indefinite |
 
 **A backup that has never been restored is not a backup.** A scripted restore drill against a clean container is part of the Phase 1 definition of done, not a follow-up task.
@@ -360,7 +452,8 @@ Power Automate was considered for the push and rejected: it adds a connector dep
 - **Unit** — quote calculation engine. Line type math, percent-line ordering, margin against markup, HST rounding, template quantity derivation. This is where money bugs live, so coverage here is high.
 - **Integration** — Drizzle queries against a real Postgres in a test container. Rate snapshot immutability is explicitly asserted: change a rate item, confirm existing quote lines do not move.
 - **Schema parity** — a test asserts that every Drizzle table and column has a matching entry in the generated SharePoint template, with no reserved-name collisions. This fails the build on drift rather than discovering it during a sync at 2am.
-- **Sync** — against a real SharePoint dev site. Covers upsert idempotency (running the same batch twice produces no duplicates), soft-delete propagation, watermark non-advancement on partial failure, and 429 backoff behaviour.
+- **Sync** — against a real SharePoint dev site. Covers upsert idempotency (running the same batch twice produces no duplicates), void propagation, watermark non-advancement on partial failure, chunked upload of a file over 4MB, and 429 backoff behaviour.
+- **Round trip** — the decisive test. Seed a database, sync it, drop it entirely, restore from SharePoint, and assert the result is equivalent row for row and file for file. This is the test that proves the recovery story is real rather than aspirational.
 - **E2E (Playwright)** — build a quote from a template, adjust lines, generate the PDF, assert it renders with the correct total.
 - **Restore drill** — scripted, run against a clean container, verified in CI.
 
@@ -377,8 +470,11 @@ Power Automate was considered for the push and rejected: it adds a connector dep
 9. The bookkeeper signs in and can read quotes but cannot edit rates, verified server-side.
 10. `Provision-MapleQuote.ps1` runs against an empty SharePoint site and creates every list, column, view, index, and library with no manual steps. Running it a second time changes nothing.
 11. The sync job runs, and the quote created in step 3 appears in the SharePoint `quotes` list with matching column names and values.
-12. A record is soft-deleted in the app; the next sync sets `is_deleted` on its SharePoint row rather than removing it.
+12. A record is voided in the app with a reason; the next sync sets `record_status`, `voided_at`, and `void_reason` on its SharePoint row rather than removing it.
 13. The bookkeeper cannot edit a synced SharePoint list directly, verified in SharePoint itself, not just in the app.
+14. A quote PDF and an uploaded file over 4MB both land in their libraries with correct metadata columns.
+15. The database is dropped and rebuilt from SharePoint alone via `npm run restore:sharepoint`, and every quote, line, file, and total matches. Performed on a second machine, not the original.
+16. The recovery runbook exists and names every secret that SharePoint does not hold.
 
 ## 10. Open items
 
