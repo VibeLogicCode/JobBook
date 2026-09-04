@@ -32,6 +32,22 @@ const PUBLIC_PREFIXES = ['/_next/static', '/_next/image', '/favicon.ico', '/api/
 const AUTH_PREFIX = '/auth/';
 
 /**
+ * First-run setup, which has to be reachable before any user exists.
+ *
+ * Without this carve-out `sso` mode cannot be installed at all: an
+ * unauthenticated request is sent to sign in, and sign-in refuses because
+ * `users` is empty -- so the one screen that creates the first user is behind
+ * the authentication that first user does not yet exist to pass. A bootstrap
+ * deadlock, and the kind that is only discovered on a real deployment.
+ *
+ * It opens only while the wizard's own gate is open: no company exists that
+ * the wizard did not itself create. Once setup is finished, or a backup is
+ * restored, or the demo seed has run, these paths authenticate like everything
+ * else. That check is a database read, so it runs only for this prefix.
+ */
+const SETUP_PREFIX = '/setup';
+
+/**
  * The print route is reached over localhost by headless Chromium from inside
  * the container, so it never passes through Cloudflare, carries no Access JWT
  * and no session cookie, and never will. It authenticates on its own secret in
@@ -112,6 +128,19 @@ export async function proxy(request: NextRequest) {
 
   const csrf = csrfRefusal(request);
   if (csrf) return csrf;
+
+  if (pathname === SETUP_PREFIX || pathname.startsWith(`${SETUP_PREFIX}/`)) {
+    // Fail CLOSED on an unreadable gate. A database that does not answer must
+    // not read as "nobody has claimed this deployment yet", which would leave
+    // the wizard open on a live installation whose database is merely down.
+    try {
+      const { readSetupGate } = await import('@/app/setup/state');
+      const gate = await readSetupGate();
+      if (gate.open) return NextResponse.next();
+    } catch {
+      // Falls through to normal authentication below.
+    }
+  }
 
   if (pathname.startsWith(AUTH_PREFIX)) {
     // Public in sso mode, absent in the others, so a deployment behind Access

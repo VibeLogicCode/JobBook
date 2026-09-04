@@ -1,10 +1,37 @@
 'use client';
 
-import { useMemo, useState, useTransition } from 'react';
-import { Plus, Trash2, X } from 'lucide-react';
-import { addLine, editLine, setQuoteStatus, voidLine } from '@/app/quotes/[id]/actions';
+import { useMemo, useRef, useState, useTransition } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { ChevronDown, ChevronRight, Plus, Trash2, X } from 'lucide-react';
+import {
+  addLine,
+  editLine,
+  raiseChangeOrder,
+  regenerateLines,
+  setQuoteStatus,
+  voidLine,
+} from '@/app/quotes/[id]/actions';
+import {
+  ChangeOrderSheet,
+  reasonLabel,
+  type ChangeOrderDraft,
+} from '@/components/worksheet/ChangeOrderSheet';
+import {
+  COLUMN_ATTR,
+  focusNextInColumn,
+  type WorksheetColumn,
+} from '@/components/worksheet/keyboard';
 import { MarginGauge } from '@/components/worksheet/MarginGauge';
-import type { WireLine, WireQuote, WireRateItem, WireTax } from '@/components/worksheet/types';
+import { RegenerateDialog, ScopeSheet } from '@/components/worksheet/ScopeSheet';
+import type {
+  WireLine,
+  WireQuote,
+  WireQuoteRef,
+  WireRateItem,
+  WireRelations,
+  WireTax,
+} from '@/components/worksheet/types';
 import { Pill, statusTone } from '@/components/ui/Pill';
 import { formatCents, formatQty, formatRate } from '@/lib/money/format';
 
@@ -24,18 +51,41 @@ export function Worksheet({
   lines,
   taxes,
   rateItems,
+  relations,
 }: {
   quote: WireQuote;
   lines: WireLine[];
   taxes: WireTax[];
   rateItems: WireRateItem[];
+  relations: WireRelations;
 }) {
+  const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [editing, setEditing] = useState<WireLine | null>(null);
   const [picking, setPicking] = useState(false);
+  const [measuring, setMeasuring] = useState(false);
+  const [confirmingRegenerate, setConfirmingRegenerate] = useState(false);
+  const [raising, setRaising] = useState(false);
 
   const editable = quote.status === 'draft' && quote.recordStatus === 'active';
+  // A change order amends work the customer has already accepted. A quote still
+  // out with them is revised instead -- there is no contract yet to change --
+  // and chaining a change order onto another is refused by the engine.
+  const amendable =
+    quote.kind === 'estimate' && quote.status === 'accepted' && quote.recordStatus === 'active';
+
+  // Measurements belong to an estimate. A change order amends accepted work at
+  // stated quantities; it was never expanded from a template, so a square
+  // footage on it would drive nothing and read as an unanswered question.
+  const scopeEditable = editable && quote.kind === 'estimate';
+  const hasScope =
+    relations.templateName !== null ||
+    quote.areaSqftMilli !== null ||
+    quote.washroomCount !== null ||
+    quote.kitchenCount !== null ||
+    quote.bedroomCount !== null;
 
   const groups = useMemo(() => {
     const included = lines.filter((line) => line.isIncluded);
@@ -51,9 +101,51 @@ export function Worksheet({
 
   function run(action: () => Promise<{ ok: true } | { ok: false; error: string }>) {
     setError(null);
+    setNotice(null);
     startTransition(async () => {
       const result = await action();
       if (!result.ok) setError(result.error);
+    });
+  }
+
+  /**
+   * Regeneration reports what it did.
+   *
+   * The summary is the whole reason this is a separate control: an operation
+   * that replaces twelve lines and says nothing is indistinguishable from one
+   * that did nothing, and the owner needs to know his hand-added lines survived.
+   */
+  function regenerate() {
+    setError(null);
+    setNotice(null);
+    startTransition(async () => {
+      const result = await regenerateLines({ quoteId: quote.id });
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      const { replaced, created, kept } = result.summary;
+      setNotice(
+        `Regenerated from the template: ${count(replaced, 'template line')} replaced, ` +
+          `${count(created, 'line')} written at the current measurements, ` +
+          `${count(kept, 'hand-added line')} kept. Replaced lines were voided, not deleted.`,
+      );
+    });
+  }
+
+  function raise(draft: ChangeOrderDraft) {
+    setError(null);
+    setNotice(null);
+    startTransition(async () => {
+      const result = await raiseChangeOrder(draft);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      setRaising(false);
+      // The change order renders in this same worksheet: it is a quote with a
+      // parent, so there is no second screen to build.
+      router.push(`/quotes/${result.quoteId}`);
     });
   }
 
@@ -71,9 +163,23 @@ export function Worksheet({
                 ? 'Expired'
                 : quote.status}
           </Pill>
-          {quote.kind === 'change_order' ? <Pill tone="info">Change order</Pill> : null}
+          {/* A change order must never be mistaken for the estimate. It carries
+              its own number, its sequence on the job, and the word. */}
+          {quote.kind === 'change_order' ? (
+            <Pill tone="info">Change order {quote.sequence}</Pill>
+          ) : null}
 
           <div className="no-print ml-auto flex gap-2">
+            {amendable ? (
+              <button
+                type="button"
+                disabled={pending}
+                className="min-h-11 rounded-[4px] bg-accent px-3 text-accent-fg hover:bg-accent-hover disabled:opacity-60"
+                onClick={() => setRaising(true)}
+              >
+                Raise a change order
+              </button>
+            ) : null}
             {quote.status === 'draft' ? (
               <button
                 type="button"
@@ -114,20 +220,63 @@ export function Worksheet({
           {quote.customerName}
           {quote.siteAddress ? ` · ${quote.siteAddress}` : ''}
         </p>
+
+        {relations.parent ? (
+          <p className="t-small text-muted">
+            Amends{' '}
+            <Link
+              href={`/quotes/${relations.parent.id}`}
+              className="num text-accent-text hover:underline"
+            >
+              {relations.parent.quoteNumber}
+            </Link>
+            {relations.amendment?.reason ? ` · ${reasonLabel(relations.amendment.reason)}` : ''}
+            {relations.amendment?.scheduleImpactDays
+              ? ` · ${count(relations.amendment.scheduleImpactDays, 'day')} added to the schedule`
+              : ''}
+          </p>
+        ) : null}
       </header>
 
-      <section className="border-b border-line bg-surface-2 px-4 py-2 t-small text-muted sm:px-6">
-        <span className="num">
-          {quote.areaSqftMilli ? formatQty(BigInt(quote.areaSqftMilli)) : '—'} {quote.areaUnit}
+      {/* The job's change orders, reachable from the estimate they amend --
+          otherwise the only route to one is the project screen, and the person
+          looking at the contract is the person who needs them. */}
+      {relations.changeOrders.length > 0 ? (
+        <section className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-line bg-surface px-4 py-2 t-small sm:px-6">
+          <span className="text-muted">Change orders</span>
+          {relations.changeOrders.map((order) => (
+            <ChangeOrderLink key={order.id} order={order} />
+          ))}
+        </section>
+      ) : null}
+
+      <section className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-line bg-surface-2 px-4 py-2 sm:px-6">
+        {scopeEditable || hasScope ? (
+          <ScopeLine
+            quote={quote}
+            templateName={relations.templateName}
+            editable={scopeEditable}
+            onOpen={() => setMeasuring(true)}
+          />
+        ) : null}
+
+        {/* Regeneration is a separate, explicit control. Saving a measurement
+            must not quietly discard ten minutes of hand adjustment, so changing
+            a figure and rebuilding the lines are two different buttons. */}
+        {scopeEditable && relations.templateName ? (
+          <button
+            type="button"
+            disabled={pending}
+            className="no-print min-h-11 rounded-[4px] border border-line-strong bg-surface px-3 hover:bg-surface-3 disabled:opacity-60"
+            onClick={() => setConfirmingRegenerate(true)}
+          >
+            Regenerate
+          </button>
+        ) : null}
+
+        <span className="t-small text-muted">
+          valid to <span className="num">{quote.validUntil}</span>
         </span>
-        {' · '}
-        {quote.washroomCount ?? 0} washroom{quote.washroomCount === 1 ? '' : 's'}
-        {' · '}
-        {quote.kitchenCount ?? 0} kitchen{quote.kitchenCount === 1 ? '' : 's'}
-        {' · '}
-        {quote.bedroomCount ?? 0} bedroom{quote.bedroomCount === 1 ? '' : 's'}
-        {' · valid to '}
-        <span className="num">{quote.validUntil}</span>
       </section>
 
       {error ? (
@@ -136,9 +285,21 @@ export function Worksheet({
         </p>
       ) : null}
 
+      {notice ? (
+        <p
+          role="status"
+          className="border-b border-info bg-info-soft px-4 py-2 t-small text-info-soft-fg sm:px-6"
+        >
+          {notice}
+        </p>
+      ) : null}
+
       <div className="flex-1 overflow-x-auto px-0 sm:px-6 sm:py-4">
         <table
           role="table"
+          // Busy rather than disabled: the fields stay focusable so Enter can
+          // keep descending while the previous commit is still in flight.
+          aria-busy={pending}
           className="data-table data-table--stack"
           style={{ minWidth: '52rem' }}
         >
@@ -224,7 +385,111 @@ export function Worksheet({
           }}
         />
       ) : null}
+
+      {measuring ? (
+        <ScopeSheet
+          quote={quote}
+          pending={pending}
+          onClose={() => setMeasuring(false)}
+          onCommit={run}
+        />
+      ) : null}
+
+      {confirmingRegenerate ? (
+        <RegenerateDialog
+          templateName={relations.templateName}
+          pending={pending}
+          onClose={() => setConfirmingRegenerate(false)}
+          onConfirm={regenerate}
+        />
+      ) : null}
+
+      {raising ? (
+        <ChangeOrderSheet
+          quote={quote}
+          rateItems={rateItems}
+          pending={pending}
+          onClose={() => setRaising(false)}
+          onRaise={raise}
+        />
+      ) : null}
     </div>
+  );
+}
+
+/**
+ * "1 washroom", "2 washrooms", "0 washrooms".
+ *
+ * One place, because the plural is wrong in a different way at each call site
+ * and a quote that reads "1 lines replaced" undermines every other figure on
+ * the screen.
+ */
+function count(value: number, noun: string): string {
+  return `${value} ${noun}${value === 1 ? '' : 's'}`;
+}
+
+/**
+ * The scope summary: the template and the four measurements on one line.
+ *
+ * Tapping it opens the measurements sheet, at every width. The sheet is the one
+ * editor for these four figures -- there is no second set of inline boxes to
+ * disagree with it, on a phone or on a desktop.
+ */
+function ScopeLine({
+  quote,
+  templateName,
+  editable,
+  onOpen,
+}: {
+  quote: WireQuote;
+  templateName: string | null;
+  editable: boolean;
+  onOpen: () => void;
+}) {
+  const summary = (
+    <>
+      {templateName ? <span className="text-ink">{templateName}</span> : null}
+      {templateName ? ' · ' : ''}
+      <span className="num text-ink">
+        {quote.areaSqftMilli ? formatQty(BigInt(quote.areaSqftMilli)) : '—'} {quote.areaUnit}
+      </span>
+      {' · '}
+      {count(quote.washroomCount ?? 0, 'washroom')}
+      {' · '}
+      {count(quote.kitchenCount ?? 0, 'kitchen')}
+      {' · '}
+      {count(quote.bedroomCount ?? 0, 'bedroom')}
+    </>
+  );
+
+  // Read-only once the quote leaves draft, following the same rule as the
+  // inline fields: the figures still read, they just stop being a control.
+  if (!editable) return <span className="t-small text-muted">{summary}</span>;
+
+  return (
+    <button
+      type="button"
+      className="flex min-h-11 min-w-0 flex-1 items-center rounded-[4px] px-1 text-left t-small text-muted hover:bg-surface-3"
+      onClick={onOpen}
+    >
+      <span className="truncate">
+        {summary}
+        <span className="sr-only"> — change the measurements</span>
+      </span>
+    </button>
+  );
+}
+
+/** One change order in the estimate's header band, with its state in words. */
+function ChangeOrderLink({ order }: { order: WireQuoteRef }) {
+  return (
+    <span className="flex items-center gap-1.5">
+      <Link href={`/quotes/${order.id}`} className="num text-accent-text hover:underline">
+        {order.quoteNumber}
+      </Link>
+      <Pill tone={statusTone(order.status, false)}>{order.status}</Pill>
+      <span className="num text-muted">{formatCents(order.totalCents)}</span>
+    </span>
   );
 }
 
@@ -247,6 +512,11 @@ function GroupRows({
   onEdit: (line: WireLine) => void;
   onCommit: (action: () => Promise<{ ok: true } | { ok: false; error: string }>) => void;
 }) {
+  // Available upgrades start closed. They are not part of the price the
+  // customer is being quoted, and open by default they push the trade the owner
+  // is actually working on off the bottom of the screen.
+  const [open, setOpen] = useState(!optional);
+
   const total = lines.reduce(
     (sum, line) => sum + (optional ? line.displayPriceCents : line.lineTotalCents),
     0,
@@ -256,23 +526,43 @@ function GroupRows({
     <>
       <tr className="group-band" role="row">
         <td colSpan={7} data-label="Group">
-          <span>{group}</span>
-          <span className="num float-right">{formatCents(total)}</span>
+          <button
+            type="button"
+            aria-expanded={open}
+            className="flex min-h-11 w-full items-center gap-2 text-left"
+            onClick={() => setOpen((value) => !value)}
+          >
+            {open ? (
+              <ChevronDown size={14} aria-hidden />
+            ) : (
+              <ChevronRight size={14} aria-hidden />
+            )}
+            <span>{group}</span>
+            <span className="num ml-auto">{formatCents(total)}</span>
+            <span className="sr-only">
+              , {count(lines.length, 'line')}, {open ? 'expanded' : 'collapsed'}
+            </span>
+          </button>
         </td>
         <td className="no-print" aria-hidden />
       </tr>
-      {lines.map((line) => (
-        <LineRow
-          key={line.id}
-          line={line}
-          editable={editable}
-          pending={pending}
-          quoteId={quoteId}
-          optional={optional}
-          onEdit={onEdit}
-          onCommit={onCommit}
-        />
-      ))}
+      {/* Collapsed rows leave the DOM rather than hiding: an input the owner
+          cannot see is an input Enter must not descend into, and the descent
+          reads document order. */}
+      {open
+        ? lines.map((line) => (
+            <LineRow
+              key={line.id}
+              line={line}
+              editable={editable}
+              pending={pending}
+              quoteId={quoteId}
+              optional={optional}
+              onEdit={onEdit}
+              onCommit={onCommit}
+            />
+          ))
+        : null}
     </>
   );
 }
@@ -317,8 +607,8 @@ function LineRow({
           <NumberField
             label={`Quantity for ${line.description}`}
             value={formatQty(BigInt(line.qtyMilli))}
+            column="qty"
             editable={editable}
-            pending={pending}
             onCommit={(next) => onCommit(() => editLine({ quoteId, lineId: line.id, qty: next }))}
           />
         )}
@@ -330,8 +620,8 @@ function LineRow({
         <NumberField
           label={`Rate for ${line.description}`}
           value={formatRate(BigInt(line.unitPriceTenThou))}
+          column="rate"
           editable={editable}
-          pending={pending}
           onCommit={(next) =>
             onCommit(() => editLine({ quoteId, lineId: line.id, unitPrice: next }))
           }
@@ -348,7 +638,8 @@ function LineRow({
           <button
             type="button"
             aria-label={`Remove ${line.description}`}
-            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-[4px] text-muted hover:bg-negative-soft hover:text-negative-soft-fg"
+            disabled={pending}
+            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-[4px] text-muted hover:bg-negative-soft hover:text-negative-soft-fg disabled:opacity-60"
             onClick={(event) => {
               event.stopPropagation();
               onCommit(() => voidLine({ quoteId, lineId: line.id }));
@@ -363,59 +654,86 @@ function LineRow({
 }
 
 /**
- * An inline numeric field that commits on blur or Enter.
+ * An inline numeric field. Tab across, Enter commits and descends, Escape
+ * cancels.
  *
  * Below `sm` it renders read-only and the row tap opens the sheet instead; the
  * input still exists exactly once in the DOM at every width, which is what
  * keeps a test query pointed at one node.
+ *
+ * It is NOT disabled while a commit is in flight. Disabling the field the owner
+ * has just descended into throws focus back to the document body, which breaks
+ * Enter-to-descend on exactly the keystroke it is meant to serve; the table
+ * carries `aria-busy` instead, and each field commits one column of one line,
+ * so two in flight cannot contradict each other.
  */
 function NumberField({
   label,
   value,
+  column,
   editable,
-  pending,
   onCommit,
 }: {
   label: string;
   value: string;
+  column: WorksheetColumn;
   editable: boolean;
-  pending: boolean;
   onCommit: (next: string) => void;
 }) {
   const [draft, setDraft] = useState(value);
   const [dirty, setDirty] = useState(false);
+  // Mirrored in a ref because the Enter path commits and THEN moves focus, and
+  // moving focus fires blur in the same tick, before the state set above is
+  // visible. Without the ref that blur commits the same edit a second time.
+  const dirtyRef = useRef(false);
 
   // A re-render after a commit brings the server's value back down.
   if (!dirty && draft !== value) setDraft(value);
 
   if (!editable) return <span className="num">{value}</span>;
 
+  /** Figures recalculate here, on commit, never on a keystroke. */
+  function commit() {
+    if (!dirtyRef.current) return;
+    dirtyRef.current = false;
+    setDirty(false);
+    if (draft !== value) onCommit(draft);
+  }
+
   return (
     <input
       aria-label={label}
       value={draft}
       inputMode="decimal"
-      disabled={pending}
+      {...{ [COLUMN_ATTR]: column }}
       className="field field-num max-sm:pointer-events-none max-sm:border-transparent max-sm:bg-transparent"
       readOnly={false}
       onChange={(event) => {
         setDraft(event.target.value);
         setDirty(true);
+        dirtyRef.current = true;
       }}
       onFocus={(event) => event.currentTarget.select()}
-      onBlur={() => {
-        if (!dirty) return;
-        setDirty(false);
-        if (draft !== value) onCommit(draft);
-      }}
+      // The row's tap opens the sheet editor. Stopped here so a click INTO a
+      // field edits it inline instead of throwing a modal over the table --
+      // below `sm` the field takes no pointer events at all, so the tap still
+      // reaches the row and the sheet is still the only editor at that width.
+      onClick={(event) => event.stopPropagation()}
+      onBlur={commit}
       onKeyDown={(event) => {
         if (event.key === 'Enter') {
           event.preventDefault();
-          event.currentTarget.blur();
+          commit();
+          focusNextInColumn(event.currentTarget, column);
         }
         if (event.key === 'Escape') {
+          // Stopped here so Escape reverts the figure rather than reaching a
+          // sheet behind the table and closing it mid-edit.
+          event.preventDefault();
+          event.stopPropagation();
           setDraft(value);
           setDirty(false);
+          dirtyRef.current = false;
         }
       }}
     />
@@ -523,9 +841,10 @@ function LineSheet({
             <label className="grid gap-1">
               <span className="t-small text-muted">Quantity ({line.unitLabel})</span>
               <input
-                className="field field-num"
+                className="field field-num min-h-12"
                 inputMode="decimal"
                 value={qty}
+                onFocus={(event) => event.currentTarget.select()}
                 onChange={(event) => setQty(event.target.value)}
               />
             </label>
@@ -535,9 +854,10 @@ function LineSheet({
               {line.calcMode === 'percent' ? 'Percent' : 'Rate'}
             </span>
             <input
-              className="field field-num"
+              className="field field-num min-h-12"
               inputMode="decimal"
               value={rate}
+              onFocus={(event) => event.currentTarget.select()}
               onChange={(event) => setRate(event.target.value)}
             />
           </label>
@@ -644,7 +964,7 @@ function RatePicker({
                 >
                   <span className="min-w-0">
                     <span className="block truncate">{item.description}</span>
-                    <span className="num t-small text-muted">{item.code}</span>
+                    <span className="present-hide num t-small text-muted">{item.code}</span>
                   </span>
                   <span className="num t-small">
                     {formatRate(BigInt(item.sellRateTenThou))}

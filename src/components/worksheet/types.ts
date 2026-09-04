@@ -70,3 +70,45 @@ export interface WireRateItem {
   unitLabel: string;
   sellRateTenThou: string;
 }
+
+/** Why a change order was raised. Mirrors the `change_reason` enum. */
+export type WireChangeReason =
+  | 'customer_request'
+  | 'site_condition'
+  | 'design_change'
+  | 'code_requirement'
+  | 'error_omission'
+  | 'allowance_reconciliation';
+
+/** Enough of another quote to name it and link to it. */
+export interface WireQuoteRef {
+  id: string;
+  quoteNumber: string;
+  sequence: number;
+  status: 'draft' | 'sent' | 'accepted' | 'declined' | 'superseded';
+  reason: WireChangeReason | null;
+  scheduleImpactDays: number | null;
+  totalCents: number;
+}
+
+/**
+ * What this quote is attached to.
+ *
+ * Kept out of `WireQuote` because it is not part of the document: a change
+ * order's parent and an estimate's change orders are navigation, loaded beside
+ * the quote rather than folded into the record the engine computed.
+ */
+export interface WireRelations {
+  /** The estimate a change order amends. Null on an estimate. */
+  parent: WireQuoteRef | null;
+  /** Change orders raised against this estimate, in project sequence. */
+  changeOrders: WireQuoteRef[];
+  /**
+   * This quote's own amendment facts. Null on an estimate, which amends
+   * nothing. Loaded here rather than on `WireQuote` because they describe the
+   * quote's relationship to another one, not the document the engine computed.
+   */
+  amendment: { reason: WireChangeReason | null; scheduleImpactDays: number | null } | null;
+  /** The scope template this quote was built from, if any. */
+  templateName: string | null;
+}

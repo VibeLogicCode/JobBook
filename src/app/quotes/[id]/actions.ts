@@ -5,13 +5,33 @@ import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { db } from '@/db/client';
 import { quoteLines, quotes, rateItems } from '@/db/schema';
+import type { WireChangeReason } from '@/components/worksheet/types';
+import { guard } from '@/lib/auth/guard';
 import { parseQtyToMilli, parseRateToTenThou } from '@/lib/money/format';
+import {
+  changeOrderLinesFromRateItems,
+  createChangeOrder,
+  type ChangeReason,
+} from '@/lib/quote/change-order';
 import { recalculateQuote } from '@/lib/quote/recalculate';
+import {
+  regenerateFromTemplate,
+  setScopeInputs,
+  type RegenerateSummary,
+} from '@/lib/quote/regenerate';
+import type { ScopeInputs } from '@/lib/quote/template';
 
 /**
- * Every action re-reads the quote and refuses anything but a draft. The
- * triggers refuse it too, but a clear error beats a database exception in the
- * user's face.
+ * Every action opens with two checks, in this order.
+ *
+ * First `guard(capability)`: authorization is a separate lookup from
+ * authentication, performed on every request that changes anything, against
+ * the user's role and never against anything the browser sent. It comes before
+ * any argument is read, so a branch added later cannot slip in above it.
+ *
+ * Then `requireDraft`: mutability is defined by status. The database triggers
+ * refuse a non-draft write as well, but a sentence beats a database exception
+ * in somebody's face.
  */
 async function requireDraft(quoteId: string) {
   const [quote] = await db.select().from(quotes).where(eq(quotes.id, quoteId));
@@ -42,6 +62,9 @@ export async function editLine(input: z.input<typeof editSchema>): Promise<EditR
   const { quoteId, lineId, qty, unitPrice, unitCost, description, isIncluded } = parsed.data;
 
   try {
+    const allowed = await guard('quote:write');
+    if (!allowed.ok) return { ok: false, error: allowed.error };
+
     await requireDraft(quoteId);
 
     const patch: Record<string, unknown> = {};
@@ -97,6 +120,9 @@ export async function voidLine(input: z.input<typeof voidSchema>): Promise<EditR
   const { quoteId, lineId, reason } = parsed.data;
 
   try {
+    const allowed = await guard('quote:write');
+    if (!allowed.ok) return { ok: false, error: allowed.error };
+
     await requireDraft(quoteId);
     await db
       .update(quoteLines)
@@ -128,6 +154,9 @@ export async function addLine(input: z.input<typeof addSchema>): Promise<EditRes
   const { quoteId, rateItemId, qty } = parsed.data;
 
   try {
+    const allowed = await guard('quote:write');
+    if (!allowed.ok) return { ok: false, error: allowed.error };
+
     await requireDraft(quoteId);
 
     const [item] = await db.select().from(rateItems).where(eq(rateItems.id, rateItemId));
@@ -183,6 +212,9 @@ export async function setQuoteStatus(input: z.input<typeof statusSchema>): Promi
   const { quoteId, status, acceptedByName } = parsed.data;
 
   try {
+    const allowed = await guard('quote:transition');
+    if (!allowed.ok) return { ok: false, error: allowed.error };
+
     const now = new Date();
     const patch: Record<string, unknown> = { status };
     if (status === 'sent') patch.sentAt = now;
@@ -198,5 +230,211 @@ export async function setQuoteStatus(input: z.input<typeof statusSchema>): Promi
     return { ok: true };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : 'that change failed' };
+  }
+}
+
+const scopeSchema = z.object({
+  quoteId: z.string().uuid(),
+  areaSqft: z.string().optional(),
+  washroomCount: z.string().optional(),
+  kitchenCount: z.string().optional(),
+  bedroomCount: z.string().optional(),
+});
+
+/**
+ * A count is a whole number of rooms, so it is parsed here rather than through
+ * the money helpers: `parseQtyToMilli('2')` is 2000n, which is the right answer
+ * to a different question.
+ */
+function parseCount(raw: string): number | null {
+  if (!/^\d{1,4}$/.test(raw.trim())) return null;
+  return Number(raw.trim());
+}
+
+/**
+ * Records what was measured. It does NOT rebuild the line list.
+ *
+ * Regeneration is the explicit second step. Changing the square footage must
+ * not silently discard ten minutes of hand adjustment -- the owner measures
+ * 1,240, generates, corrects the drywall line for the stairwell, and a later
+ * correction to the area figure has no business undoing that.
+ */
+export async function saveScopeInputs(
+  input: z.input<typeof scopeSchema>,
+): Promise<EditResult> {
+  const parsed = scopeSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: 'those measurements did not make sense' };
+  const { quoteId, areaSqft, washroomCount, kitchenCount, bedroomCount } = parsed.data;
+
+  const scope: Partial<ScopeInputs> = {};
+
+  // A blank field leaves the figure as it was. The sheet arrives pre-filled, so
+  // an empty box means the owner cleared it rather than measured zero, and
+  // writing a zero over a measurement nobody touched loses information.
+  if (areaSqft !== undefined && areaSqft.trim() !== '') {
+    const value = parseQtyToMilli(areaSqft);
+    if (value === null) return { ok: false, error: `"${areaSqft}" is not an area` };
+    scope.areaSqftMilli = value;
+  }
+
+  type CountKey = 'washroomCount' | 'kitchenCount' | 'bedroomCount';
+  const counts: [string | undefined, CountKey, string][] = [
+    [washroomCount, 'washroomCount', 'washrooms'],
+    [kitchenCount, 'kitchenCount', 'kitchens'],
+    [bedroomCount, 'bedroomCount', 'bedrooms'],
+  ];
+  for (const [raw, key, label] of counts) {
+    if (raw === undefined || raw.trim() === '') continue;
+    const value = parseCount(raw);
+    if (value === null) return { ok: false, error: `"${raw}" is not a number of ${label}` };
+    scope[key] = value;
+  }
+
+  try {
+    const allowed = await guard('quote:write');
+    if (!allowed.ok) return { ok: false, error: allowed.error };
+
+    await setScopeInputs({ quoteId, scope });
+    revalidatePath(`/quotes/${quoteId}`);
+    return { ok: true };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : 'those measurements did not save',
+    };
+  }
+}
+
+const regenerateSchema = z.object({ quoteId: z.string().uuid() });
+
+export type RegenerateResult =
+  | { ok: true; summary: RegenerateSummary }
+  | { ok: false; error: string };
+
+/**
+ * Rebuilds the template-derived lines at the quote's current measurements.
+ *
+ * The summary comes straight back to the caller because the screen has to
+ * report what happened: an operation that replaces lines and says nothing is
+ * indistinguishable from one that did nothing.
+ */
+export async function regenerateLines(
+  input: z.input<typeof regenerateSchema>,
+): Promise<RegenerateResult> {
+  const parsed = regenerateSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: 'that regeneration did not make sense' };
+
+  try {
+    const allowed = await guard('quote:write');
+    if (!allowed.ok) return { ok: false, error: allowed.error };
+
+    const summary = await regenerateFromTemplate({ quoteId: parsed.data.quoteId });
+    revalidatePath(`/quotes/${parsed.data.quoteId}`);
+    return { ok: true, summary };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : 'that regeneration failed',
+    };
+  }
+}
+
+/**
+ * The six reasons, as the database spells them.
+ *
+ * `satisfies` proves every member is a real `change_reason`, and the two
+ * assertions below prove the list is complete and that the union the client
+ * component carries is the same union: a reason added to the enum without a
+ * human wording would otherwise reach production as a blank menu entry.
+ */
+const CHANGE_REASONS = [
+  'customer_request',
+  'site_condition',
+  'design_change',
+  'code_requirement',
+  'error_omission',
+  'allowance_reconciliation',
+] as const satisfies readonly ChangeReason[];
+
+type AssertNever<T extends never> = T;
+type _EveryReasonOffered = AssertNever<Exclude<ChangeReason, (typeof CHANGE_REASONS)[number]>>;
+type _WireReasonsMatch = AssertNever<
+  Exclude<ChangeReason, WireChangeReason> | Exclude<WireChangeReason, ChangeReason>
+>;
+
+const changeOrderSchema = z.object({
+  parentQuoteId: z.string().uuid(),
+  reason: z.enum(CHANGE_REASONS),
+  scheduleImpactDays: z.string().optional(),
+  notes: z.string().max(2000).optional(),
+  lines: z
+    .array(
+      z.object({
+        rateItemId: z.string().uuid(),
+        qty: z.string(),
+        deductive: z.boolean().optional(),
+      }),
+    )
+    .min(1),
+});
+
+export type ChangeOrderResult =
+  | { ok: true; quoteId: string; quoteNumber: string; sequence: number }
+  | { ok: false; error: string };
+
+/**
+ * Raises a change order against an accepted quote.
+ *
+ * A deduction is not a separate kind of line: `changeOrderLinesFromRateItems`
+ * turns the toggle into a negative rate, and the engine already carries
+ * negatives through the subtotal, the percent base and the taxable base.
+ */
+export async function raiseChangeOrder(
+  input: z.input<typeof changeOrderSchema>,
+): Promise<ChangeOrderResult> {
+  const parsed = changeOrderSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: 'that change order needs a reason and at least one line' };
+  }
+  const { parentQuoteId, reason, scheduleImpactDays, notes, lines } = parsed.data;
+
+  let days: number | undefined;
+  if (scheduleImpactDays !== undefined && scheduleImpactDays.trim() !== '') {
+    const value = parseCount(scheduleImpactDays);
+    if (value === null) {
+      return { ok: false, error: `"${scheduleImpactDays}" is not a number of days` };
+    }
+    days = value;
+  }
+
+  const picks: { rateItemId: string; qtyMilli: bigint; deductive: boolean }[] = [];
+  for (const line of lines) {
+    const qtyMilli = parseQtyToMilli(line.qty);
+    if (qtyMilli === null) return { ok: false, error: `"${line.qty}" is not a quantity` };
+    picks.push({ rateItemId: line.rateItemId, qtyMilli, deductive: line.deductive ?? false });
+  }
+
+  try {
+    const allowed = await guard('quote:write');
+    if (!allowed.ok) return { ok: false, error: allowed.error };
+
+    const built = await changeOrderLinesFromRateItems(picks);
+    const created = await createChangeOrder({
+      parentQuoteId,
+      reason,
+      scheduleImpactDays: days,
+      lines: built,
+      notes: notes?.trim() || undefined,
+    });
+
+    revalidatePath('/quotes');
+    revalidatePath(`/quotes/${parentQuoteId}`);
+    revalidatePath(`/quotes/${created.quoteId}`);
+    return { ok: true, ...created };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : 'that change order failed',
+    };
   }
 }

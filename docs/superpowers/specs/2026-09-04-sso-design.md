@@ -346,7 +346,7 @@ The three providers all speak OpenID Connect and all differ in the places that c
 
 ### 6.1 Microsoft (Entra ID)
 
-**Single tenant, or consumers. Never `common` or `organizations`.** `SSO_MICROSOFT_TENANT_ID` is either a tenant GUID or the literal `consumers`. The authority is `https://login.microsoftonline.com/{that}/v2.0` and discovery is read from its `.well-known/openid-configuration`.
+**Single tenant, or consumers. Never `common` or `organizations`.** `MICROSOFT_TENANT_ID` is either a tenant GUID or the literal `consumers`. The authority is `https://login.microsoftonline.com/{that}/v2.0` and discovery is read from its `.well-known/openid-configuration`.
 
 The reason is what it does to the `email` claim. In a single tenant the email of a member account is set by that tenant's administrator, so an owner who enters `jane@company.com` can trust that the account arriving with that claim is the one the administrator gave Jane. Under `common` any tenant in the world can present a token, `email` on a work account is not guaranteed to be verified, and the app would need a maintained allowlist of `tid` values that nobody will maintain. Under `consumers` every account is a personal Microsoft account, `tid` is the fixed MSA tenant `9188040d-6c67-4c5b-b112-36a304b66dad`, and the email is the verified login of the account. Two configurations that make email trustworthy; two that do not; the two that do not are refused at boot.
 
@@ -369,7 +369,7 @@ Discovery from `https://accounts.google.com/.well-known/openid-configuration`; i
 
 **`email_verified` must be `true`, or the link is refused.** Google accounts created with a non-Gmail address can carry an unverified email; the claim says so and the app believes it.
 
-**`hd` is checked server-side, if configured, and the request parameter is never relied upon.** `SSO_GOOGLE_HD`, optional, names a Google Workspace domain. When set, the token's `hd` claim must equal it; a personal Gmail account carries no `hd` claim at all and is refused. Sending `hd` as a request parameter only pre-selects an account in Google's chooser and enforces nothing, so it is sent as a courtesy and ignored on the way back. A deployment without Workspace leaves the variable unset and any verified Google account whose email the owner entered can link — which is the correct behaviour for a company whose staff use Gmail.
+**`hd` is checked server-side, if configured, and the request parameter is never relied upon.** `GOOGLE_HD`, optional, names a Google Workspace domain. When set, the token's `hd` claim must equal it; a personal Gmail account carries no `hd` claim at all and is refused. Sending `hd` as a request parameter only pre-selects an account in Google's chooser and enforces nothing, so it is sent as a courtesy and ignored on the way back. A deployment without Workspace leaves the variable unset and any verified Google account whose email the owner entered can link — which is the correct behaviour for a company whose staff use Gmail.
 
 The OAuth client in Google Cloud Console needs the redirect URI `{APP_PUBLIC_URL}/auth/callback/google`, and the consent screen must be published for external users or every sign-in shows a warning. Google client secrets do not expire.
 
@@ -377,7 +377,7 @@ The OAuth client in Google Cloud Console needs the redirect URI `{APP_PUBLIC_URL
 
 Apple is the provider with the most moving parts, and three of them are decided here.
 
-**The client secret is generated at runtime, never stored as a value.** Apple does not issue a client secret. The client authenticates with a JWT that the app signs itself: ES256, `iss` the ten-character Team ID, `sub` the Services ID, `aud` `https://appleid.apple.com`, `iat` now, `exp` at most six months later, `kid` the Key ID. The signing key is a `.p8` file downloaded once from the developer portal. Most integrations generate this JWT by hand, paste it into configuration with a six-month expiry, and go down six months later. This app mounts the `.p8` as a Docker secret at the path in `SSO_APPLE_PRIVATE_KEY_FILE` and mints a fresh JWT with a five-minute expiry on every token exchange, using `jose`. It cannot expire in operation, and the only thing that can lapse is the Apple developer membership itself, which is the runbook's problem.
+**The client secret is generated at runtime, never stored as a value.** Apple does not issue a client secret. The client authenticates with a JWT that the app signs itself: ES256, `iss` the ten-character Team ID, `sub` the Services ID, `aud` `https://appleid.apple.com`, `iat` now, `exp` at most six months later, `kid` the Key ID. The signing key is a `.p8` file downloaded once from the developer portal. Most integrations generate this JWT by hand, paste it into configuration with a six-month expiry, and go down six months later. This app mounts the `.p8` as a Docker secret at the path in `APPLE_PRIVATE_KEY_FILE` and mints a fresh JWT with a five-minute expiry on every token exchange, using `jose`. It cannot expire in operation, and the only thing that can lapse is the Apple developer membership itself, which is the runbook's problem.
 
 **`response_mode=form_post` is mandatory, and it dictates the state cookie.** Apple requires it whenever `name` or `email` is in scope. The callback is therefore a cross-site POST, which is why `__Host-auth_state` is `SameSite=None` (section 5.3) and why `POST /auth/callback/apple` is the one exemption from the CSRF origin check (section 5.5).
 
@@ -410,6 +410,15 @@ What was not chosen, and why:
 
 ## 7. First-run setup
 
+**Naming corrected at implementation.** This section originally prefixed every
+provider variable with `SSO_`. The implementation reads them unprefixed --
+`GOOGLE_CLIENT_ID`, `MICROSOFT_TENANT_ID`, `APPLE_PRIVATE_KEY_FILE` -- and the
+document now matches, because the disagreement had already cost something: the
+users screen followed this document while the runtime followed itself, so a
+correctly configured deployment offered no sign-in method and reported "no
+provider is configured" while sign-in worked. `SSO_COOKIE_SECRET` keeps its
+prefix: it belongs to this application, not to a provider.
+
 ### 7.1 Who is doing this
 
 Section 8.6 of the main design makes the setup wizard completable by the owner, and that stays true for everything it collects today. Creating an OAuth client in Google Cloud Console, an app registration in Entra, or a Services ID and key in the Apple developer portal is not owner work, and no wizard makes it so — each console changes its layout more often than this product will ship releases. **Provider registration is installer work, done from `INSTALL.md`, and the wizard validates the result.** That is the same rule the existing step 5 applies to the Graph certificate, for the same reason: credentials never pass through a form, because a form writes to the database and the database is mirrored and dumped.
@@ -422,12 +431,12 @@ Section 8.6 of the main design makes the setup wizard completable by the owner, 
 | `APP_PUBLIC_URL` | The origin users reach the app at | Builds every redirect URI and is the CSRF comparison origin. Never derived from `Host`. `INTERNAL_BASE_URL` already exists for Chromium and is a different thing |
 | `SSO_COOKIE_SECRET` | Encrypts `__Host-auth_state` | At least 32 bytes. Rotating it invalidates in-flight sign-ins only, never sessions |
 | `SSO_BOOTSTRAP_OWNER_EMAIL` | Names the first owner | Section 7.3. Removed after first use |
-| `SSO_GOOGLE_CLIENT_ID`, `SSO_GOOGLE_CLIENT_SECRET` | Google OAuth client | |
-| `SSO_GOOGLE_HD` | Optional Workspace domain | Section 6.2 |
-| `SSO_MICROSOFT_CLIENT_ID`, `SSO_MICROSOFT_CLIENT_SECRET` | Entra app registration | |
-| `SSO_MICROSOFT_TENANT_ID` | Tenant GUID or `consumers` | `common` and `organizations` refuse at boot (section 6.1) |
-| `SSO_APPLE_CLIENT_ID`, `SSO_APPLE_TEAM_ID`, `SSO_APPLE_KEY_ID` | Services ID, Team ID, Key ID | |
-| `SSO_APPLE_PRIVATE_KEY_FILE` | Path to the mounted `.p8` | A Docker secret, like the Graph certificate. Never an inline value |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Google OAuth client | |
+| `GOOGLE_HD` | Optional Workspace domain | Section 6.2 |
+| `MICROSOFT_CLIENT_ID`, `MICROSOFT_CLIENT_SECRET` | Entra app registration | |
+| `MICROSOFT_TENANT_ID` | Tenant GUID or `consumers` | `common` and `organizations` refuse at boot (section 6.1) |
+| `APPLE_CLIENT_ID`, `APPLE_TEAM_ID`, `APPLE_KEY_ID` | Services ID, Team ID, Key ID | |
+| `APPLE_PRIVATE_KEY_FILE` | Path to the mounted `.p8` | A Docker secret, like the Graph certificate. Never an inline value |
 
 Every `*_SECRET` accepts a `*_SECRET_FILE` companion pointing at a Docker secret, and the production compose file uses the file form. **A provider is configured when its client id is present, and a configured provider with any of its other variables missing refuses to boot**, naming the variable — the same fail-early rule `verifyAccessJwt` applies to a missing `CF_ACCESS_AUD`. At least one provider must be configured in `sso` mode or the mode is meaningless and boot refuses.
 
@@ -463,7 +472,7 @@ The application reaches it through `SSO_ISSUER_OVERRIDE_<PROVIDER>`, honoured **
 
 ### 8.2 What is covered
 
-**Unit, `tests/unit/`.** Mode interlocks: `sso` with `CF_ACCESS_TEAM_DOMAIN` set refuses; `access` with `SSO_GOOGLE_CLIENT_ID` set refuses; unset `AUTH_MODE` refuses; a configured provider missing its secret refuses. Claim validation per provider: wrong `iss`, wrong `aud`, expired, `nonce` mismatch, Google `email_verified` false, Google `hd` absent when required, Microsoft `tid` mismatch, Microsoft `oid` absent, Apple `email_verified` as the string `"false"`. The Apple client-secret JWT: ES256, `iss`, `sub`, `aud`, `kid`, `exp` under six months. The state cookie: a tampered ciphertext is refused; an expired one is refused; one from a different `SSO_COOKIE_SECRET` is refused. The identity-matching table in section 4 as a table-driven test, one row per line of it.
+**Unit, `tests/unit/`.** Mode interlocks: `sso` with `CF_ACCESS_TEAM_DOMAIN` set refuses; `access` with `GOOGLE_CLIENT_ID` set refuses; unset `AUTH_MODE` refuses; a configured provider missing its secret refuses. Claim validation per provider: wrong `iss`, wrong `aud`, expired, `nonce` mismatch, Google `email_verified` false, Google `hd` absent when required, Microsoft `tid` mismatch, Microsoft `oid` absent, Apple `email_verified` as the string `"false"`. The Apple client-secret JWT: ES256, `iss`, `sub`, `aud`, `kid`, `exp` under six months. The state cookie: a tampered ciphertext is refused; an expired one is refused; one from a different `SSO_COOKIE_SECRET` is refused. The identity-matching table in section 4 as a table-driven test, one row per line of it.
 
 **Database, `tests/db/`.** `NULLS NOT DISTINCT` actually rejects a second Google identity with the same `sub`. The partial unique index rejects a second active identity for one user and allows a void one. `sessions` stores a hash and a round-trip of the plaintext finds the row. The application role holds no DELETE on the two new tables, inside a transaction, as Task 9 of Plan 1 already does for the rest.
 

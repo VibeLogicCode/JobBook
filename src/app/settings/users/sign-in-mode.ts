@@ -28,9 +28,14 @@ export function authMode(): AuthMode {
  */
 export function configuredProviders(): Provider[] {
   const providers: Provider[] = [];
-  if (process.env.SSO_GOOGLE_CLIENT_ID) providers.push('google');
-  if (process.env.SSO_MICROSOFT_CLIENT_ID) providers.push('microsoft');
-  if (process.env.SSO_APPLE_CLIENT_ID) providers.push('apple');
+  // Unprefixed, matching what the runtime actually reads in
+  // src/lib/auth/oidc/providers.ts. These were SSO_-prefixed, following the SSO
+  // design document, and the consequence was silent: a correctly configured
+  // deployment offered no sign-in method at all and this screen showed "no
+  // provider is configured" while sign-in worked perfectly.
+  if (process.env.GOOGLE_CLIENT_ID) providers.push('google');
+  if (process.env.MICROSOFT_CLIENT_ID) providers.push('microsoft');
+  if (process.env.APPLE_CLIENT_ID) providers.push('apple');
   return providers;
 }
 

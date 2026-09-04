@@ -8,6 +8,7 @@ import { db } from '@/db/client';
 import { customers, projects } from '@/db/schema';
 import type { FormResult } from '@/components/detail/form-state';
 import { FINISHED_STAGES } from '@/components/detail/labels';
+import { guard } from '@/lib/auth/guard';
 
 /**
  * An untouched text input posts an empty string; a column wants null.
@@ -124,6 +125,9 @@ export async function createCustomer(
 
   let id: string;
   try {
+    const allowed = await guard('quote:write');
+    if (!allowed.ok) return { ok: false, error: allowed.error };
+
     const [row] = await db
       .insert(customers)
       .values(parsed.data)
@@ -152,6 +156,9 @@ export async function updateCustomer(
   if (!parsed.success) return { ok: false, error: firstProblem(parsed.error) };
 
   try {
+    const allowed = await guard('quote:write');
+    if (!allowed.ok) return { ok: false, error: allowed.error };
+
     const [existing] = await db.select().from(customers).where(eq(customers.id, id.data.id));
     if (!existing) return { ok: false, error: 'that customer no longer exists' };
     // A void record is a closed record. Editing one would quietly rewrite
@@ -183,6 +190,9 @@ export async function voidCustomer(
   const { id, reason } = parsed.data;
 
   try {
+    const allowed = await guard('record:void');
+    if (!allowed.ok) return { ok: false, error: allowed.error };
+
     const [existing] = await db.select().from(customers).where(eq(customers.id, id));
     if (!existing) return { ok: false, error: 'that customer no longer exists' };
     if (existing.recordStatus !== 'active') {

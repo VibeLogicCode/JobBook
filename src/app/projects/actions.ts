@@ -8,6 +8,7 @@ import { db } from '@/db/client';
 import { customers, projects } from '@/db/schema';
 import { allocateDocumentNumber } from '@/lib/quote/numbering';
 import type { FormResult } from '@/components/detail/form-state';
+import { guard } from '@/lib/auth/guard';
 
 const optionalText = (max: number) =>
   z
@@ -116,6 +117,9 @@ export async function createProject(
 
   let id: string;
   try {
+    const allowed = await guard('quote:write');
+    if (!allowed.ok) return { ok: false, error: allowed.error };
+
     const [customer] = await db
       .select({ recordStatus: customers.recordStatus })
       .from(customers)
@@ -161,6 +165,9 @@ export async function updateProject(
   if (!parsed.success) return { ok: false, error: firstProblem(parsed.error) };
 
   try {
+    const allowed = await guard('quote:write');
+    if (!allowed.ok) return { ok: false, error: allowed.error };
+
     const [existing] = await db.select().from(projects).where(eq(projects.id, id.data.id));
     if (!existing) return { ok: false, error: 'that job no longer exists' };
     if (existing.recordStatus !== 'active') {
@@ -193,6 +200,9 @@ export async function setProjectStage(
   const { id, stage, lostReason } = parsed.data;
 
   try {
+    const allowed = await guard('quote:write');
+    if (!allowed.ok) return { ok: false, error: allowed.error };
+
     const [existing] = await db.select().from(projects).where(eq(projects.id, id));
     if (!existing) return { ok: false, error: 'that job no longer exists' };
     if (existing.recordStatus !== 'active') {
