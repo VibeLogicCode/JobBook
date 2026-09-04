@@ -91,7 +91,16 @@ The app validates the `Cf-Access-Jwt-Assertion` header in Next.js middleware aga
 
 Roles: `owner` (full access including rate cards), `admin` (quotes and projects, no rate edit), `bookkeeper` (read quotes, full access to phase 3 expense features). Enforced server-side in route handlers, not by hiding UI.
 
-### 3.4 Hosting portability
+### 3.4 Distribution and self-update
+
+Source lives in a private repository; the customer receives a built image from a private registry and never receives source. The application updates itself by asking a public version manifest what the latest release is, then sending one request to a Watchtower companion container — it never touches the Docker socket.
+
+Full design, including what source secrecy is and is not achievable, in `2026-08-30-distribution-and-updates.md`. Two consequences land in this spec:
+
+- **A `settings` key/value table** for machine state (update bookkeeping, sync cursors, toggles), distinct from `organization`'s typed tenant configuration. **Excluded from the SharePoint mirror** — machine state has no business being read by an accountant, and a mirrored table ends up in every backup.
+- **Migrations run on boot, after a dump and before serving.** A migration failure must refuse to serve rather than run against a half-migrated schema.
+
+### 3.5 Hosting portability
 
 Everything runs from one `docker-compose.yml`: app, postgres, cloudflared. The mini PC is the initial target at zero marginal cost. If uptime proves inadequate, the identical compose file runs on a 4-6 EUR/month VPS with a database restore and a DNS change. The hosting decision is therefore reversible and is deliberately deferred.
 
@@ -243,6 +252,13 @@ files        -- polymorphic attachment table, one row per stored file
 
 audit_log
   id, table_name, record_id, action, changed_by, changed_at, diff jsonb
+
+settings     -- key/value machine state; NOT mirrored to SharePoint
+  key (primary key), value, updated_at
+  -- update.* bookkeeping, feature toggles, cursors. Distinct from
+  -- `organization`, which holds typed tenant configuration. Absence is the
+  -- off state: no defaulted column can switch a feature on for someone who
+  -- never asked.
 
 sync_state   -- not mirrored to SharePoint; local bookkeeping only
   id, list_name (unique), watermark timestamptz,
