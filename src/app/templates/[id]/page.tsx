@@ -28,6 +28,7 @@ import {
 import { Notice } from '@/components/settings/Notice';
 import { Section } from '@/components/settings/Section';
 import { Pill } from '@/components/ui/Pill';
+import { AmountCell, TableWrap } from '@/components/ui/Table';
 import { formatQty, formatRate } from '@/lib/money/format';
 
 export const dynamic = 'force-dynamic';
@@ -199,190 +200,186 @@ export default async function TemplateDetailPage({
         </Section>
 
         <Section title="Lines">
-          <div className="overflow-x-auto rounded-[6px] border border-line">
-            <table className="data-table data-table--stack" style={{ minWidth: '68rem' }}>
-              <thead>
+          <TableWrap minWidth="68rem">
+            <thead>
+              <tr>
+                <th scope="col">Item</th>
+                <th scope="col">Group</th>
+                <th scope="col">Quantity from</th>
+                <th scope="col" className="cell-num">
+                  Multiplier
+                </th>
+                <th scope="col" className="cell-num">
+                  Fixed quantity
+                </th>
+                <th scope="col">Flags</th>
+                <th scope="col" className="cell-num">
+                  Order
+                </th>
+                <th scope="col">Change</th>
+              </tr>
+            </thead>
+            <tbody>
+              {lines.length === 0 ? (
                 <tr>
-                  <th scope="col">Item</th>
-                  <th scope="col">Group</th>
-                  <th scope="col">Quantity from</th>
-                  <th scope="col" className="cell-num">
-                    Multiplier
-                  </th>
-                  <th scope="col" className="cell-num">
-                    Fixed quantity
-                  </th>
-                  <th scope="col">Flags</th>
-                  <th scope="col" className="cell-num">
-                    Order
-                  </th>
-                  <th scope="col">Change</th>
+                  <td data-label="Item" colSpan={8}>
+                    No lines yet. Add the first one below, and the worked example above will
+                    show what it derives.
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {lines.length === 0 ? (
-                  <tr>
-                    <td data-label="Item" colSpan={8}>
-                      No lines yet. Add the first one below, and the worked example above will
-                      show what it derives.
-                    </td>
-                  </tr>
-                ) : null}
+              ) : null}
 
-                {lines.map(({ line, item }) => (
-                  <tr key={line.id}>
-                    <td data-label="Item">
-                      {item.description}
-                      <span className="ml-2 num t-small text-subtle">{item.code}</span>
-                      <span className="block t-small text-subtle">
-                        {item.calcMode === 'qty'
-                          ? `per ${item.unitLabel}`
-                          : item.calcMode === 'flat'
-                            ? 'flat price'
-                            : 'percentage of the work'}
-                      </span>
-                    </td>
-                    <td data-label="Group" className="t-small text-muted">
-                      {line.lineGroup}
-                    </td>
-                    <td data-label="Quantity from" className="t-small text-muted">
-                      {QTY_SOURCE_LABELS[line.qtySource] ?? line.qtySource}
-                    </td>
-                    <td data-label="Multiplier" className="cell-num">
-                      {formatRate(line.qtyMultiplierTenThou)}
-                    </td>
-                    <td data-label="Fixed quantity" className="cell-num">
-                      {line.fixedQtyMilli === null ? '—' : formatQty(line.fixedQtyMilli)}
-                    </td>
-                    <td data-label="Flags">
-                      <span className="flex flex-wrap gap-1">
-                        {line.isOptional ? <Pill tone="info">Optional</Pill> : null}
-                        {line.isAllowance ? <Pill tone="warning">Allowance</Pill> : null}
-                        {!line.isOptional && !line.isAllowance ? (
-                          <span className="t-small text-subtle">Included, fixed price</span>
-                        ) : null}
-                      </span>
-                    </td>
-                    <td data-label="Order" className="cell-num">
-                      {line.sortOrder}
-                    </td>
-                    <td data-label="Change">
-                      <details className="min-w-0">
-                        <summary className="min-h-11 cursor-pointer list-none rounded-[4px] border border-line-strong px-3 py-2 t-small">
-                          Change…
-                        </summary>
-                        <div className="mt-3 flex w-full max-w-[38rem] flex-col gap-4 border-t border-line pt-3">
-                          <ActionForm
-                            action={updateTemplateLine}
-                            submitLabel="Save line"
-                            disabled={!allowed}
-                            disabledNote={readOnlyNote}
-                          >
-                            <input type="hidden" name="id" value={line.id} />
-                            <input type="hidden" name="scopeTemplateId" value={template.id} />
-                            <input type="hidden" name="rateItemId" value={line.rateItemId} />
-                            <FieldGrid>
-                              <SelectField
-                                idPrefix={`line-${line.id}`}
-                                name="qtySource"
-                                label="Quantity from"
-                                required
-                                defaultValue={line.qtySource}
-                                options={QTY_SOURCE_OPTIONS}
-                                disabled={!allowed}
-                              />
-                              <TextField
-                                idPrefix={`line-${line.id}`}
-                                name="qtyMultiplier"
-                                label="Multiplier"
-                                required
-                                numeric
-                                inputMode="decimal"
-                                maxLength={12}
-                                defaultValue={formatRate(line.qtyMultiplierTenThou)}
-                                disabled={!allowed}
-                                hint="Four decimal places at most. Ignored when the quantity is typed on the quote."
-                              />
-                              <TextField
-                                idPrefix={`line-${line.id}`}
-                                name="fixedQty"
-                                label="Fixed quantity"
-                                numeric
-                                inputMode="decimal"
-                                maxLength={12}
-                                defaultValue={
-                                  line.fixedQtyMilli === null
-                                    ? ''
-                                    : formatQty(line.fixedQtyMilli)
-                                }
-                                disabled={!allowed}
-                                hint="Only read when the source is a fixed quantity."
-                              />
-                              <TextField
-                                idPrefix={`line-${line.id}`}
-                                name="lineGroup"
-                                label="Line group"
-                                required
-                                maxLength={100}
-                                defaultValue={line.lineGroup}
-                                disabled={!allowed}
-                                hint="The band this line sits under on the worksheet and the document."
-                              />
-                              <TextField
-                                idPrefix={`line-${line.id}`}
-                                name="sortOrder"
-                                label="Order"
-                                required
-                                numeric
-                                inputMode="numeric"
-                                maxLength={4}
-                                defaultValue={String(line.sortOrder)}
-                                disabled={!allowed}
-                              />
-                              <CheckboxField
-                                idPrefix={`line-${line.id}`}
-                                name="isOptional"
-                                label="Optional — an upgrade the customer may add"
-                                defaultChecked={line.isOptional}
-                                disabled={!allowed}
-                                hint="An optional line starts excluded, so a template cannot silently inflate a quote."
-                              />
-                              <CheckboxField
-                                idPrefix={`line-${line.id}`}
-                                name="isAllowance"
-                                label="Allowance — a placeholder reconciled against actual cost"
-                                defaultChecked={line.isAllowance}
-                                disabled={!allowed}
-                                hint="Overrides the rate item's own flag, so one item can be a fixed price in one template and an allowance in another."
-                              />
-                            </FieldGrid>
-                          </ActionForm>
-
-                          <div>
-                            <h3 className="t-small font-semibold">Remove this line</h3>
-                            <p className="mb-2 max-w-prose t-small text-subtle">
-                              The row is voided with a reason, not deleted. The database
-                              refuses a delete outright — a watermark-based mirror cannot
-                              observe a row that no longer exists, and the phantom would
-                              outlive the record.
-                            </p>
-                            <RowAction
-                              action={voidTemplateLine}
-                              label="Remove from template"
-                              destructive
+              {lines.map(({ line, item }) => (
+                <tr key={line.id}>
+                  <td data-label="Item">
+                    {item.description}
+                    <span className="ml-2 num t-small text-subtle">{item.code}</span>
+                    <span className="block t-small text-subtle">
+                      {item.calcMode === 'qty'
+                        ? `per ${item.unitLabel}`
+                        : item.calcMode === 'flat'
+                          ? 'flat price'
+                          : 'percentage of the work'}
+                    </span>
+                  </td>
+                  <td data-label="Group" className="t-small text-muted">
+                    {line.lineGroup}
+                  </td>
+                  <td data-label="Quantity from" className="t-small text-muted">
+                    {QTY_SOURCE_LABELS[line.qtySource] ?? line.qtySource}
+                  </td>
+                  <AmountCell data-label="Multiplier">
+                    {formatRate(line.qtyMultiplierTenThou)}
+                  </AmountCell>
+                  <AmountCell data-label="Fixed quantity">
+                    {line.fixedQtyMilli === null ? '—' : formatQty(line.fixedQtyMilli)}
+                  </AmountCell>
+                  <td data-label="Flags">
+                    <span className="flex flex-wrap gap-1">
+                      {line.isOptional ? <Pill tone="info">Optional</Pill> : null}
+                      {line.isAllowance ? <Pill tone="warning">Allowance</Pill> : null}
+                      {!line.isOptional && !line.isAllowance ? (
+                        <span className="t-small text-subtle">Included, fixed price</span>
+                      ) : null}
+                    </span>
+                  </td>
+                  <AmountCell data-label="Order">{line.sortOrder}</AmountCell>
+                  <td data-label="Change">
+                    <details className="min-w-0">
+                      <summary className="min-h-11 cursor-pointer list-none rounded-[4px] border border-line-strong px-3 py-2 t-small">
+                        Change…
+                      </summary>
+                      <div className="mt-3 flex w-full max-w-[38rem] flex-col gap-4 border-t border-line pt-3">
+                        <ActionForm
+                          action={updateTemplateLine}
+                          submitLabel="Save line"
+                          disabled={!allowed}
+                          disabledNote={readOnlyNote}
+                        >
+                          <input type="hidden" name="id" value={line.id} />
+                          <input type="hidden" name="scopeTemplateId" value={template.id} />
+                          <input type="hidden" name="rateItemId" value={line.rateItemId} />
+                          <FieldGrid>
+                            <SelectField
+                              idPrefix={`line-${line.id}`}
+                              name="qtySource"
+                              label="Quantity from"
+                              required
+                              defaultValue={line.qtySource}
+                              options={QTY_SOURCE_OPTIONS}
                               disabled={!allowed}
-                              fields={{ id: line.id, scopeTemplateId: template.id, reason: '' }}
-                              confirm="Remove this line from the template? The row stays, voided, with a reason."
                             />
-                          </div>
+                            <TextField
+                              idPrefix={`line-${line.id}`}
+                              name="qtyMultiplier"
+                              label="Multiplier"
+                              required
+                              numeric
+                              inputMode="decimal"
+                              maxLength={12}
+                              defaultValue={formatRate(line.qtyMultiplierTenThou)}
+                              disabled={!allowed}
+                              hint="Four decimal places at most. Ignored when the quantity is typed on the quote."
+                            />
+                            <TextField
+                              idPrefix={`line-${line.id}`}
+                              name="fixedQty"
+                              label="Fixed quantity"
+                              numeric
+                              inputMode="decimal"
+                              maxLength={12}
+                              defaultValue={
+                                line.fixedQtyMilli === null
+                                  ? ''
+                                  : formatQty(line.fixedQtyMilli)
+                              }
+                              disabled={!allowed}
+                              hint="Only read when the source is a fixed quantity."
+                            />
+                            <TextField
+                              idPrefix={`line-${line.id}`}
+                              name="lineGroup"
+                              label="Line group"
+                              required
+                              maxLength={100}
+                              defaultValue={line.lineGroup}
+                              disabled={!allowed}
+                              hint="The band this line sits under on the worksheet and the document."
+                            />
+                            <TextField
+                              idPrefix={`line-${line.id}`}
+                              name="sortOrder"
+                              label="Order"
+                              required
+                              numeric
+                              inputMode="numeric"
+                              maxLength={4}
+                              defaultValue={String(line.sortOrder)}
+                              disabled={!allowed}
+                            />
+                            <CheckboxField
+                              idPrefix={`line-${line.id}`}
+                              name="isOptional"
+                              label="Optional — an upgrade the customer may add"
+                              defaultChecked={line.isOptional}
+                              disabled={!allowed}
+                              hint="An optional line starts excluded, so a template cannot silently inflate a quote."
+                            />
+                            <CheckboxField
+                              idPrefix={`line-${line.id}`}
+                              name="isAllowance"
+                              label="Allowance — a placeholder reconciled against actual cost"
+                              defaultChecked={line.isAllowance}
+                              disabled={!allowed}
+                              hint="Overrides the rate item's own flag, so one item can be a fixed price in one template and an allowance in another."
+                            />
+                          </FieldGrid>
+                        </ActionForm>
+
+                        <div>
+                          <h3 className="t-small font-semibold">Remove this line</h3>
+                          <p className="mb-2 max-w-prose t-small text-subtle">
+                            The row is voided with a reason, not deleted. The database
+                            refuses a delete outright — a watermark-based mirror cannot
+                            observe a row that no longer exists, and the phantom would
+                            outlive the record.
+                          </p>
+                          <RowAction
+                            action={voidTemplateLine}
+                            label="Remove from template"
+                            destructive
+                            disabled={!allowed}
+                            fields={{ id: line.id, scopeTemplateId: template.id, reason: '' }}
+                            confirm="Remove this line from the template? The row stays, voided, with a reason."
+                          />
                         </div>
-                      </details>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                      </div>
+                    </details>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </TableWrap>
         </Section>
 
         <Section

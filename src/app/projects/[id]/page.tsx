@@ -4,6 +4,7 @@ import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { customers, organization, projects, quotes, stageHistory } from '@/db/schema';
 import { Pill, statusTone } from '@/components/ui/Pill';
+import { AmountCell, TableWrap } from '@/components/ui/Table';
 import { formatBasisPoints, formatCents } from '@/lib/money/format';
 import { setProjectStage, updateProject } from '@/app/projects/actions';
 import { DetailList, DetailRow, EmptyState, Panel } from '@/components/detail/Panel';
@@ -109,54 +110,88 @@ export default async function ProjectPage({
 
   return (
     <div className="grid gap-4 px-4 py-4 sm:px-6">
-      <header className="grid gap-1">
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-          <h1 className="t-title">{project.name}</h1>
-          <span className="num t-small text-muted">{project.projectNumber}</span>
-          <span className="t-small text-subtle">{noun}</span>
-          <Pill tone={stageTone(project.stage)}>{PROJECT_STAGES[project.stage]}</Pill>
-          {active ? null : <Pill tone="negative">Void</Pill>}
+      {/* Identity and the actions only. What the job is worth, who it is for
+          and where it stands all read from the one block below, because the
+          fact in two places is how this screen went wrong before. */}
+      <header className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <h1 className="t-title">{project.name}</h1>
+        <span className="num t-small text-muted">{project.projectNumber}</span>
+        <span className="t-small text-subtle">{noun}</span>
+        {active ? null : <Pill tone="negative">Void</Pill>}
 
-          <div className="no-print ml-auto flex flex-wrap gap-2">
+        <div className="no-print ml-auto flex flex-wrap gap-2">
+          {active && !editing ? (
+            <>
+              <Link
+                href={`/projects/${project.id}?edit=1`}
+                className="flex min-h-11 items-center rounded-[4px] border border-line-strong bg-surface px-3 hover:bg-surface-2"
+              >
+                Edit
+              </Link>
+              {/* Another quote on the same opportunity -- a second price
+                  point, or a scope the customer asked to see separately. */}
+              <Link
+                href={`/quotes/new?opportunity=${project.id}`}
+                className="flex min-h-11 items-center rounded-[4px] bg-accent px-3 text-accent-fg hover:bg-accent-hover"
+              >
+                New quote
+              </Link>
+            </>
+          ) : null}
+        </div>
+      </header>
+
+      {/* Where the job stands, in one place: what it is worth, what it is,
+          and which stage it is in. A stage with a panel of its own read as a
+          setting to go and change rather than as this job's status, and put
+          the one figure that matters two scrolls away from it. */}
+      <section className="rounded-[6px] border border-line bg-surface p-4">
+        <div className="flex flex-wrap items-start gap-x-8 gap-y-4">
+          <div className="min-w-0">
+            {/* The label names the accepted quotes because the figure is
+                derived from them -- there is no contract_value column -- and
+                that is the whole reason it can be trusted. */}
+            <p className="t-small text-muted">Contract value — accepted quotes</p>
+            <p className="num t-display">{formatCents(Number(job.contractValueCents))}</p>
+            <p className="t-small text-muted">
+              {accepted.length} accepted of{' '}
+              {versions.length} quote{versions.length === 1 ? '' : 's'}
+            </p>
+            <p className="mt-2 t-small text-muted">
+              <Link
+                href={`/customers/${job.customerId}`}
+                className="text-accent-text hover:underline"
+              >
+                {job.customerName}
+              </Link>
+              {job.customerCompany ? ` · ${job.customerCompany}` : ''}
+              {` · ${PROJECT_TYPES[project.projectType]}`}
+              {project.contractType ? ` · ${CONTRACT_TYPES[project.contractType]}` : ''}
+            </p>
+          </div>
+
+          {/* The control stays its own form with its own action even inside
+              this block: every stage change writes a stage_history row
+              through a trigger, and a stage folded in among fifteen other
+              fields gets moved by accident on the way to fixing a postal
+              code. It sizes to the select and its button rather than filling
+              the card -- a stage change is a small, frequent adjustment, not
+              this screen's primary surface. */}
+          <div className="min-w-64 sm:ml-auto">
+            <Pill tone={stageTone(project.stage)}>{PROJECT_STAGES[project.stage]}</Pill>
             {active && !editing ? (
-              <>
-                <Link
-                  href={`/projects/${project.id}?edit=1`}
-                  className="flex min-h-11 items-center rounded-[4px] border border-line-strong bg-surface px-3 hover:bg-surface-2"
-                >
-                  Edit
-                </Link>
-                {/* Another quote on the same opportunity -- a second price
-                    point, or a scope the customer asked to see separately. */}
-                <Link
-                  href={`/quotes/new?opportunity=${project.id}`}
-                  className="flex min-h-11 items-center rounded-[4px] bg-accent px-3 text-accent-fg hover:bg-accent-hover"
-                >
-                  New quote
-                </Link>
-              </>
+              <div className="no-print mt-3">
+                <StageControl
+                  action={setProjectStage}
+                  projectId={project.id}
+                  stage={project.stage}
+                  lostReason={project.lostReason}
+                  hasAcceptedQuote={accepted.length > 0}
+                />
+              </div>
             ) : null}
           </div>
         </div>
-        <p className="t-small text-muted">
-          <Link href={`/customers/${job.customerId}`} className="text-accent-text hover:underline">
-            {job.customerName}
-          </Link>
-          {job.customerCompany ? ` · ${job.customerCompany}` : ''}
-          {` · ${PROJECT_TYPES[project.projectType]}`}
-          {project.contractType ? ` · ${CONTRACT_TYPES[project.contractType]}` : ''}
-        </p>
-      </header>
-
-      {/* The one dominant figure on the view. Derived, so it is always the sum
-          of the quotes a customer actually signed. */}
-      <section className="rounded-[6px] border border-line bg-surface p-4">
-        <p className="t-small text-muted">Contract value — accepted quotes</p>
-        <p className="num t-display">{formatCents(Number(job.contractValueCents))}</p>
-        <p className="t-small text-muted">
-          {accepted.length} accepted of{' '}
-          {versions.length} quote{versions.length === 1 ? '' : 's'}
-        </p>
       </section>
 
       {project.stage === 'lost' && project.lostReason ? (
@@ -232,78 +267,69 @@ export default async function ProjectPage({
         </div>
       )}
 
-      {active && !editing ? (
-        <Panel title="Stage" className="no-print">
-          <StageControl
-            action={setProjectStage}
-            projectId={project.id}
-            stage={project.stage}
-            lostReason={project.lostReason}
-            hasAcceptedQuote={accepted.length > 0}
-          />
-        </Panel>
-      ) : null}
-
-      <Panel title="Quotes">
+      {/* min-w-0 because this panel is a grid item, and a grid item's
+          automatic minimum width is its min-content -- which, for a panel
+          holding a table that declares a min-width, is that table's width.
+          Without it the panel refuses to shrink and the PAGE scrolls
+          sideways at any viewport narrower than the table (measured: 858px
+          of page at a 700px viewport), which is the one thing the scroll
+          container exists to prevent. */}
+      <Panel title="Quotes" className="min-w-0">
         {versions.length === 0 ? (
           <EmptyState>
             No quotes on this job yet. Start one from the worksheet, or move the job to Quoting
             first so the stage history reads true.
           </EmptyState>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="data-table data-table--stack" style={{ minWidth: '46rem' }}>
-              <caption className="sr-only">Quote versions for {project.projectNumber}</caption>
-              <thead>
-                <tr>
-                  <th scope="col">Quote</th>
-                  <th scope="col">Version</th>
-                  <th scope="col">Dated</th>
-                  <th scope="col">Status</th>
-                  <th scope="col" className="cell-num">Total</th>
-                  <th scope="col" className="present-hide cell-num">Margin</th>
-                </tr>
-              </thead>
-              <tbody>
-                {versions.map((quote) => {
-                  // Expiry derives from valid_until; there is no stored
-                  // 'expired' status to go stale.
-                  const expired = quote.status === 'sent' && quote.validUntil < today;
-                  return (
-                    <tr key={quote.id}>
-                      <td data-label="Quote">
-                        <Link href={`/quotes/${quote.id}`} className="text-accent-text hover:underline">
-                          {quote.quoteNumber}
-                        </Link>
-                        {quote.kind === 'change_order' ? (
-                          <span className="ml-2">
-                            <Pill tone="info">Change order</Pill>
-                          </span>
-                        ) : null}
-                      </td>
-                      <td data-label="Version" className="num t-small text-muted">
-                        v{quote.version}
-                      </td>
-                      <td data-label="Dated" className="num t-small">{quote.quoteDate}</td>
-                      <td data-label="Status">
-                        <Pill tone={statusTone(quote.status, expired)}>
-                          {expired ? 'Expired' : quote.status}
-                        </Pill>
-                      </td>
-                      <td data-label="Total" className="cell-num">
-                        {formatCents(quote.totalCents)}
-                      </td>
-                      {/* Margin is hidden in Present mode: he turns the laptop
-                          around at the customer's kitchen table. */}
-                      <td data-label="Margin" className="present-hide cell-num text-muted">
-                        {formatBasisPoints(quote.marginBp)}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <TableWrap minWidth="46rem" bare>
+            <caption className="sr-only">Quote versions for {project.projectNumber}</caption>
+            <thead>
+              <tr>
+                <th scope="col">Quote</th>
+                <th scope="col">Version</th>
+                <th scope="col">Dated</th>
+                <th scope="col">Status</th>
+                <th scope="col" className="cell-num">Total</th>
+                <th scope="col" className="present-hide cell-num">Margin</th>
+              </tr>
+            </thead>
+            <tbody>
+              {versions.map((quote) => {
+                // Expiry derives from valid_until; there is no stored
+                // 'expired' status to go stale.
+                const expired = quote.status === 'sent' && quote.validUntil < today;
+                return (
+                  <tr key={quote.id}>
+                    <td data-label="Quote">
+                      <Link href={`/quotes/${quote.id}`} className="text-accent-text hover:underline">
+                        {quote.quoteNumber}
+                      </Link>
+                      {quote.kind === 'change_order' ? (
+                        <span className="ml-2">
+                          <Pill tone="info">Change order</Pill>
+                        </span>
+                      ) : null}
+                    </td>
+                    <td data-label="Version" className="num t-small text-muted">
+                      v{quote.version}
+                    </td>
+                    <td data-label="Dated" className="num t-small">{quote.quoteDate}</td>
+                    <td data-label="Status">
+                      <Pill tone={statusTone(quote.status, expired)}>
+                        {expired ? 'Expired' : quote.status}
+                      </Pill>
+                    </td>
+                    <AmountCell data-label="Total" cents={quote.totalCents} />
+                    {/* Margin is hidden in Present mode: he turns the laptop
+                        around at the customer's kitchen table. */}
+                    <AmountCell data-label="Margin" className="present-hide text-muted">
+                      {formatBasisPoints(quote.marginBp)}
+                    </AmountCell>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </TableWrap>
         )}
       </Panel>
 

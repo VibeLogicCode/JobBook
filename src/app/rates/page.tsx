@@ -1,6 +1,7 @@
 import { and, asc, eq } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { costCodes, rateItems } from '@/db/schema';
+import { AmountCell, TableWrap } from '@/components/ui/Table';
 import { formatBasisPoints, formatRate } from '@/lib/money/format';
 import { marginBasisPoints } from '@/lib/money/scale';
 
@@ -22,44 +23,41 @@ export default async function RatesPage() {
         written — every line snapshots its rates when it is created.
       </p>
 
-      <div className="overflow-x-auto rounded-[6px] border border-line bg-surface">
-        <table className="data-table data-table--stack" style={{ minWidth: '48rem' }}>
-          <thead>
-            <tr>
-              <th scope="col">Description</th>
-              <th scope="col">Code</th>
-              <th scope="col">Cost code</th>
-              <th scope="col">Unit</th>
-              <th scope="col" className="cell-num">Cost</th>
-              <th scope="col" className="cell-num">Sell</th>
-              <th scope="col" className="cell-num">Margin</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map(({ item, costCode }) => {
-              const margin = marginBasisPoints(item.sellRateTenThou, item.costRateTenThou);
-              return (
-                <tr key={item.id}>
-                  <td data-label="Description">{item.description}</td>
-                  <td data-label="Code" className="num t-small text-muted">{item.code}</td>
-                  <td data-label="Cost code" className="t-small text-muted">{costCode ?? '—'}</td>
-                  <td data-label="Unit" className="t-small text-muted">
-                    {item.unitLabel || (item.calcMode === 'percent' ? '%' : '—')}
-                  </td>
-                  <td data-label="Cost" className="cell-num">{formatRate(item.costRateTenThou)}</td>
-                  <td data-label="Sell" className="cell-num">{formatRate(item.sellRateTenThou)}</td>
-                  <td
-                    data-label="Margin"
-                    className={`cell-num ${margin < 0 ? 'text-negative' : ''}`}
-                  >
-                    {formatBasisPoints(margin)}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+      <TableWrap minWidth="48rem">
+        <thead>
+          <tr>
+            <th scope="col">Description</th>
+            <th scope="col">Code</th>
+            <th scope="col">Cost code</th>
+            <th scope="col">Unit</th>
+            <th scope="col" className="cell-num">Cost</th>
+            <th scope="col" className="cell-num">Sell</th>
+            <th scope="col" className="cell-num">Margin</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(({ item, costCode }) => {
+            const margin = marginBasisPoints(item.sellRateTenThou, item.costRateTenThou);
+            return (
+              <tr key={item.id}>
+                <td data-label="Description">{item.description}</td>
+                <td data-label="Code" className="num t-small text-muted">{item.code}</td>
+                <td data-label="Cost code" className="t-small text-muted">{costCode ?? '—'}</td>
+                <td data-label="Unit" className="t-small text-muted">
+                  {item.unitLabel || (item.calcMode === 'percent' ? '%' : '—')}
+                </td>
+                {/* Rates are ten-thousandths, not cents, so these take the
+                    numeric cell but keep their own formatter. */}
+                <AmountCell data-label="Cost">{formatRate(item.costRateTenThou)}</AmountCell>
+                <AmountCell data-label="Sell">{formatRate(item.sellRateTenThou)}</AmountCell>
+                <AmountCell data-label="Margin" className={margin < 0 ? 'text-negative' : ''}>
+                  {formatBasisPoints(margin)}
+                </AmountCell>
+              </tr>
+            );
+          })}
+        </tbody>
+      </TableWrap>
     </div>
   );
 }

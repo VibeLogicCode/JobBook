@@ -4,7 +4,7 @@ import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { customers, organization, projects, quotes } from '@/db/schema';
 import { Pill, statusTone } from '@/components/ui/Pill';
-import { formatCents } from '@/lib/money/format';
+import { AmountCell, TableWrap } from '@/components/ui/Table';
 import { updateCustomer, voidCustomer } from '@/app/customers/actions';
 import { CustomerForm } from '@/components/detail/CustomerForm';
 import { DetailList, DetailRow, EmptyState, Panel } from '@/components/detail/Panel';
@@ -226,7 +226,12 @@ export default async function CustomerPage({
         </div>
       )}
 
-      <Panel title="Jobs">
+      {/* min-w-0 on both table panels because a grid item's automatic minimum
+          width is its min-content, and for a panel holding a table that
+          declares a min-width that IS the table's width: without it the panel
+          will not shrink and the page scrolls sideways instead of the table
+          (measured: 826px of page at a 700px viewport). */}
+      <Panel title="Jobs" className="min-w-0">
         {jobs.length === 0 ? (
           <EmptyState>
             No jobs for this customer yet.{' '}
@@ -239,95 +244,87 @@ export default async function CustomerPage({
             {' '}— a quote is written against a job, not against a person.
           </EmptyState>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="data-table data-table--stack" style={{ minWidth: '44rem' }}>
-              <caption className="sr-only">Jobs for {customer.name}</caption>
-              <thead>
-                <tr>
-                  <th scope="col">Job</th>
-                  <th scope="col">Number</th>
-                  <th scope="col">Stage</th>
-                  <th scope="col">Starts</th>
-                  <th scope="col" className="cell-num">Contract</th>
+          <TableWrap minWidth="44rem" bare>
+            <caption className="sr-only">Jobs for {customer.name}</caption>
+            <thead>
+              <tr>
+                <th scope="col">Job</th>
+                <th scope="col">Number</th>
+                <th scope="col">Stage</th>
+                <th scope="col">Starts</th>
+                <th scope="col" className="cell-num">Contract</th>
+              </tr>
+            </thead>
+            <tbody>
+              {jobs.map((job) => (
+                <tr key={job.id}>
+                  <td data-label="Job">
+                    <Link href={`/projects/${job.id}`} className="text-accent-text hover:underline">
+                      {job.name}
+                    </Link>
+                  </td>
+                  <td data-label="Number" className="num t-small text-muted">
+                    {job.projectNumber}
+                  </td>
+                  <td data-label="Stage">
+                    <Pill tone={stageTone(job.stage)}>{PROJECT_STAGES[job.stage]}</Pill>
+                  </td>
+                  <td data-label="Starts" className="num t-small">
+                    {job.actualStart ?? job.scheduledStart ?? '—'}
+                  </td>
+                  <AmountCell data-label="Contract" cents={Number(job.contractValueCents)} />
                 </tr>
-              </thead>
-              <tbody>
-                {jobs.map((job) => (
-                  <tr key={job.id}>
-                    <td data-label="Job">
-                      <Link href={`/projects/${job.id}`} className="text-accent-text hover:underline">
-                        {job.name}
-                      </Link>
-                    </td>
-                    <td data-label="Number" className="num t-small text-muted">
-                      {job.projectNumber}
-                    </td>
-                    <td data-label="Stage">
-                      <Pill tone={stageTone(job.stage)}>{PROJECT_STAGES[job.stage]}</Pill>
-                    </td>
-                    <td data-label="Starts" className="num t-small">
-                      {job.actualStart ?? job.scheduledStart ?? '—'}
-                    </td>
-                    <td data-label="Contract" className="cell-num">
-                      {formatCents(Number(job.contractValueCents))}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+              ))}
+            </tbody>
+          </TableWrap>
         )}
       </Panel>
 
-      <Panel title="Quote history">
+      <Panel title="Quote history" className="min-w-0">
         {history.length === 0 ? (
           <EmptyState>
             No quotes yet. Open a job and start one from its worksheet.
           </EmptyState>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="data-table data-table--stack" style={{ minWidth: '44rem' }}>
-              <caption className="sr-only">Quotes for {customer.name}</caption>
-              <thead>
-                <tr>
-                  <th scope="col">Job</th>
-                  <th scope="col">Number</th>
-                  <th scope="col">Dated</th>
-                  <th scope="col">Status</th>
-                  <th scope="col" className="cell-num">Total</th>
-                </tr>
-              </thead>
-              <tbody>
-                {history.map((quote) => {
-                  // Expiry is derived from valid_until, never stored: a stored
-                  // 'expired' status is wrong the moment the clock passes it.
-                  const expired = quote.status === 'sent' && quote.validUntil < today;
-                  return (
-                    <tr key={quote.id}>
-                      <td data-label="Job">
-                        <Link href={`/quotes/${quote.id}`} className="text-accent-text hover:underline">
-                          {quote.projectName}
-                        </Link>
-                      </td>
-                      <td data-label="Number" className="num t-small text-muted">
-                        {quote.quoteNumber} v{quote.version}
-                        {quote.kind === 'change_order' ? ' CO' : ''}
-                      </td>
-                      <td data-label="Dated" className="num t-small">{quote.quoteDate}</td>
-                      <td data-label="Status">
-                        <Pill tone={statusTone(quote.status, expired)}>
-                          {expired ? 'Expired' : quote.status}
-                        </Pill>
-                      </td>
-                      <td data-label="Total" className="cell-num">
-                        {formatCents(quote.totalCents)}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <TableWrap minWidth="44rem" bare>
+            <caption className="sr-only">Quotes for {customer.name}</caption>
+            <thead>
+              <tr>
+                <th scope="col">Job</th>
+                <th scope="col">Number</th>
+                <th scope="col">Dated</th>
+                <th scope="col">Status</th>
+                <th scope="col" className="cell-num">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {history.map((quote) => {
+                // Expiry is derived from valid_until, never stored: a stored
+                // 'expired' status is wrong the moment the clock passes it.
+                const expired = quote.status === 'sent' && quote.validUntil < today;
+                return (
+                  <tr key={quote.id}>
+                    <td data-label="Job">
+                      <Link href={`/quotes/${quote.id}`} className="text-accent-text hover:underline">
+                        {quote.projectName}
+                      </Link>
+                    </td>
+                    <td data-label="Number" className="num t-small text-muted">
+                      {quote.quoteNumber} v{quote.version}
+                      {quote.kind === 'change_order' ? ' CO' : ''}
+                    </td>
+                    <td data-label="Dated" className="num t-small">{quote.quoteDate}</td>
+                    <td data-label="Status">
+                      <Pill tone={statusTone(quote.status, expired)}>
+                        {expired ? 'Expired' : quote.status}
+                      </Pill>
+                    </td>
+                    <AmountCell data-label="Total" cents={quote.totalCents} />
+                  </tr>
+                );
+              })}
+            </tbody>
+          </TableWrap>
         )}
       </Panel>
 

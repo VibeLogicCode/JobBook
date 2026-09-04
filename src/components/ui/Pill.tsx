@@ -16,7 +16,11 @@ export type Tone = keyof typeof TONES;
 export function Pill({ tone = 'neutral', children }: { tone?: Tone; children: React.ReactNode }) {
   return (
     <span
-      className={`inline-flex items-center rounded-[4px] border px-1.5 py-0.5 t-micro uppercase ${TONES[tone]}`}
+      // shrink-0 and nowrap because a chip lives in a flex row beside a
+      // heading: a flex item's default is to shrink, and the first thing a
+      // squeezed chip does is break its own word across two lines, which is
+      // the state it exists to make legible at a glance.
+      className={`inline-flex shrink-0 items-center whitespace-nowrap rounded-[4px] border px-1.5 py-0.5 t-micro uppercase ${TONES[tone]}`}
     >
       {children}
     </span>

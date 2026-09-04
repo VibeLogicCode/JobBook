@@ -4,7 +4,7 @@ import { alias } from 'drizzle-orm/pg-core';
 import { db } from '@/db/client';
 import { customers, projects, quotes } from '@/db/schema';
 import { Pill, statusTone } from '@/components/ui/Pill';
-import { formatCents } from '@/lib/money/format';
+import { AmountCell, TableWrap } from '@/components/ui/Table';
 
 export const dynamic = 'force-dynamic';
 
@@ -62,60 +62,56 @@ export default async function QuotesPage() {
           nothing to set up first.
         </p>
       ) : (
-        <div className="overflow-x-auto rounded-[6px] border border-line bg-surface">
-          <table className="data-table data-table--stack" style={{ minWidth: '44rem' }}>
-            <thead>
-              <tr>
-                <th scope="col">Project</th>
-                <th scope="col">Number</th>
-                <th scope="col">Customer</th>
-                <th scope="col">Status</th>
-                <th scope="col" className="cell-num">Total</th>
+        <TableWrap minWidth="44rem">
+          <thead>
+            <tr>
+              <th scope="col">Project</th>
+              <th scope="col">Number</th>
+              <th scope="col">Customer</th>
+              <th scope="col">Status</th>
+              <th scope="col" className="cell-num">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.id}>
+                <td data-label="Project">
+                  {/* Wrapped so the change-order marker sits beside the name
+                      in the table and inside the card, at both widths. */}
+                  <span className="flex flex-wrap items-center gap-x-2">
+                    <Link href={`/quotes/${row.id}`} className="text-accent-text hover:underline">
+                      {row.projectName}
+                    </Link>
+                    {row.kind === 'change_order' ? (
+                      <Pill tone="info">Change order {row.sequence}</Pill>
+                    ) : null}
+                    {row.kind === 'change_order' && row.parentId ? (
+                      <span className="t-small text-muted">
+                        amends{' '}
+                        <Link
+                          href={`/quotes/${row.parentId}`}
+                          className="num text-accent-text hover:underline"
+                        >
+                          {row.parentNumber}
+                        </Link>
+                      </span>
+                    ) : null}
+                  </span>
+                </td>
+                <td data-label="Number" className="num t-small text-muted">
+                  {row.quoteNumber} v{row.version}
+                </td>
+                <td data-label="Customer">{row.customerName}</td>
+                <td data-label="Status">
+                  <Pill tone={statusTone(row.status, row.validUntil < today)}>
+                    {row.validUntil < today && row.status === 'sent' ? 'Expired' : row.status}
+                  </Pill>
+                </td>
+                <AmountCell data-label="Total" cents={row.totalCents} />
               </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => (
-                <tr key={row.id}>
-                  <td data-label="Project">
-                    {/* Wrapped so the change-order marker sits beside the name
-                        in the table and inside the card, at both widths. */}
-                    <span className="flex flex-wrap items-center gap-x-2">
-                      <Link href={`/quotes/${row.id}`} className="text-accent-text hover:underline">
-                        {row.projectName}
-                      </Link>
-                      {row.kind === 'change_order' ? (
-                        <Pill tone="info">Change order {row.sequence}</Pill>
-                      ) : null}
-                      {row.kind === 'change_order' && row.parentId ? (
-                        <span className="t-small text-muted">
-                          amends{' '}
-                          <Link
-                            href={`/quotes/${row.parentId}`}
-                            className="num text-accent-text hover:underline"
-                          >
-                            {row.parentNumber}
-                          </Link>
-                        </span>
-                      ) : null}
-                    </span>
-                  </td>
-                  <td data-label="Number" className="num t-small text-muted">
-                    {row.quoteNumber} v{row.version}
-                  </td>
-                  <td data-label="Customer">{row.customerName}</td>
-                  <td data-label="Status">
-                    <Pill tone={statusTone(row.status, row.validUntil < today)}>
-                      {row.validUntil < today && row.status === 'sent' ? 'Expired' : row.status}
-                    </Pill>
-                  </td>
-                  <td data-label="Total" className="cell-num">
-                    {formatCents(row.totalCents)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+            ))}
+          </tbody>
+        </TableWrap>
       )}
     </div>
   );

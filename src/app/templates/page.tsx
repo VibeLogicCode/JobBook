@@ -10,6 +10,7 @@ import { FieldGrid, SelectField, TextAreaField, TextField } from '@/components/s
 import { Notice } from '@/components/settings/Notice';
 import { Section } from '@/components/settings/Section';
 import { Pill } from '@/components/ui/Pill';
+import { AmountCell, TableWrap } from '@/components/ui/Table';
 
 export const dynamic = 'force-dynamic';
 
@@ -53,85 +54,81 @@ export default async function TemplatesPage() {
             </div>
           )}
 
-          <div className="overflow-x-auto rounded-[6px] border border-line">
-            <table className="data-table data-table--stack" style={{ minWidth: '48rem' }}>
-              <thead>
+          <TableWrap minWidth="48rem">
+            <thead>
+              <tr>
+                <th scope="col">Name</th>
+                <th scope="col">Project type</th>
+                <th scope="col" className="cell-num">
+                  Lines
+                </th>
+                <th scope="col">Status</th>
+                <th scope="col">Manage</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.length === 0 ? (
                 <tr>
-                  <th scope="col">Name</th>
-                  <th scope="col">Project type</th>
-                  <th scope="col" className="cell-num">
-                    Lines
-                  </th>
-                  <th scope="col">Status</th>
-                  <th scope="col">Manage</th>
+                  <td data-label="Name" colSpan={5}>
+                    No templates yet. Create one below — a quote can still be built line by
+                    line without any.
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {rows.length === 0 ? (
-                  <tr>
-                    <td data-label="Name" colSpan={5}>
-                      No templates yet. Create one below — a quote can still be built line by
-                      line without any.
-                    </td>
-                  </tr>
-                ) : null}
+              ) : null}
 
-                {rows.map(({ template, lineCount }) => (
-                  <tr key={template.id}>
-                    <td data-label="Name">
+              {rows.map(({ template, lineCount }) => (
+                <tr key={template.id}>
+                  <td data-label="Name">
+                    <Link
+                      href={`/templates/${template.id}`}
+                      className="text-accent-text underline decoration-1 underline-offset-2"
+                    >
+                      {template.name}
+                    </Link>
+                    {template.description ? (
+                      <span className="block t-small text-subtle">{template.description}</span>
+                    ) : null}
+                  </td>
+                  <td data-label="Project type" className="t-small text-muted">
+                    {PROJECT_TYPE_LABELS[template.projectType] ?? template.projectType}
+                  </td>
+                  <AmountCell data-label="Lines">{lineCount}</AmountCell>
+                  <td data-label="Status">
+                    {template.isActive ? (
+                      <Pill tone="positive">Available</Pill>
+                    ) : (
+                      <Pill tone="neutral">Retired</Pill>
+                    )}
+                  </td>
+                  <td data-label="Manage">
+                    <span className="flex flex-wrap gap-2">
                       <Link
                         href={`/templates/${template.id}`}
-                        className="text-accent-text underline decoration-1 underline-offset-2"
+                        className="min-h-11 rounded-[4px] border border-line-strong px-3 py-2 t-small hover:bg-surface-2"
                       >
-                        {template.name}
+                        Open
                       </Link>
-                      {template.description ? (
-                        <span className="block t-small text-subtle">{template.description}</span>
-                      ) : null}
-                    </td>
-                    <td data-label="Project type" className="t-small text-muted">
-                      {PROJECT_TYPE_LABELS[template.projectType] ?? template.projectType}
-                    </td>
-                    <td data-label="Lines" className="cell-num">
-                      {lineCount}
-                    </td>
-                    <td data-label="Status">
-                      {template.isActive ? (
-                        <Pill tone="positive">Available</Pill>
-                      ) : (
-                        <Pill tone="neutral">Retired</Pill>
-                      )}
-                    </td>
-                    <td data-label="Manage">
-                      <span className="flex flex-wrap gap-2">
-                        <Link
-                          href={`/templates/${template.id}`}
-                          className="min-h-11 rounded-[4px] border border-line-strong px-3 py-2 t-small hover:bg-surface-2"
-                        >
-                          Open
-                        </Link>
-                        <RowAction
-                          action={setTemplateActive}
-                          label={template.isActive ? 'Retire' : 'Bring back'}
-                          destructive={template.isActive}
-                          disabled={!allowed}
-                          fields={{
-                            id: template.id,
-                            isActive: template.isActive ? 'false' : 'true',
-                          }}
-                          confirm={
-                            template.isActive
-                              ? 'Retire this template? It stops being offered on new quotes. Quotes already built from it are untouched.'
-                              : undefined
-                          }
-                        />
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                      <RowAction
+                        action={setTemplateActive}
+                        label={template.isActive ? 'Retire' : 'Bring back'}
+                        destructive={template.isActive}
+                        disabled={!allowed}
+                        fields={{
+                          id: template.id,
+                          isActive: template.isActive ? 'false' : 'true',
+                        }}
+                        confirm={
+                          template.isActive
+                            ? 'Retire this template? It stops being offered on new quotes. Quotes already built from it are untouched.'
+                            : undefined
+                        }
+                      />
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </TableWrap>
         </Section>
 
         <Section

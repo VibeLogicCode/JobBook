@@ -93,10 +93,13 @@ export function ActionForm({
  */
 function Submit({
   label,
+  pendingLabel,
   disabled,
   destructive,
 }: {
   label: string;
+  /** Overrides the pending text; a caller with a better verb than the default. */
+  pendingLabel?: string;
   disabled?: boolean;
   destructive?: boolean;
 }) {
@@ -111,7 +114,10 @@ function Submit({
           : 'bg-accent text-accent-fg hover:bg-accent-hover'
       }`}
     >
-      {pending ? 'Saving…' : label}
+      {/* A destructive action does not report "Saving". Pressing Remove and
+          being told the app is saving describes the opposite of what is
+          happening; a caller with a better verb passes pendingLabel. */}
+      {pending ? (pendingLabel ?? (destructive ? 'Working…' : 'Saving…')) : label}
     </button>
   );
 }

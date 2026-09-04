@@ -3,7 +3,7 @@ import { and, asc, eq, sql } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { customers, projects, quotes } from '@/db/schema';
 import { Pill } from '@/components/ui/Pill';
-import { formatCents } from '@/lib/money/format';
+import { AmountCell, TableWrap } from '@/components/ui/Table';
 import { PROJECT_STAGES, stageTone, workNoun } from '@/components/detail/labels';
 
 export const dynamic = 'force-dynamic';
@@ -58,47 +58,43 @@ export default async function ProjectsPage() {
           and the opportunity is created with it.
         </p>
       ) : (
-        <div className="overflow-x-auto rounded-[6px] border border-line bg-surface">
-          <table className="data-table data-table--stack" style={{ minWidth: '46rem' }}>
-            <thead>
-              <tr>
-                <th scope="col">Work</th>
-                <th scope="col">Number</th>
-                <th scope="col">Customer</th>
-                <th scope="col">Stage</th>
-                <th scope="col">Starts</th>
-                <th scope="col" className="cell-num">Contract</th>
+        <TableWrap minWidth="46rem">
+          <thead>
+            <tr>
+              <th scope="col">Work</th>
+              <th scope="col">Number</th>
+              <th scope="col">Customer</th>
+              <th scope="col">Stage</th>
+              <th scope="col">Starts</th>
+              <th scope="col" className="cell-num">Contract</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.id}>
+                <td data-label="Work">
+                  <Link href={`/projects/${row.id}`} className="text-accent-text hover:underline">
+                    {row.name}
+                  </Link>
+                  <span className="block t-small text-subtle">
+                    {workNoun(Number(row.acceptedQuotes) > 0)}
+                  </span>
+                </td>
+                <td data-label="Number" className="num t-small text-muted">
+                  {row.projectNumber}
+                </td>
+                <td data-label="Customer">{row.customerName}</td>
+                <td data-label="Stage">
+                  <Pill tone={stageTone(row.stage)}>{PROJECT_STAGES[row.stage]}</Pill>
+                </td>
+                <td data-label="Starts" className="num t-small">
+                  {row.actualStart ?? row.scheduledStart ?? '—'}
+                </td>
+                <AmountCell data-label="Contract" cents={Number(row.contractValueCents)} />
               </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => (
-                <tr key={row.id}>
-                  <td data-label="Work">
-                    <Link href={`/projects/${row.id}`} className="text-accent-text hover:underline">
-                      {row.name}
-                    </Link>
-                    <span className="block t-small text-subtle">
-                      {workNoun(Number(row.acceptedQuotes) > 0)}
-                    </span>
-                  </td>
-                  <td data-label="Number" className="num t-small text-muted">
-                    {row.projectNumber}
-                  </td>
-                  <td data-label="Customer">{row.customerName}</td>
-                  <td data-label="Stage">
-                    <Pill tone={stageTone(row.stage)}>{PROJECT_STAGES[row.stage]}</Pill>
-                  </td>
-                  <td data-label="Starts" className="num t-small">
-                    {row.actualStart ?? row.scheduledStart ?? '—'}
-                  </td>
-                  <td data-label="Contract" className="cell-num">
-                    {formatCents(Number(row.contractValueCents))}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+            ))}
+          </tbody>
+        </TableWrap>
       )}
     </div>
   );

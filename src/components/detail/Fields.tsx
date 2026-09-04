@@ -73,7 +73,12 @@ export function TextAreaField({ label, hint, ...area }: TextAreaProps) {
   return (
     <label className="grid gap-1">
       <Legend label={label} required={area.required} />
-      <textarea {...area} className="field min-h-11" />
+      {/* Three rows, not the 44px control floor every other field takes. A
+          multi-line field whose minimum is one line tall is a single-line
+          input that happens to wrap, and the fields using this hold
+          exclusions, assumptions and payment terms -- paragraphs somebody has
+          to be able to read back while typing them. */}
+      <textarea {...area} className="field min-h-20" />
       {hint ? <span className="t-small text-subtle">{hint}</span> : null}
     </label>
   );
@@ -123,7 +128,7 @@ export function FormError({ error }: { error: string | null }) {
   return (
     <p
       role="alert"
-      className="rounded-[4px] border border-negative bg-negative-soft px-3 py-2 t-small text-negative-soft-fg"
+      className="rounded-[6px] border border-negative bg-negative-soft px-3 py-2 t-small text-negative-soft-fg"
     >
       {error}
     </p>

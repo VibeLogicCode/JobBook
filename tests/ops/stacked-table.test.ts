@@ -116,6 +116,19 @@ const NO_STACK: Record<string, string> = {
 /** A cell that holds controls rather than a figure, so it prints no label. */
 const ACTION_COLUMN = /\bno-print\b/;
 
+/**
+ * The table primitive, which sets the stack class for every page that renders
+ * through it.
+ *
+ * A file declares that its cells stack either by writing the class itself or
+ * by importing this: the class pair, the scroll container and the min-width
+ * moved into `src/components/ui/Table.tsx`, so a converted page no longer
+ * holds the literal this sweep looks for. Its cells are still swept, which is
+ * the part that matters -- what changed is how a file says it stacks, not
+ * whether it has to.
+ */
+const PRIMITIVE = "from '@/components/ui/Table'";
+
 interface Cell {
   tag: string;
   body: string;
@@ -219,7 +232,7 @@ async function sweepMarkup(root: string): Promise<Sweep> {
     if (found.length === 0) continue;
 
     const relative = path.relative(root, file);
-    if (!source.includes(STACK)) {
+    if (!source.includes(STACK) && !source.includes(PRIMITIVE)) {
       if (!(relative in NO_STACK)) {
         offences.push(`${relative} holds cells but declares no ${STACK}, and is not listed as exempt`);
       }
