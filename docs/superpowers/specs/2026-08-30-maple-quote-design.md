@@ -205,6 +205,8 @@ organization   -- single row per deployment; all branding and locale
   -- financial and legal
   tax_registration_number, tax_registration_label,   -- 'HST Number'
   business_number, currency DEFAULT 'CAD', locale DEFAULT 'en-CA',
+  fiscal_year_end_month int, fiscal_year_end_day int,   -- not assumed Dec 31
+  tax_filing_frequency ENUM('annual','quarterly','monthly'),
   holdback_pct numeric(5,4), holdback_label, holdback_terms_text,
   payment_terms_days int, payment_terms_text,
   insurance_statement,        -- 'Fully insured and bonded'
@@ -569,7 +571,41 @@ White-labelling is only real if standing up a new company does not require SQL. 
 
 The wizard writes the `organization` row, `tax_rates`, `feature_flags`, and the first `users` row. It runs once; afterwards every field remains editable under Settings, owner role only.
 
-## 9. Interface
+## 9. Accountant export
+
+Year-end is the pain the owner named first. The export is a first-class feature, not a report.
+
+**Scope honesty:** most of a tax filing is Phase 3-4 data. Phase 1 holds customers, projects, and quotes — no revenue, no expenses. The framework is built in Phase 1 and each later phase adds its sheets, so the accountant story grows rather than arriving late.
+
+### 9.1 Periods
+
+Driven by `organization.fiscal_year_end_month` / `_day` and `tax_filing_frequency`. A December 31 year end and quarterly HST is the seeded default, not an assumption in code — many corporations have off-calendar year ends, and the export must respect the one it is given.
+
+### 9.2 Sheets, by the phase that fills them
+
+| Phase | Sheets |
+|---|---|
+| 1 | Cover and manifest, Customers, Projects, Quotes with tax breakdown, Pipeline summary |
+| 3 | Expenses by category, HST paid (input tax credits), Vendors |
+| 4 | Sales invoices with HST collected, AR aging, AP aging, Holdback receivable and payable, Customer deposits (unearned revenue), WIP schedule, T5018 subcontractor payments |
+
+Two of these are statutory and are the reason the vendor and invoice schemas must anticipate them rather than be retrofitted:
+
+- **T5018, Statement of Contract Payments.** CRA requires construction contractors to file a slip annually for every subcontractor paid more than $500 in the reporting period, carrying legal name, address, and business number or SIN. `vendors` therefore needs `business_number` and `is_subcontractor` from the moment it exists. Reconstructing this from invoice history at the first year end is exactly the manual scramble this system is meant to remove.
+- **Work in progress.** Jobs open at year end drive percentage-of-completion revenue recognition. The accountant will ask for it, and it needs contract value, costs to date, and billings to date per open project.
+
+### 9.3 Output rules
+
+- One `.xlsx` workbook per period, one sheet per subject, plus a CSV per sheet — accountants frequently prefer CSV.
+- `exceljs` for generation. SheetJS's free build left npm following CVEs and is not used.
+- Every row carries its source record id so any figure traces back to a record in the app.
+- Amounts are written as real numbers with two decimals, never as strings. Accountants sort and sum these columns.
+- The cover sheet states company, tax registration number, period covered, generation timestamp, and **what is not included** — so nobody mistakes a Phase 1 export for a complete set of books.
+- Written to the SharePoint `Exports` library monthly, and on demand from Settings.
+
+The permanent boundary from section 2 still holds: this system feeds an accountant and feeds QuickBooks or Xero. It is not a general ledger.
+
+## 10. Interface
 
 The visual system, responsive strategy, screen inventory, worksheet design, and document design live in a companion document: `2026-08-30-ui-design.md`.
 
@@ -578,7 +614,7 @@ Two decisions from it that affect this spec:
 - **Full responsive parity**, including the quote worksheet on a phone. Accepted with its cost — roughly a third more interface work in Phase 1 — because the owner needs to build a quote in the field.
 - **Present mode**, a view toggle that hides cost, margin, internal notes, and rate codes. He shows quotes to customers on his own screen; without it, turning the laptop around exposes his margin. A view state only, no data or permission implications.
 
-## 10. Testing
+## 11. Testing
 
 - **Unit** — quote calculation engine. Line type math, percent-line ordering, margin against markup, tax rounding, template quantity derivation. This is where money bugs live, so coverage here is high.
 - **Tax** — its own suite, because it is the most jurisdiction-sensitive logic in the system. Single-rate (Ontario HST), dual-rate (BC GST + PST), compound ordering, non-taxable lines, exempt customers, and a rate change mid-stream where a quote dated before the change gets the old rate and one dated after gets the new one.
@@ -592,7 +628,7 @@ Two decisions from it that affect this spec:
 - **Backup** — mount-detection is tested by unmounting the target and asserting the job aborts loudly rather than writing to the underlying path. Retention pruning, dump verification, and `age` round-trip encryption are each covered.
 - **Restore drill** — scripted, run against a clean container, verified in CI. Covers both the dump path and the SharePoint rebuild path.
 
-## 11. Definition of done, Phase 1
+## 12. Definition of done, Phase 1
 
 1. Owner signs in with his Microsoft account through Cloudflare Access and reaches the app on both phone and desktop.
 2. He creates a customer and a project.
@@ -623,7 +659,7 @@ Two decisions from it that affect this spec:
 27. A second tax line is added and both appear correctly on the PDF with their own labels and registration numbers.
 28. A line marked non-taxable is excluded from the taxable base; a tax-exempt customer produces a quote with no tax lines and the exemption number shown.
 
-## 12. Open items
+## 13. Open items
 
 - **Real rate figures.** The seed rate card ships with clearly marked placeholder GTA numbers so the app is usable on first run. The owner overwrites them in the UI. No code change required.
 - **Commercial bid mode.** Deferred pending confirmation that square-foot pricing is genuinely inadequate for his tenant improvement work.
