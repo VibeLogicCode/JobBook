@@ -1,0 +1,1 @@
+ALTER TABLE "document_sequences" ADD COLUMN "prefix" text;

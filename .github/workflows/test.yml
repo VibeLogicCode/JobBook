@@ -1,0 +1,43 @@
+name: test
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: quote
+          POSTGRES_PASSWORD: quote_dev_only
+          POSTGRES_DB: quote
+        ports: ['5433:5432']
+        options: >-
+          --health-cmd "pg_isready -U quote"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+    env:
+      DATABASE_URL: postgres://quote:quote_dev_only@127.0.0.1:5433/quote
+      TEST_DATABASE_URL: postgres://quote:quote_dev_only@127.0.0.1:5433/quote_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+
+      # The suite connects to TEST_DATABASE_URL, so that database has to exist
+      # and carry the schema. Migrating only DATABASE_URL would leave every
+      # database test failing on a missing table.
+      - name: Create the test database
+        run: PGPASSWORD=quote_dev_only psql -h 127.0.0.1 -p 5433 -U quote -d quote -c 'create database quote_test'
+
+      # drizzle-kit migrate, not push: push diffs a schema and would skip the
+      # custom migrations that carry the triggers and the no-DELETE grant.
+      - name: Migrate both databases
+        run: |
+          npm run db:migrate
+          DATABASE_URL="$TEST_DATABASE_URL" npx drizzle-kit migrate
+
+      - run: npm run typecheck
+      - run: npm test

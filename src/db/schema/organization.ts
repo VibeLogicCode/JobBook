@@ -128,6 +128,14 @@ export const documentSequences = pgTable('document_sequences', {
   kind: text('kind').notNull(),
   year: integer('year').notNull(),
   nextSeq: integer('next_seq').notNull().default(1),
+  /**
+   * Document code, per kind and per year: 'QT', 'CO', 'INV', 'PO'.
+   *
+   * Here rather than on `organization` because that is what the six removed
+   * counter columns were, and because a tenant that renames its quotes
+   * mid-year keeps the old year's numbers intact.
+   */
+  prefix: text('prefix'),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [primaryKey({ columns: [t.kind, t.year] })]);
 
