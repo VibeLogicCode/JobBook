@@ -122,6 +122,7 @@ customers
   address_line1, address_line2, city, province DEFAULT 'ON', postal_code,
   customer_type ENUM('residential','commercial'),
   lead_source ENUM('call','email','referral','website','repeat','other'),
+  is_tax_exempt bool DEFAULT false, tax_exempt_number, tax_exempt_reason,
   notes
 
 projects
@@ -142,6 +143,7 @@ rate_items
   unit_type ENUM('sqft','each','flat','percent','hour'),
   cost_rate numeric(12,4),      -- what it costs him
   sell_rate numeric(12,4),      -- what the customer pays
+  is_taxable bool DEFAULT true, -- false for pass-through disbursements
   default_qty numeric(12,3), sort_order, is_active
   UNIQUE(rate_card_id, code)
 
@@ -155,8 +157,9 @@ scope_template_items
   is_optional bool, line_group, sort_order
 
 quote_taxes   -- snapshotted tax breakdown per quote
-  id, quote_id FK, label, rate numeric(6,5), tax_amount numeric(12,2),
-  sort_order
+  id, quote_id FK, label, registration_number,
+  rate numeric(6,5), taxable_base numeric(12,2),
+  tax_amount numeric(12,2), sort_order
 
 quotes
   id, project_id FK, quote_number, version int,
@@ -175,6 +178,7 @@ quote_lines
   qty numeric(12,3),
   unit_cost numeric(12,4), unit_price numeric(12,4),   -- snapshotted
   line_cost numeric(12,2), line_total numeric(12,2),
+  is_taxable bool,                          -- snapshotted from rate_item
   is_optional bool, is_included bool, notes
 
 organization   -- single row per deployment; all branding and locale
@@ -203,9 +207,13 @@ feature_flags   -- named toggles, one row per feature
   key (unique), enabled bool, config jsonb, updated_at, updated_by
   -- 'sharepoint_sync', 'receipt_ocr', 'usb_backup'
 
-tax_rates
-  id, label, rate numeric(6,5), sort_order, is_active
-  -- Ontario seeds one row: 'HST', 0.13
+tax_rates          -- versioned by effective date, never edited in place
+  id, label, short_label, registration_number,
+  rate numeric(6,5),
+  effective_from DATE, effective_to DATE,   -- NULL = currently in force
+  is_compound bool DEFAULT false,           -- applies on subtotal + prior taxes
+  sort_order, is_active
+  -- Ontario seeds one row: 'HST', 0.13, effective_from 2010-07-01
 
 files        -- polymorphic attachment table, one row per stored file
   id, entity_type ENUM('quote','project','customer','receipt',
@@ -541,7 +549,7 @@ White-labelling is only real if standing up a new company does not require SQL. 
 
 1. **Organization** — legal and display name, operating name, tagline, owner name, address, phone, email, website.
 2. **Branding** — logo and favicon upload, brand colour. Logo is stored through the `files` table and inlined as a data URI when rendering PDFs, so document generation never depends on an authenticated fetch.
-3. **Financial** — currency, locale, tax registration number and its label, one or more tax rates, holdback percentage and terms, payment terms.
+3. **Financial** — currency, locale, tax registration number and its label, one or more tax rates with their effective dates, holdback percentage and terms, payment terms.
 4. **Documents** — number prefixes and starting sequences, quote validity days, terms and footer text.
 5. **Features** — SharePoint sync on or off; if on, collect Graph credentials and validate them before completing. USB backup path, validated as mounted.
 6. **First user** — the signed-in identity becomes `owner`.
@@ -551,7 +559,8 @@ The wizard writes the `organization` row, `tax_rates`, `feature_flags`, and the 
 
 ## 9. Testing
 
-- **Unit** — quote calculation engine. Line type math, percent-line ordering, margin against markup, HST rounding, template quantity derivation. This is where money bugs live, so coverage here is high.
+- **Unit** — quote calculation engine. Line type math, percent-line ordering, margin against markup, tax rounding, template quantity derivation. This is where money bugs live, so coverage here is high.
+- **Tax** — its own suite, because it is the most jurisdiction-sensitive logic in the system. Single-rate (Ontario HST), dual-rate (BC GST + PST), compound ordering, non-taxable lines, exempt customers, and a rate change mid-stream where a quote dated before the change gets the old rate and one dated after gets the new one.
 - **Integration** — Drizzle queries against a real Postgres in a test container. Rate snapshot immutability is explicitly asserted: change a rate item, confirm existing quote lines do not move.
 - **Schema parity** — a test asserts that every Drizzle table and column has a matching entry in the generated SharePoint template, with no reserved-name collisions. This fails the build on drift rather than discovering it during a sync at 2am.
 - **Sync** — against a real SharePoint dev site. Covers upsert idempotency (running the same batch twice produces no duplicates), void propagation, watermark non-advancement on partial failure, chunked upload of a file over 4MB, and 429 backoff behaviour.
@@ -589,6 +598,9 @@ The wizard writes the `organization` row, `tax_rates`, `feature_flags`, and the 
 23. The app boots and quotes correctly with `sharepoint_sync` disabled and no Graph credentials present.
 24. Enabling `sharepoint_sync` on a populated database backfills every row, and enabling it a second time creates no duplicates.
 25. Disabling `sharepoint_sync` while no USB backup path is configured surfaces the single-copy warning.
+26. A tax rate is changed with a future effective date. Quotes dated before it keep the old rate, quotes dated after get the new one, and every already-issued quote is untouched.
+27. A second tax line is added and both appear correctly on the PDF with their own labels and registration numbers.
+28. A line marked non-taxable is excluded from the taxable base; a tax-exempt customer produces a quote with no tax lines and the exemption number shown.
 
 ## 11. Open items
 
