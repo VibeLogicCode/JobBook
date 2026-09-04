@@ -80,6 +80,58 @@ services:
       # - /mnt/backup:/mnt/backup
     restart: unless-stopped
 
+  # The backup schedule, in its own container.
+  #
+  # Same image, so it carries the same pg_dump, age and scripts, and updates
+  # with the app rather than drifting a major version behind it. Separate
+  # process, so a dump cannot slow the web server and a failing backup cannot
+  # take the quoting system down with it.
+  #
+  # It refuses to start without a recipient key rather than idling: a container
+  # named `backup` that is quietly taking none looks exactly like one that is
+  # working.
+  backup:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      db:
+        condition: service_healthy
+    entrypoint: ['/usr/local/bin/backup-loop.sh']
+    # The image's healthcheck pings the web server's /api/health. This
+    # container runs no web server, so it would report unhealthy forever --
+    # a permanent false alarm sitting next to the real signal, which is the
+    # exact failure this tier's monitoring is meant to avoid. Liveness here is
+    # the dump's own freshness, reported in the app from sync_state and the
+    # artifact timestamps.
+    healthcheck:
+      disable: true
+    environment:
+      DATABASE_URL: postgres://quote:${POSTGRES_PASSWORD:-quote_dev_only}@db:5432/quote
+      # Passed through rather than required here. A missing key must fail
+      # LOUDLY AT RUNTIME -- backup-loop.sh exits with the reason and the
+      # container shows as Exited(1) -- not at parse time, where it would stop
+      # `docker compose up` bringing the quoting system up at all. A refusal to
+      # start the app because backups are unconfigured is the wrong trade for a
+      # contractor who needs to send a quote this afternoon.
+      BACKUP_AGE_PUBLIC_KEY: ${BACKUP_AGE_PUBLIC_KEY:-}
+      BACKUP_INTERVAL_MINUTES: ${BACKUP_INTERVAL_MINUTES:-60}
+      BACKUP_USB_DIR: ${BACKUP_USB_DIR:-}
+      BACKUP_HEARTBEAT_URL: ${BACKUP_HEARTBEAT_URL:-}
+      BACKUP_RETAIN_HOURLY_HOURS: ${BACKUP_RETAIN_HOURLY_HOURS:-48}
+      BACKUP_RETAIN_DAILY_DAYS: ${BACKUP_RETAIN_DAILY_DAYS:-30}
+    volumes:
+      # Reads the same uploaded files the app writes, and writes into the same
+      # backup volume, so one artifact set exists rather than two.
+      - files:/data/files:ro
+      - backups:/data/backups
+      # - /mnt/backup:/mnt/backup
+    # on-failure, not unless-stopped: an unconfigured key is a permanent
+    # condition, and a container that restarts forever on the same fatal
+    # message buries it in a log nobody reads. Exited(1) beside a running app
+    # is visible in one `docker compose ps`.
+    restart: on-failure
+
 volumes:
   dbdata:
   files:

@@ -73,6 +73,39 @@ updates itself unattended at 3am. It is skipped only when
 install with nothing yet to lose — and the boot says so on stderr, because a
 deployment taking no backups at all should not be a quiet condition.
 
+## The schedule
+
+A `backup` service in `docker-compose.app.yml`, running the same image as the
+app. `BACKUP_INTERVAL_MINUTES` sets the frequency; 60 by default.
+
+Why a sidecar rather than the two obvious alternatives:
+
+**Not a timer inside the application process.** A dump is minutes of IO, and
+the process serving the worksheet should not be deciding when to do it. If the
+app restarts mid-deploy the schedule must not go with it, and a failing backup
+must never be able to take the quoting system down.
+
+**Not cron on the host.** The whole product is one `docker compose up`. A
+backup that depends on somebody remembering a crontab line on a mini PC exists
+on the day it is set up and stops existing the first time the machine is
+rebuilt -- silently, because a missing backup is invisible until it is needed.
+
+Three behaviours worth knowing:
+
+- **The first run is immediate.** A fresh deployment holds a backup within
+  seconds, because a machine that dies in its first hour is a machine somebody
+  just typed a day of quotes into.
+- **It sleeps to the next boundary**, not for a fixed interval, so a run that
+  takes four minutes does not walk the hourly backup forward to twenty past.
+- **No key means Exited(1), not idling.** A container named `backup` quietly
+  taking none looks exactly like one that works. The restart policy is
+  `on-failure` rather than `unless-stopped`, so a permanent misconfiguration
+  shows up once in `docker compose ps` instead of scrolling past in a log.
+
+A failed individual run is logged and the loop continues to the next tick.
+Exiting would turn one unwritable USB drive into a restart loop that never
+takes the internal copy either.
+
 ## Verified round trip
 
 Run inside the image on 2026-09-04, against the seeded demo tenant:
