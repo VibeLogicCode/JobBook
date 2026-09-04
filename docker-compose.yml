@@ -1,0 +1,22 @@
+# Development only. The production compose file (Plan 4a) publishes no ports:
+# the app reaches Postgres over the compose network, and nothing else should.
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: quote
+      POSTGRES_PASSWORD: quote_dev_only
+      POSTGRES_DB: quote
+    ports:
+      # Bound to loopback, and on 5433 so it cannot collide with a Postgres
+      # already installed on the host.
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - dbdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U quote"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+volumes:
+  dbdata:
