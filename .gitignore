@@ -7,3 +7,7 @@ node_modules/
 *.pfx
 backups/
 dev-db/
+
+# A deployment's own list of strings the white-label guard must reject. It
+# names a real company, so it stays out of the repository by design.
+tests/ops/tenant-literals.local.json

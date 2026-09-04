@@ -1,6 +1,6 @@
 # Multi-Provider SSO — Contractor Quote & Project Management System
 
-**Companion to** `2026-08-30-maple-quote-design.md` (sections 2.1, 3.3, 4, 7, 8.6) and `2026-08-30-distribution-and-updates.md`
+**Companion to** `2026-08-30-scopeline-design.md` (sections 2.1, 3.3, 4, 7, 8.6) and `2026-08-30-distribution-and-updates.md`
 Date: 2026-09-04
 Status: Awaiting review
 
@@ -164,7 +164,16 @@ The main design's section 7.4 lists change as stated above. Section 8.4 ("What b
 
 ### 3.1 Who the administrator is
 
-The requirement says "admin selects". In this system's role model (main design, section 3.3) the person who administers the company's deployment is `owner`; the `admin` role exists in the enum and has nothing built for it. The UI design's screen inventory puts users under `Settings`, owner only. **User management, including the sign-in method, is `owner` role.** The `admin` role does not get it. Giving the second-highest role the power to change how the highest role signs in is how a lockout becomes a takeover, and nothing in the requirement asks for it.
+**Revised 2026-09-04 on the owner's instruction**, which was: "as long as admin controls the permission for user I don't care how user logs in, SSO or local account." An earlier draft of this section reserved user management to the `owner` role. That is overruled. **The `admin` role manages users, their roles, and their sign-in method**, and section 10 is the authority on exactly what each role may do.
+
+The instruction settles a larger question too, and it is worth stating plainly because it reorders the priorities of this whole document: **the sign-in method is a deployment detail; the permission model is the requirement.** Which provider a person presses is interchangeable, and may differ per user, per deployment and per mode. What may never vary is that permission is decided by the application, per request, against `users.role` -- never by the identity provider, and never inferred from the fact that somebody managed to sign in at all. Sections 1 through 9 describe three ways of establishing *who* a person is. Section 10 describes *what they may do*, and it reads identically in all three.
+
+Four guardrails survive the revision, because handing `admin` the users screen without them turns a lockout into a takeover, which was the original objection and remains a real one:
+
+1. An `admin` may not create, edit, deactivate, or change the sign-in method of a user whose role is `owner`. Owner rows are visible to an `admin` and read-only.
+2. An `admin` may not grant the `owner` role to anyone, themselves included. Only an `owner` promotes an `owner`.
+3. Nobody, at any role, changes their own role. Self-elevation is refused even for an `owner`; a second owner or the recovery script in section 3.5 does it.
+4. The last active `owner` cannot be deactivated or demoted, by anyone. This one is enforced in the database as well as the application, because it is the only rule whose failure leaves no route back in through the interface.
 
 ### 3.2 What the owner sees
 
@@ -502,28 +511,86 @@ Apple is second because it needs a paid developer membership the installing comp
 | SAML, or a generic "bring your own OIDC provider" option | Every generic option is a support surface for a provider the maintainer has never seen. The three named providers cover every small contractor this product will meet; a fourth is a future adapter, not a configuration screen |
 | Storing the Apple-supplied name | Section 4.4. `display_name` is the owner's field |
 
-## 10. Decisions made on the owner's behalf
+## 10. Authorization: what a role may do
+
+This section exists because of the owner's instruction recorded in section 3.1, and it is the part of this document the authentication implementation has to satisfy. Everything before it decides how the application learns who is asking. This decides what that answer entitles them to, and it is written so that no line of it depends on which provider -- or which of the three modes -- produced the identity.
+
+### 10.1 The rule the implementation must not break
+
+Authentication establishes an identity. **Authorization is a separate lookup against `users`, performed by the application, on every request that changes or reveals anything.** A valid session is never sufficient on its own.
+
+Three consequences, each of them a way this gets built wrongly:
+
+- **No permission is ever read from a token.** Not from a Google `hd`, not from a Microsoft group or role claim, not from an Access JWT's custom claims. A provider can be reconfigured by somebody who has never seen this application, and a claim-driven permission would change with it, silently. The provider says who; `users.role` says what.
+- **Deny by default.** A route with no permission check must fail closed rather than fall through to allowed. The check belongs at the top of the server action or route handler, before any argument is read, so that adding a route without one is a visible omission instead of an open door.
+- **A role change takes effect at once.** Changing `users.role` revokes that user's sessions and drops their entries from the in-process cache (section 5.1), exactly as changing the sign-in method does. A demoted user carrying a cached role for another seven days is the whole reason these sessions are stateful.
+
+`AUTH_MODE=local` is not an exception to any of it. Local mode supplies one identity from `LOCAL_USER_EMAIL`, and that identity is then subject to the same lookup: if the `users` row says `bookkeeper`, the LAN session is a bookkeeper. A mode decides how identity arrives, never what it may do.
+
+### 10.2 The matrix
+
+Three roles, from the existing `role` enum. No new roles, and no per-user permission flags: in a company with three or four people, a matrix everybody can hold in their head beats a permission system nobody audits.
+
+| Capability | `owner` | `admin` | `bookkeeper` |
+|---|---|---|---|
+| Create and edit customers, projects, quotes | Yes | Yes | No |
+| Send, accept, decline, revise a quote | Yes | Yes | No |
+| Void a quote, project, or customer | Yes | Yes | No |
+| See cost and margin, read the worksheet | Yes | Yes | Yes, read-only |
+| Generate and download documents | Yes | Yes | Yes |
+| Manage users: add, deactivate, set role, set sign-in method | Yes | Yes, except `owner` rows and except granting `owner` | No |
+| Reset a user's provider link, sign a user out everywhere | Yes | Yes, except `owner` rows | No |
+| Edit rate items, cost codes, scope templates | Yes | Yes | No |
+| Edit tax rates and their effective dates | Yes | No | No |
+| Edit organization identity, branding, and document text | Yes | No | No |
+| Turn the SharePoint mirror on or off, read its state | Yes | No | No |
+| Read and configure backup, restore, and update settings | Yes | No | No |
+| Read the audit log | Yes | Yes | Yes |
+| Accountant export (Phase 3) | Yes | Yes | Yes |
+
+`bookkeeper` sees cost and margin deliberately. The role exists for whoever prepares the year end, and a set of books carrying the revenue but not the cost is not a set of books. What the role cannot do is change a priced record.
+
+The five capabilities reserved to `owner` are the ones whose blast radius is the whole deployment rather than one job: the tax rate every future quote inherits, the company's own identity on every document it sends, whether data leaves the box for SharePoint, and whether the backups exist at all. An `admin` running the office day to day needs none of them.
+
+### 10.3 Where the check lives
+
+One module, `src/lib/auth/permissions.ts`, exporting the capability names in the matrix above and a single `require(capability)` that every server action and route handler calls. Not scattered `role === 'owner'` comparisons: the matrix is a table, and a table belongs in one place where it can be read against this document and tested exhaustively.
+
+The check reads the session's user row, never a role handed in from the client. A role in a form field or in a client component's props is a role the browser can edit.
+
+`INTERNAL_RENDER_SECRET` on the print route (main design, section 6.1) stays outside this model. It authenticates a process rather than a person, and the document it renders was already authorized when the page that asked for it was.
+
+### 10.4 What must be tested
+
+The matrix is a table, so it takes a table-driven test: for every capability and every role, assert allowed or refused. That test is what turns adding a capability without wiring it into a failure instead of a silent omission.
+
+Beyond it, five cases the guardrails in section 3.1 exist for, each asserted directly: an `admin` refused when editing an `owner` row; an `admin` refused when granting `owner`; any role refused when changing its own role; the last active `owner` refused deactivation, at both the application and the database; and a demoted user's next request refused while the old session cookie is still in hand.
+
+## 11. Decisions made on the owner's behalf
 
 1. **SSO lives in the app only when Cloudflare Access is absent (`AUTH_MODE=sso`); with Access present, Access does it.** Access already federates all three providers with a WAF in front, and two doors are worse than one.
 2. **The three modes are mutually exclusive and `AUTH_MODE` becomes mandatory.** With three options, an unset default is a guess, and the existing interlock exists to refuse guesses.
 3. **In `access` mode the per-user picker is hidden and per-user enforcement is refused.** It is one rule in the Access policy; duplicating it in the app is two places to disagree.
-4. **User management, including the sign-in method, is `owner` role, not `admin`.** Letting the second role change how the first signs in turns a lockout into a takeover.
-5. **One method per user, no "any".** It is what was asked for, and it is the tighter model.
-6. **Authentication keys on the provider subject after the first link; email is only the first-time match.** Email changes, goes unverified, and for Apple is sometimes a relay; the subject does none of those.
-7. **Users are never created by sign-in.** A quoting system with margin on every line is not something a new hire should reach before the owner has chosen their role.
-8. **Sessions are stateful rows in PostgreSQL with an in-process cache; no Redis, no stateless JWT.** Revocation is the whole administrative story, one box means the cache is coherent, and Postgres is already there.
-9. **Idle 7 days, absolute 30.** The owner can revoke at any moment, so a daily re-login buys nothing and costs a person in a truck.
-10. **No pruning of `sessions`.** Two thousand rows a year does not justify a carve-out from the no-DELETE rule.
-11. **The Apple client secret is minted at runtime from the mounted key with a five-minute life.** A pasted six-month JWT is a scheduled outage.
-12. **The state cookie is `SameSite=None`, encrypted, ten minutes.** Apple's mandatory `form_post` is a cross-site POST, and a `Lax` cookie is invisible to it.
-13. **Microsoft is single-tenant or `consumers` only.** Those are the two configurations in which the `email` claim can be trusted for a first link.
-14. **Google's `hd` is enforced server-side from the token, optionally, and never from the request parameter.** The parameter is a UI hint.
-15. **The provider-supplied name is ignored.** `display_name` is the owner's field, which makes Apple's once-only delivery irrelevant.
-16. **Hide My Email is allowed if the owner enters the relay address.** The app sends no mail, so a relay costs it nothing, and a person may reasonably not want their real address in their employer's system.
-17. **In `sso` mode the first owner is named by `SSO_BOOTSTRAP_OWNER_EMAIL`, overruling "the signed-in identity becomes owner".** On a public URL, first-to-arrive is a stranger.
-18. **Provider registration is installer work from `INSTALL.md`; the wizard validates and never collects.** Consoles change monthly, and credentials never pass through a form that writes to a mirrored database.
-19. **Lockout recovery is a script on the box, not `AUTH_MODE=local`.** Switching to local mode under a live tunnel makes the internet the owner until someone stops the tunnel.
-20. **`openid-client` 6.x, pinned exact, behind a one-directory seam.** Same author as the `jose` already in use, certified, small; if abandoned, vendor `oauth4webapi` or hand-roll on `jose` inside that directory and nothing else moves.
-21. **No real provider in CI; a mock in process, plus a quarterly manual checklist.** The providers cannot be scripted in a pipeline, and a credential in CI is what the whole design avoids.
-22. **Google and Microsoft ship first; Apple second.** Apple needs a paid membership the company may not hold, cannot be tested on a LAN, and has three quirks that deserve their own attention.
-23. **Passwords, magic links, JIT provisioning, `common` tenants, refresh tokens, provider-side logout, an in-app second factor, and generic SAML/OIDC are refused.** Each is either a credential the app would then have to protect, or a support surface for something the product will not meet.
+4. **User management, including roles and the sign-in method, belongs to the `admin` role -- the owner's own instruction, overruling an earlier draft of this document.** It carries four guardrails (section 3.1): owner rows are read-only to an `admin`, an `admin` cannot grant `owner`, nobody changes their own role, and the last active owner cannot be demoted or deactivated.
+5. **Permission is decided by the application against `users.role`, never by a provider claim, and identically in all three modes (section 10).** The login method is interchangeable; the permission model is the requirement. A claim-driven permission changes whenever somebody reconfigures a provider console, silently.
+6. **Three roles, no per-user permission flags.** A matrix three people can hold in their heads beats a permission system nobody audits.
+7. **`bookkeeper` sees cost and margin and can change nothing priced.** A set of books with revenue and no cost is not a set of books.
+8. **One method per user, no "any".** It is what was asked for, and it is the tighter model.
+9. **Authentication keys on the provider subject after the first link; email is only the first-time match.** Email changes, goes unverified, and for Apple is sometimes a relay; the subject does none of those.
+10. **Users are never created by sign-in.** A quoting system with margin on every line is not something a new hire should reach before the owner has chosen their role.
+11. **Sessions are stateful rows in PostgreSQL with an in-process cache; no Redis, no stateless JWT.** Revocation is the whole administrative story, one box means the cache is coherent, and Postgres is already there.
+12. **Idle 7 days, absolute 30.** The owner can revoke at any moment, so a daily re-login buys nothing and costs a person in a truck.
+13. **No pruning of `sessions`.** Two thousand rows a year does not justify a carve-out from the no-DELETE rule.
+14. **The Apple client secret is minted at runtime from the mounted key with a five-minute life.** A pasted six-month JWT is a scheduled outage.
+15. **The state cookie is `SameSite=None`, encrypted, ten minutes.** Apple's mandatory `form_post` is a cross-site POST, and a `Lax` cookie is invisible to it.
+16. **Microsoft is single-tenant or `consumers` only.** Those are the two configurations in which the `email` claim can be trusted for a first link.
+17. **Google's `hd` is enforced server-side from the token, optionally, and never from the request parameter.** The parameter is a UI hint.
+18. **The provider-supplied name is ignored.** `display_name` is the owner's field, which makes Apple's once-only delivery irrelevant.
+19. **Hide My Email is allowed if the owner enters the relay address.** The app sends no mail, so a relay costs it nothing, and a person may reasonably not want their real address in their employer's system.
+20. **In `sso` mode the first owner is named by `SSO_BOOTSTRAP_OWNER_EMAIL`, overruling "the signed-in identity becomes owner".** On a public URL, first-to-arrive is a stranger.
+21. **Provider registration is installer work from `INSTALL.md`; the wizard validates and never collects.** Consoles change monthly, and credentials never pass through a form that writes to a mirrored database.
+22. **Lockout recovery is a script on the box, not `AUTH_MODE=local`.** Switching to local mode under a live tunnel makes the internet the owner until someone stops the tunnel.
+23. **`openid-client` 6.x, pinned exact, behind a one-directory seam.** Same author as the `jose` already in use, certified, small; if abandoned, vendor `oauth4webapi` or hand-roll on `jose` inside that directory and nothing else moves.
+24. **No real provider in CI; a mock in process, plus a quarterly manual checklist.** The providers cannot be scripted in a pipeline, and a credential in CI is what the whole design avoids.
+25. **Google and Microsoft ship first; Apple second.** Apple needs a paid membership the company may not hold, cannot be tested on a LAN, and has three quirks that deserve their own attention.
+26. **Passwords, magic links, JIT provisioning, `common` tenants, refresh tokens, provider-side logout, an in-app second factor, and generic SAML/OIDC are refused.** Each is either a credential the app would then have to protect, or a support surface for something the product will not meet.

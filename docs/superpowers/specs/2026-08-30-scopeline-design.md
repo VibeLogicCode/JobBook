@@ -3,9 +3,9 @@
 **Design document**
 Date: 2026-08-30
 Status: Awaiting review
-First deployment: Maple Custom Homes (maplecustomhomes.ca) — general contractor, GTA / Golden Horseshoe, Ontario
+First deployment: Northgate Building Group (northgate.example) — general contractor, GTA / Golden Horseshoe, Ontario
 
-The product is white-label (section 2.1). Company identity, branding, tax rules, and document terms are configuration. Maple Custom Homes is the first tenant, not the subject of the code.
+The product is white-label (section 2.1). Company identity, branding, tax rules, and document terms are configuration. Northgate Building Group is the first tenant, not the subject of the code.
 
 ---
 
@@ -39,7 +39,7 @@ Phase 1 was chosen because the owner quotes daily. It delivers the fastest visib
 
 The system is a product configured for one company, not an application written about one company. **No company-specific value appears anywhere in code, templates, or seed logic.** Name, logo, address, contact details, tax registration, owner name, tax rate, holdback percentage, document prefixes, and terms text are all configuration, editable in the UI by the owner.
 
-Maple Custom Homes is the first deployment, not the subject of the codebase. A build that hardcodes "Maple Custom Homes" or "13%" anywhere outside a seed file has a bug.
+Northgate Building Group is the first deployment, not the subject of the codebase. A build that hardcodes "Northgate Building Group" or "13%" anywhere outside a seed file has a bug.
 
 **Tenancy: one deployment per company.** Each company gets its own container stack, its own Postgres, its own SharePoint site, and its own domain. Multi-tenancy in a shared database was rejected — it introduces an entire class of cross-tenant data leak that cannot occur when the databases are separate, and deployment is already a twenty-minute Compose operation. The `organization` table nonetheless carries an `id` so a future multi-tenant variant is an addition rather than a rewrite.
 
@@ -59,7 +59,7 @@ One system is better. The client owns hardware. The application is built as a se
 
 ### 3.2 Stack
 
-Versions and library choices track the existing **Budget Tracker** project (`Documents/Budget Tracker`) — same maintainer, same deployment shape, same self-hosted Docker target. Its conventions are adopted rather than re-derived: `src/` layout with `(app)` and `(auth)` route groups, `src/db/{client,schema,seed}.ts`, `src/lib/<domain>/`, hand-rolled `src/components/ui/` primitives, `tests/{unit,integration,db,api,app,components,lib,ops,scripts}`, a maintained `CHANGELOG.md` and `INSTALL.md`, and GitHub Actions for tests and image releases.
+Versions and library choices track the existing **Budget Tracker** project — same maintainer, same deployment shape, same self-hosted Docker target. Its conventions are adopted rather than re-derived: `src/` layout with `(app)` and `(auth)` route groups, `src/db/{client,schema,seed}.ts`, `src/lib/<domain>/`, hand-rolled `src/components/ui/` primitives, `tests/{unit,integration,db,api,app,components,lib,ops,scripts}`, a maintained `CHANGELOG.md` and `INSTALL.md`, and GitHub Actions for tests and image releases.
 
 | Layer | Choice | Reason |
 |---|---|---|
@@ -79,7 +79,7 @@ Versions and library choices track the existing **Budget Tracker** project (`Doc
 
 ### 3.3 Access and authentication
 
-Cloudflare Tunnel exposes the app at a subdomain of `maplecustomhomes.ca`. Cloudflare Access sits in front with Entra ID as the identity provider, so users get one Microsoft login with their existing M365 accounts.
+Cloudflare Tunnel exposes the app at a subdomain of `northgate.example`. Cloudflare Access sits in front with Entra ID as the identity provider, so users get one Microsoft login with their existing M365 accounts.
 
 The app validates the `Cf-Access-Jwt-Assertion` header against Cloudflare's JWKS, extracts the verified email, and resolves the role from the `users` table. There is no second login and no separate password store. In Next.js 16 this file is `proxy.ts`, not `middleware.ts`, and it runs on the Node runtime.
 
@@ -652,7 +652,7 @@ No manual list or column creation. The chain is:
 
 ```
 Drizzle schema  ->  npm run generate:sharepoint  ->  PnP template XML
-                                                 ->  Provision-MapleQuote.ps1
+                                                 ->  Provision-Scopeline.ps1
 ```
 
 A code generator reads the Drizzle table definitions and emits a PnP provisioning template plus a PowerShell wrapper. Running the wrapper creates or updates every list, field, view, and index, and applies the permission model from section 7.2.

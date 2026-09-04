@@ -1,5 +1,5 @@
 {
-  "name": "contractor-quote",
+  "name": "scopeline",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -44,5 +44,6 @@
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "zod": "^4.5.4"
-  }
+  },
+  "description": "Quoting, documents and job costing for a general contractor."
 }

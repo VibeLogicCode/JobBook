@@ -8,7 +8,7 @@
 
 **Tech Stack:** Next.js 16, React 19, TypeScript 6, PostgreSQL 16, Drizzle ORM 0.45, Vitest 3, zod, Docker Compose.
 
-**Spec:** `docs/superpowers/specs/2026-08-30-maple-quote-design.md` and `docs/superpowers/specs/2026-08-30-ui-design.md`
+**Spec:** `docs/superpowers/specs/2026-08-30-scopeline-design.md` and `docs/superpowers/specs/2026-08-30-ui-design.md`
 
 **Plan 1 of 5 for Phase 1.** Later plans: (2) application and worksheet UI, (3) PDF documents, (4) SharePoint sync and backup, (5) first-run setup and accountant export.
 
@@ -18,7 +18,7 @@ Every task's requirements implicitly include this section.
 
 - **Node >= 22.** TypeScript `strict: true`. No `any` in committed code.
 - **Nothing is ever deleted.** No `DELETE` statement anywhere. Voiding sets `record_status = 'void'` with `voided_at`, `voided_by`, and a required `void_reason`.
-- **No company-specific value in code, templates, or logic.** Not "Maple Custom Homes", not `0.13`, not an Ontario assumption. Seed files are the only permitted location, and they are data.
+- **No company-specific value in code, templates, or logic.** Not "Northgate Building Group", not `0.13`, not an Ontario assumption. Seed files are the only permitted location, and they are data.
 - **Money is integer cents.** JavaScript `number` never holds a monetary value mid-calculation.
 - **Quantities are integer thousandths. Rates are integer ten-thousandths.** `qty × rate` is computed in `BigInt` and rounded once, half-up, at the line boundary.
 - **Rates are snapshotted onto quote lines** at line creation. Quote lines never reference `rate_items` for a price.
@@ -58,7 +58,7 @@ Every task's requirements implicitly include this section.
 
 ```json
 {
-  "name": "contractor-quote",
+  "name": "scopeline",
   "version": "0.1.0",
   "private": true,
   "engines": { "node": ">=22" },
@@ -3315,11 +3315,11 @@ const EXEMPT = [path.join('src', 'db', 'seed')];
  * than in the tax_rates table is exactly the bug this guard exists to catch.
  */
 const FORBIDDEN = [
-  /maple\s*custom\s*homes/i,
-  /maplecustomhomes/i,
-  /general contracting done right/i,
+  /northgate\s*building\s*group/i,
+  /northgate\.example/i,
+  /renovations and custom builds/i,
   /\b0\.13\b/,
-  /\b647-?960-?4017\b/,
+  /\b905-?555-?0142\b/,
 ];
 
 async function* walk(dir: string): AsyncGenerator<string> {

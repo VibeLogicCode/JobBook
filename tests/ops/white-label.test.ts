@@ -9,20 +9,55 @@ const SEARCH_DIRS = ['src', 'scripts', 'drizzle', 'docker'];
 const EXEMPT = [path.join('src', 'db', 'seed')];
 
 /**
- * Values that belong to a tenant, never to the product.
+ * Patterns for values that belong to a tenant rather than to the product.
  *
- * The bare tax rate is included deliberately. An Ontario HST rate written into
- * code rather than read from tax_rates is exactly the defect this guard exists
- * to catch: it survives a rate change silently, and it is wrong for every
- * deployment outside one province.
+ * The built-in list is generic on purpose. An earlier version listed the first
+ * customer's company name, tagline and phone number as literal regexes, which
+ * made the guard against tenant details in the codebase the codebase's own
+ * largest collection of tenant details -- and it would have shipped to every
+ * other company that buys this.
+ *
+ * A deployment that wants to guard specific strings puts them in
+ * `tenant-literals.local.json` beside this file, as an array of regex sources.
+ * That file is gitignored, so a real company's name never enters the
+ * repository at all.
  */
-const FORBIDDEN = [
-  /maple\s*custom\s*homes/i,
-  /maplecustomhomes/i,
-  /general contracting done right/i,
-  /\b0\.13\b/,
-  /\b647-?\s?960-?\s?4017\b/,
+const BUILT_IN = [
+  // A bare tax rate written into code rather than read from tax_rates: it
+  // survives a rate change silently and is wrong outside one province.
+  { source: String.raw`\b0\.13\b`, why: 'a hardcoded tax rate' },
+  { source: String.raw`\b0\.15\b`, why: 'a hardcoded tax rate' },
+  // A North American phone number in source is somebody's actual phone.
+  { source: String.raw`\b\(?\d{3}\)?[-.\s]\d{3}[-.\s]\d{4}\b`, why: 'a phone number' },
+  // The GST/HST account suffix on a Canadian business number.
+  { source: String.raw`\bRT\d{4}\b`, why: 'a tax registration number' },
 ];
+
+interface Pattern {
+  regex: RegExp;
+  why: string;
+}
+
+const LOCAL_LIST = 'tenant-literals.local.json';
+
+async function loadPatterns(): Promise<Pattern[]> {
+  const patterns: Pattern[] = BUILT_IN.map((entry) => ({
+    regex: new RegExp(entry.source, 'i'),
+    why: entry.why,
+  }));
+
+  try {
+    const local = await readFile(path.join(import.meta.dirname, LOCAL_LIST), 'utf8');
+    for (const source of JSON.parse(local) as string[]) {
+      patterns.push({ regex: new RegExp(source, 'i'), why: `the tenant literal /${source}/` });
+    }
+  } catch {
+    // No local list, which is the normal case. The built-in patterns still
+    // apply: an absent file must never silently disable the guard.
+  }
+
+  return patterns;
+}
 
 async function* walk(dir: string): AsyncGenerator<string> {
   let entries;
@@ -43,14 +78,17 @@ async function* walk(dir: string): AsyncGenerator<string> {
 }
 
 async function findOffences(root: string, dirs: string[]): Promise<string[]> {
+  const patterns = await loadPatterns();
   const offences: string[] = [];
+
   for (const dir of dirs) {
     for await (const file of walk(path.join(root, dir))) {
       const relative = path.relative(root, file);
       if (EXEMPT.some((exempt) => relative.startsWith(exempt))) continue;
+      if (relative.endsWith(LOCAL_LIST)) continue;
       const text = await readFile(file, 'utf8');
-      for (const pattern of FORBIDDEN) {
-        if (pattern.test(text)) offences.push(`${relative} matches ${pattern}`);
+      for (const pattern of patterns) {
+        if (pattern.regex.test(text)) offences.push(`${relative} contains ${pattern.why}`);
       }
     }
   }
@@ -62,28 +100,46 @@ describe('white-label guard', () => {
     expect(await findOffences(ROOT, SEARCH_DIRS)).toEqual([]);
   });
 
-  it('catches a tenant name, so the guard is known to work', async () => {
+  it('catches a hardcoded tax rate, so the guard is known to work', async () => {
     // A guard that has never failed is not a guard. This proves it fires
     // rather than passing because the walk quietly found nothing.
     const scratch = await mkdtemp(path.join(tmpdir(), 'white-label-'));
     try {
-      await writeFile(
-        path.join(scratch, 'offender.ts'),
-        "export const FOOTER = 'Maple Custom Homes — General Contracting Done Right';\n",
-      );
+      await writeFile(path.join(scratch, 'tax.ts'), 'const HST = 0.13;\n');
       const offences = await findOffences(scratch, ['.']);
-      expect(offences.length).toBeGreaterThan(0);
-      expect(offences[0]).toContain('offender.ts');
+      expect(offences).toHaveLength(1);
+      expect(offences[0]).toContain('tax.ts');
     } finally {
       await rm(scratch, { recursive: true, force: true });
     }
   });
 
-  it('catches a hardcoded tax rate', async () => {
+  it('catches a phone number', async () => {
     const scratch = await mkdtemp(path.join(tmpdir(), 'white-label-'));
     try {
-      await writeFile(path.join(scratch, 'tax.ts'), 'const HST = 0.13;\n');
+      await writeFile(path.join(scratch, 'footer.ts'), "export const TEL = '905-555-0142';\n");
       expect(await findOffences(scratch, ['.'])).toHaveLength(1);
+    } finally {
+      await rm(scratch, { recursive: true, force: true });
+    }
+  });
+
+  it('catches a tax registration number', async () => {
+    const scratch = await mkdtemp(path.join(tmpdir(), 'white-label-'));
+    try {
+      await writeFile(path.join(scratch, 'doc.ts'), "const NUMBER = '80000 1234 RT0001';\n");
+      expect(await findOffences(scratch, ['.'])).toHaveLength(1);
+    } finally {
+      await rm(scratch, { recursive: true, force: true });
+    }
+  });
+
+  it('honours a local tenant list without that list entering the repository', async () => {
+    const scratch = await mkdtemp(path.join(tmpdir(), 'white-label-'));
+    try {
+      await writeFile(path.join(scratch, 'footer.ts'), "export const NAME = 'Northgate';\n");
+      // No local list here, so the generic patterns alone see nothing wrong.
+      expect(await findOffences(scratch, ['.'])).toEqual([]);
     } finally {
       await rm(scratch, { recursive: true, force: true });
     }
@@ -91,13 +147,11 @@ describe('white-label guard', () => {
 
   it('exempts the seed directory, which is allowed to name a company', async () => {
     const scratch = await mkdtemp(path.join(tmpdir(), 'white-label-'));
+    const { mkdir } = await import('node:fs/promises');
     try {
       const seed = path.join(scratch, 'src', 'db', 'seed');
-      await writeFile(path.join(scratch, 'placeholder.ts'), 'export const X = 1;\n');
-      await rm(seed, { recursive: true, force: true });
-      const { mkdir } = await import('node:fs/promises');
       await mkdir(seed, { recursive: true });
-      await writeFile(path.join(seed, 'demo.ts'), "export const NAME = 'Maple Custom Homes';\n");
+      await writeFile(path.join(seed, 'demo.ts'), "export const TEL = '905-555-0142';\n");
       expect(await findOffences(scratch, ['src'])).toEqual([]);
     } finally {
       await rm(scratch, { recursive: true, force: true });

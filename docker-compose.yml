@@ -1,5 +1,7 @@
 # Development only. The production compose file (Plan 4a) publishes no ports:
 # the app reaches Postgres over the compose network, and nothing else should.
+name: scopeline-dev
+
 services:
   db:
     image: postgres:16-alpine
