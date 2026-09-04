@@ -80,7 +80,7 @@ COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 
 RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/backup.sh \
       /usr/local/bin/restore.sh /usr/local/bin/backup-loop.sh \
-    && mkdir -p /data/files /data/backups \
+    && mkdir -p /data/files /data/backups /data/config \
     && chown -R pwuser:pwuser /app /data
 
 # Chromium's sandbox needs privileges a container should not have, and the app

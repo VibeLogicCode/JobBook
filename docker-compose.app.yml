@@ -43,6 +43,7 @@ services:
       # hostname would resolve to Cloudflare and authenticate against Access
       # instead of the render secret.
       INTERNAL_BASE_URL: http://127.0.0.1:3000
+      DEPLOY_CONFIG_PATH: /data/config/auth.env
       INTERNAL_RENDER_SECRET: ${INTERNAL_RENDER_SECRET:?set INTERNAL_RENDER_SECRET in .env}
       # LAN testing mode. Swap to Access by removing these two and setting
       # CF_ACCESS_TEAM_DOMAIN and CF_ACCESS_AUD -- access.ts refuses to run
@@ -69,10 +70,18 @@ services:
       BACKUP_USB_DIR: ${BACKUP_USB_DIR:-}
       BACKUP_HEARTBEAT_URL: ${BACKUP_HEARTBEAT_URL:-}
     ports:
-      - '${APP_PORT:-3000}:3000'
+      # Bound to LOOPBACK by default, not to every interface. Reaching the app
+      # from another machine is then a deliberate act: either through the proxy
+      # (HTTPS) or the tunnel, both below, or by setting APP_BIND=0.0.0.0 and
+      # accepting plain HTTP across the office network.
+      - '${APP_BIND:-127.0.0.1}:${APP_PORT:-3000}:3000'
     volumes:
       - files:/data/files
       - backups:/data/backups
+      # Where the setup wizard writes the deployment configuration. A file
+      # rather than database rows, because these are credentials and a database
+      # row is mirrored to SharePoint and lands in every backup.
+      - config:/data/config
       # The USB drive, at the same path BACKUP_USB_DIR names. Commented out
       # rather than guessed: an unset host path silently becomes an anonymous
       # volume, which is a backup destination on the same disk as the database
@@ -132,7 +141,59 @@ services:
     # is visible in one `docker compose ps`.
     restart: on-failure
 
+  # HTTPS. Opt in with: docker compose --profile https up -d
+  #
+  # A real domain gets a public certificate automatically. A LAN address gets
+  # one from Caddy's own internal CA, which browsers distrust until that CA is
+  # installed on each device -- the honest cost of HTTPS with no domain and no
+  # internet, and cheaper than the alternative of a business quoting over
+  # plain HTTP across a shared office network.
+  proxy:
+    image: caddy:2-alpine
+    profiles: ['https']
+    depends_on:
+      app:
+        condition: service_healthy
+    ports:
+      - '80:80'
+      - '443:443'
+    environment:
+      CADDY_SITE: ${CADDY_SITE:-localhost}
+      CADDY_EMAIL: ${CADDY_EMAIL:-}
+      # Unset for a LAN address on purpose: pinning a browser to HTTPS for a
+      # bare IP is not something an owner can undo without clearing state on
+      # every device.
+      CADDY_HSTS: ${CADDY_HSTS:-}
+    volumes:
+      - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddydata:/data
+      - caddyconfig:/config
+    restart: unless-stopped
+
+  # Cloudflare Tunnel. Opt in with: docker compose --profile tunnel up -d
+  #
+  # With this running, nothing needs to be published at all: cloudflared makes
+  # an outbound connection and Cloudflare terminates TLS at its edge, so there
+  # is no inbound port, no certificate to renew, and no router to configure.
+  # Access policies in front of it are what make AUTH_MODE=access meaningful.
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    profiles: ['tunnel']
+    depends_on:
+      app:
+        condition: service_healthy
+    command: ['tunnel', '--no-autoupdate', 'run']
+    environment:
+      # From the Cloudflare dashboard when the tunnel is created. It is a
+      # credential: it belongs in .env or the wizard's config file, never in a
+      # committed compose file.
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:-}
+    restart: unless-stopped
+
 volumes:
   dbdata:
   files:
   backups:
+  config:
+  caddydata:
+  caddyconfig:
