@@ -5,6 +5,7 @@ import {
   scopeTemplateItems, scopeTemplates, taxRates,
 } from '@/db/schema';
 import { addDays, tenantToday, yearOf } from '@/lib/quote/dates';
+import { loadTaxRatesFor } from '@/lib/quote/rates';
 import { allocateDocumentNumber } from '@/lib/quote/numbering';
 import type { TaxRateInput } from '@/lib/quote/tax';
 import { expandTemplate, type ScopeInputs, type TemplateItem } from '@/lib/quote/template';
@@ -15,24 +16,6 @@ type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 /** Revision is allowed only from these. See the note on reviseQuote. */
 const REVISABLE = ['sent', 'declined'] as const;
-
-async function loadTaxRates(tx: Tx): Promise<TaxRateInput[]> {
-  const rows = await tx
-    .select()
-    .from(taxRates)
-    .where(and(eq(taxRates.isActive, true), eq(taxRates.recordStatus, 'active')))
-    .orderBy(asc(taxRates.sortOrder));
-
-  return rows.map((row) => ({
-    label: row.label,
-    registrationNumber: row.registrationNumber,
-    rateTenThou: row.rateTenThou,
-    effectiveFrom: row.effectiveFrom,
-    effectiveTo: row.effectiveTo,
-    isCompound: row.isCompound,
-    sortOrder: row.sortOrder,
-  }));
-}
 
 async function requireOrganization(tx: Tx) {
   const [org] = await tx.select().from(organization).where(eq(organization.id, 1));
@@ -161,7 +144,7 @@ export async function createQuoteFromTemplate(args: {
 
     const quoteDate = args.quoteDate ?? (await tenantToday(tx));
     const lines = expandTemplate(templateItems, args.scope);
-    const totals = computeQuote(lines, await loadTaxRates(tx), { onDate: quoteDate, customerExempt });
+    const totals = computeQuote(lines, await loadTaxRatesFor(tx), { onDate: quoteDate, customerExempt });
 
     const quoteNumber = await allocateDocumentNumber(tx, 'quote', yearOf(quoteDate));
 
@@ -275,7 +258,7 @@ export async function reviseQuote(args: {
 
     const quoteDate = await tenantToday(tx);
     const customerExempt = await customerExemptFor(tx, source.projectId);
-    const totals = computeQuote(carried, await loadTaxRates(tx), { onDate: quoteDate, customerExempt });
+    const totals = computeQuote(carried, await loadTaxRatesFor(tx), { onDate: quoteDate, customerExempt });
 
     // Superseded before the copy is inserted, so the partial unique index on
     // the accepted slot never sees two live rows at once.

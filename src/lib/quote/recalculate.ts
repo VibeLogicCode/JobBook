@@ -1,6 +1,7 @@
 import { and, asc, eq } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { customers, projects, quoteLines, quoteTaxes, quotes, taxRates } from '@/db/schema';
+import { loadTaxRatesFor } from '@/lib/quote/rates';
 import { computeQuote } from '@/lib/quote/totals';
 import type { LineInput } from '@/lib/quote/types';
 import type { TaxRateInput } from '@/lib/quote/tax';
@@ -57,21 +58,7 @@ export async function recalculateQuote(quoteId: string): Promise<void> {
       costCodeId: line.costCodeId,
     }));
 
-    const rateRows = await tx
-      .select()
-      .from(taxRates)
-      .where(and(eq(taxRates.isActive, true), eq(taxRates.recordStatus, 'active')))
-      .orderBy(asc(taxRates.sortOrder));
-
-    const rates: TaxRateInput[] = rateRows.map((row) => ({
-      label: row.label,
-      registrationNumber: row.registrationNumber,
-      rateTenThou: row.rateTenThou,
-      effectiveFrom: row.effectiveFrom,
-      effectiveTo: row.effectiveTo,
-      isCompound: row.isCompound,
-      sortOrder: row.sortOrder,
-    }));
+    const rates: TaxRateInput[] = await loadTaxRatesFor(tx);
 
     const totals = computeQuote(inputs, rates, {
       onDate: quote.quoteDate,
