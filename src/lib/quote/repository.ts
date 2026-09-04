@@ -12,7 +12,7 @@ import { expandTemplate, type ScopeInputs, type TemplateItem } from '@/lib/quote
 import { computeQuote } from '@/lib/quote/totals';
 import type { LineInput } from '@/lib/quote/types';
 
-type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 /** Revision is allowed only from these. See the note on reviseQuote. */
 const REVISABLE = ['sent', 'declined'] as const;
@@ -23,7 +23,7 @@ async function requireOrganization(tx: Tx) {
   return org;
 }
 
-async function customerExemptFor(tx: Tx, projectId: string): Promise<boolean> {
+export async function customerExemptFor(tx: Tx, projectId: string): Promise<boolean> {
   const [row] = await tx
     .select({ isTaxExempt: customers.isTaxExempt })
     .from(projects)
@@ -33,7 +33,7 @@ async function customerExemptFor(tx: Tx, projectId: string): Promise<boolean> {
   return row.isTaxExempt;
 }
 
-async function writeLinesAndTaxes(
+export async function writeLinesAndTaxes(
   tx: Tx,
   quoteId: string,
   totals: ReturnType<typeof computeQuote>,
@@ -79,6 +79,25 @@ async function writeLinesAndTaxes(
       })),
     );
   }
+}
+
+/**
+ * The next estimate slot on an opportunity.
+ *
+ * An opportunity carries more than one estimate -- the basement and the deck
+ * are separate decisions the customer makes separately -- so each gets its own
+ * sequence, and versions count within a sequence. Reusing version 1 collides
+ * on (project, kind, sequence, version), which is a real bug this once had.
+ *
+ * It lives in one place because there are now two ways to start a quote, and
+ * two copies of the allocation is how the collision comes back.
+ */
+async function nextEstimateSequence(tx: Tx, projectId: string): Promise<number> {
+  const siblings = await tx
+    .select({ sequence: quotes.sequence })
+    .from(quotes)
+    .where(and(eq(quotes.projectId, projectId), eq(quotes.kind, 'estimate')));
+  return siblings.reduce((max, row) => Math.max(max, row.sequence), 0) + 1;
 }
 
 /**
@@ -148,15 +167,7 @@ export async function createQuoteFromTemplate(args: {
 
     const quoteNumber = await allocateDocumentNumber(tx, 'quote', yearOf(quoteDate));
 
-    // A project can carry more than one estimate -- the basement and the deck
-    // are separate decisions the customer makes separately -- so each gets its
-    // own sequence, and versions count within a sequence. Reusing version 1
-    // collides on (project, kind, sequence, version).
-    const siblings = await tx
-      .select({ sequence: quotes.sequence })
-      .from(quotes)
-      .where(and(eq(quotes.projectId, args.projectId), eq(quotes.kind, 'estimate')));
-    const sequence = siblings.reduce((max, row) => Math.max(max, row.sequence), 0) + 1;
+    const sequence = await nextEstimateSequence(tx, args.projectId);
 
     const [quote] = await tx
       .insert(quotes)
@@ -173,6 +184,67 @@ export async function createQuoteFromTemplate(args: {
         washroomCount: args.scope.washroomCount,
         kitchenCount: args.scope.kitchenCount,
         bedroomCount: args.scope.bedroomCount,
+        subtotalCents: totals.subtotalCents,
+        taxTotalCents: totals.taxTotalCents,
+        totalCents: totals.totalCents,
+        totalCostCents: totals.totalCostCents,
+        marginBp: totals.marginBp,
+        holdbackPctTenThou: org.defaultHoldbackPctTenThou,
+        terms: org.quoteTermsText,
+        paymentTermsText: org.paymentTermsText,
+        createdBy: args.createdBy,
+      })
+      .returning();
+
+    await writeLinesAndTaxes(tx, quote!.id, totals, args.createdBy);
+    return { quoteId: quote!.id, quoteNumber };
+  });
+}
+
+/**
+ * Starts a quote with no lines.
+ *
+ * Templates only cover the work that repeats. There are two seeded and nine
+ * project types, so requiring one would mean a kitchen or an addition could
+ * not be quoted at all -- and the owner would conclude the product does not
+ * do kitchens. A blank quote takes its lines from the worksheet instead.
+ *
+ * Everything else is identical to the template path, deliberately: the number
+ * is allocated inside the transaction so an abandoned quote does not burn one,
+ * the validity window comes from the organization, and the tax rows are
+ * written even though the base is zero, because the quote must print its tax
+ * lines from the moment it exists rather than gaining them on first edit.
+ */
+export async function createBlankQuote(args: {
+  projectId: string;
+  quoteDate?: string;
+  createdBy?: string;
+}): Promise<{ quoteId: string; quoteNumber: string }> {
+  return db.transaction(async (tx) => {
+    const org = await requireOrganization(tx);
+    const customerExempt = await customerExemptFor(tx, args.projectId);
+
+    const quoteDate = args.quoteDate ?? (await tenantToday(tx));
+    const totals = computeQuote([], await loadTaxRatesFor(tx), {
+      onDate: quoteDate,
+      customerExempt,
+    });
+
+    const sequence = await nextEstimateSequence(tx, args.projectId);
+    const quoteNumber = await allocateDocumentNumber(tx, 'quote', yearOf(quoteDate));
+
+    const [quote] = await tx
+      .insert(quotes)
+      .values({
+        projectId: args.projectId,
+        quoteNumber,
+        kind: 'estimate',
+        sequence,
+        version: 1,
+        quoteDate,
+        validUntil: addDays(quoteDate, org.quoteValidityDays),
+        // No scopeTemplateId, so "regenerate from template" has nothing to
+        // regenerate from and the worksheet is the only author of the lines.
         subtotalCents: totals.subtotalCents,
         taxTotalCents: totals.taxTotalCents,
         totalCents: totals.totalCents,
@@ -216,7 +288,7 @@ export async function reviseQuote(args: {
     }
     if (!REVISABLE.includes(source.status as (typeof REVISABLE)[number])) {
       throw new Error(
-        `a ${source.status} quote cannot be revised: a draft edits in place, and an accepted quote takes a change order`,
+        `this quote is ${source.status}, so it cannot be revised: a draft edits in place, and an accepted quote takes a change order`,
       );
     }
 
@@ -348,11 +420,16 @@ export async function voidQuote(args: {
 }
 
 /**
- * Contract value, derived rather than stored.
+ * Contract value, derived rather than stored, and TAX-INCLUSIVE.
  *
  * An earlier draft had both a projects.contract_value_cents column and a
  * statement that the value was derived. Two sources of truth from day one is a
  * reconciliation bug waiting for a witness.
+ *
+ * This sums `total_cents`, which is `subtotal + tax`. That is the right figure
+ * to show a customer -- it is what the contract says they owe -- and the WRONG
+ * figure to bill progress against. Use `contractSubtotalCents` for that; see
+ * the note there, because getting this one wrong is expensive and silent.
  */
 export async function contractValueCents(projectId: string): Promise<number> {
   const rows = await db
@@ -366,4 +443,32 @@ export async function contractValueCents(projectId: string): Promise<number> {
       ),
     );
   return rows.reduce((sum, row) => sum + row.total, 0);
+}
+
+/**
+ * Contract value BEFORE tax -- the base progress billing multiplies.
+ *
+ * Progress billing computes `contract x percent complete - previously billed`
+ * and then charges tax on the result. Handed the tax-inclusive figure, it
+ * charges tax on tax, once per draw: on a $100,000 contract at 13% HST taken
+ * to completion that is about $1,690 over-billed, spread across every invoice
+ * so no single one looks wrong. The customer's accountant finds it, not the
+ * owner.
+ *
+ * Hence two functions with names that cannot be confused, rather than one
+ * function and a comment. The invoice engine takes this one; the figure on the
+ * job screen is the other.
+ */
+export async function contractSubtotalCents(projectId: string): Promise<number> {
+  const rows = await db
+    .select({ subtotal: quotes.subtotalCents })
+    .from(quotes)
+    .where(
+      and(
+        eq(quotes.projectId, projectId),
+        eq(quotes.status, 'accepted'),
+        eq(quotes.recordStatus, 'active'),
+      ),
+    );
+  return rows.reduce((sum, row) => sum + row.subtotal, 0);
 }

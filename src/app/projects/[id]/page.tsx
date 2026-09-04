@@ -12,7 +12,7 @@ import { StageControl } from '@/components/detail/StageControl';
 import { StageTimeline } from '@/components/detail/StageTimeline';
 import { tenantIsoToday } from '@/components/detail/dates';
 import {
-  CONTRACT_TYPES, PROJECT_STAGES, PROJECT_TYPES, stageTone,
+  CONTRACT_TYPES, PROJECT_STAGES, PROJECT_TYPES, stageTone, workNoun,
 } from '@/components/detail/labels';
 
 export const dynamic = 'force-dynamic';
@@ -100,6 +100,10 @@ export default async function ProjectPage({
     .orderBy(asc(customers.name));
 
   const today = tenantIsoToday(org?.timezone ?? 'UTC');
+  // The record is a job from the moment a quote on it is accepted, which is
+  // the same event the owner calls converting it.
+  const accepted = versions.filter((quote) => quote.status === 'accepted');
+  const noun = workNoun(accepted.length > 0);
   const active = project.recordStatus === 'active';
   const editing = edit === '1' && active;
 
@@ -109,17 +113,28 @@ export default async function ProjectPage({
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
           <h1 className="t-title">{project.name}</h1>
           <span className="num t-small text-muted">{project.projectNumber}</span>
+          <span className="t-small text-subtle">{noun}</span>
           <Pill tone={stageTone(project.stage)}>{PROJECT_STAGES[project.stage]}</Pill>
           {active ? null : <Pill tone="negative">Void</Pill>}
 
           <div className="no-print ml-auto flex flex-wrap gap-2">
             {active && !editing ? (
-              <Link
-                href={`/projects/${project.id}?edit=1`}
-                className="flex min-h-11 items-center rounded-[4px] border border-line-strong bg-surface px-3 hover:bg-surface-2"
-              >
-                Edit
-              </Link>
+              <>
+                <Link
+                  href={`/projects/${project.id}?edit=1`}
+                  className="flex min-h-11 items-center rounded-[4px] border border-line-strong bg-surface px-3 hover:bg-surface-2"
+                >
+                  Edit
+                </Link>
+                {/* Another quote on the same opportunity -- a second price
+                    point, or a scope the customer asked to see separately. */}
+                <Link
+                  href={`/quotes/new?opportunity=${project.id}`}
+                  className="flex min-h-11 items-center rounded-[4px] bg-accent px-3 text-accent-fg hover:bg-accent-hover"
+                >
+                  New quote
+                </Link>
+              </>
             ) : null}
           </div>
         </div>
@@ -139,7 +154,7 @@ export default async function ProjectPage({
         <p className="t-small text-muted">Contract value — accepted quotes</p>
         <p className="num t-display">{formatCents(Number(job.contractValueCents))}</p>
         <p className="t-small text-muted">
-          {versions.filter((quote) => quote.status === 'accepted').length} accepted of{' '}
+          {accepted.length} accepted of{' '}
           {versions.length} quote{versions.length === 1 ? '' : 's'}
         </p>
       </section>
@@ -152,14 +167,14 @@ export default async function ProjectPage({
       ) : null}
 
       {editing ? (
-        <Panel title="Edit job">
+        <Panel title={`Edit ${noun.toLowerCase()}`}>
           <ProjectForm
             action={updateProject}
             project={project}
             customers={customerList}
             defaultProvince={org?.province ?? ''}
             cancelHref={`/projects/${project.id}`}
-            submitLabel="Save job"
+            submitLabel={`Save ${noun.toLowerCase()}`}
             showRealisedDates
           />
         </Panel>
@@ -180,7 +195,7 @@ export default async function ProjectPage({
                   <span className="text-subtle">—</span>
                 )}
               </DetailRow>
-              <DetailRow label="Job type" value={PROJECT_TYPES[project.projectType]} />
+              <DetailRow label="Type of work" value={PROJECT_TYPES[project.projectType]} />
               <DetailRow
                 label="Contract type"
                 value={project.contractType ? CONTRACT_TYPES[project.contractType] : null}

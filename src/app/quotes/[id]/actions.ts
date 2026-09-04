@@ -8,6 +8,7 @@ import { quoteLines, quotes, rateItems } from '@/db/schema';
 import type { WireChangeReason } from '@/components/worksheet/types';
 import { guard } from '@/lib/auth/guard';
 import { parseQtyToMilli, parseRateToTenThou } from '@/lib/money/format';
+import { acceptQuoteLines } from '@/lib/quote/accept';
 import {
   changeOrderLinesFromRateItems,
   createChangeOrder,
@@ -216,6 +217,35 @@ export async function setQuoteStatus(input: z.input<typeof statusSchema>): Promi
     if (!allowed.ok) return { ok: false, error: allowed.error };
 
     const now = new Date();
+
+    // An ESTIMATE cannot be accepted here, and the refusal is server-side
+    // rather than only a hidden button: this action writes the status and
+    // nothing else -- no line selection, no project stage, no decision about
+    // the other quotes on the opportunity. The result is a quote that reads
+    // ACCEPTED while the opportunity is still a lead, no job exists, contract
+    // value appears out of nowhere and nothing explains why. That happened on
+    // the first real attempt, which is why a hidden control was not enough.
+    //
+    // A change order still comes through here: it is one already-agreed
+    // change, has no optional lines by construction, and accepting it neither
+    // wins the job nor puts any other quote out of the running.
+    if (status === 'accepted') {
+      const [subject] = await db
+        .select({ kind: quotes.kind })
+        .from(quotes)
+        .where(eq(quotes.id, quoteId));
+      if (!subject) return { ok: false, error: 'that quote no longer exists' };
+      if (subject.kind === 'estimate') {
+        return {
+          ok: false,
+          error:
+            'An estimate is won through the acceptance panel below the worksheet, which asks ' +
+            'which lines the customer agreed to and turns the opportunity into a job. Marking ' +
+            'the status alone would leave a quote that says accepted with no job behind it.',
+        };
+      }
+    }
+
     const patch: Record<string, unknown> = { status };
     if (status === 'sent') patch.sentAt = now;
     if (status === 'accepted') {
@@ -230,6 +260,83 @@ export async function setQuoteStatus(input: z.input<typeof statusSchema>): Promi
     return { ok: true };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : 'that change failed' };
+  }
+}
+
+const acceptSchema = z.object({
+  quoteId: z.string().uuid(),
+  wonLineIds: z.array(z.string().uuid()).min(1),
+  declineSiblings: z.boolean(),
+  acceptedByName: z.string().min(1).max(200),
+});
+
+export type AcceptResult =
+  | {
+      ok: true;
+      projectId: string;
+      acceptedQuoteId: string;
+      version: number;
+      revised: boolean;
+      declined: { id: string; quoteNumber: string }[];
+    }
+  | { ok: false; error: string };
+
+/**
+ * Wins the quote: accepts the chosen lines and turns the opportunity into a job.
+ *
+ * Guarded on `quote:transition` rather than `quote:write`, because nothing
+ * about the document is being edited -- a contract is coming into existence,
+ * which is the same class of decision as sending or declining one, and a
+ * bookkeeper holds neither.
+ *
+ * The actor's id becomes `created_by` on everything the transaction writes. The
+ * customer's name arrives from the form and lands in `accepted_by_name`; the
+ * two are different people and are never conflated.
+ */
+export async function acceptQuote(
+  input: z.input<typeof acceptSchema>,
+): Promise<AcceptResult> {
+  const parsed = acceptSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: 'that acceptance needs at least one line and a name' };
+  }
+  const { quoteId, wonLineIds, declineSiblings, acceptedByName } = parsed.data;
+
+  try {
+    const allowed = await guard('quote:transition');
+    if (!allowed.ok) return { ok: false, error: allowed.error };
+
+    const outcome = await acceptQuoteLines({
+      quoteId,
+      wonLineIds,
+      declineSiblings,
+      acceptedByName,
+      createdBy: allowed.actor.id,
+    });
+
+    // The job list, the opportunity that just became a job, the quote that was
+    // superseded and the version that now stands accepted all say something
+    // different from what they said a moment ago.
+    revalidatePath('/quotes');
+    revalidatePath('/projects');
+    revalidatePath(`/quotes/${quoteId}`);
+    revalidatePath(`/quotes/${outcome.acceptedQuoteId}`);
+    revalidatePath(`/projects/${outcome.projectId}`);
+    for (const quote of outcome.declined) revalidatePath(`/quotes/${quote.id}`);
+
+    return {
+      ok: true,
+      projectId: outcome.projectId,
+      acceptedQuoteId: outcome.acceptedQuoteId,
+      version: outcome.version,
+      revised: outcome.revised,
+      declined: outcome.declined,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : 'that acceptance failed',
+    };
   }
 }
 

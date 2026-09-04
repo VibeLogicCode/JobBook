@@ -110,9 +110,15 @@ export default async function CustomerPage({
                 </Link>
                 <Link
                   href={`/projects/new?customer=${customer.id}`}
+                  className="flex min-h-11 items-center rounded-[4px] border border-line-strong bg-surface px-3 hover:bg-surface-2"
+                >
+                  New opportunity
+                </Link>
+                <Link
+                  href={`/quotes/new?customer=${customer.id}`}
                   className="flex min-h-11 items-center rounded-[4px] bg-accent px-3 text-accent-fg hover:bg-accent-hover"
                 >
-                  New job
+                  New quote
                 </Link>
               </>
             ) : null}

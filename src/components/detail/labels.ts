@@ -71,6 +71,19 @@ export const PROJECT_STAGES: Record<ProjectStage, string> = {
  * job that is complete or lost is history: if those blocked the void too, a
  * customer who bought one basement in 2019 could never be closed out.
  */
+/**
+ * Opportunity or job -- the same row, named for where it is in its life.
+ *
+ * Derived from whether an accepted quote exists, NOT from the stage. Stage
+ * cannot answer it: `on_hold` is a stalled opportunity before anything is won
+ * and a paused job afterwards, and `lost` is an opportunity that never became
+ * one. Acceptance is also the exact event the owner means by "convert" -- a
+ * quote is won, and from that moment there is a job to buy materials against.
+ */
+export function workNoun(hasAcceptedQuote: boolean): 'Job' | 'Opportunity' {
+  return hasAcceptedQuote ? 'Job' : 'Opportunity';
+}
+
 export const FINISHED_STAGES: ProjectStage[] = ['complete', 'lost'];
 
 export function isLiveStage(stage: ProjectStage): boolean {

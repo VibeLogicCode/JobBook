@@ -192,16 +192,32 @@ export function Worksheet({
             ) : null}
             {quote.status === 'sent' ? (
               <>
-                <button
-                  type="button"
-                  disabled={pending}
-                  className="min-h-11 rounded-[4px] bg-accent px-3 text-accent-fg hover:bg-accent-hover"
-                  onClick={() =>
-                    run(() => setQuoteStatus({ quoteId: quote.id, status: 'accepted' }))
-                  }
-                >
-                  Accepted
-                </button>
+                {/* An ESTIMATE is never accepted from here.
+
+                    This button sets the status and nothing else: no line
+                    selection, no stage change, no decision about the other
+                    quotes on the opportunity. On an estimate that is a quote
+                    marked won while the opportunity is still a lead -- the
+                    contract value appears, no job exists, and nothing says
+                    why. Winning an estimate goes through the acceptance panel
+                    below the worksheet, which asks which lines were won.
+
+                    A change order has no such choice to make: it is one
+                    agreed change, has no optional lines by construction, and
+                    accepting it neither wins the job nor puts anything else
+                    out of the running. So it keeps the one-click control. */}
+                {quote.kind === 'change_order' ? (
+                  <button
+                    type="button"
+                    disabled={pending}
+                    className="min-h-11 rounded-[4px] bg-accent px-3 text-accent-fg hover:bg-accent-hover"
+                    onClick={() =>
+                      run(() => setQuoteStatus({ quoteId: quote.id, status: 'accepted' }))
+                    }
+                  >
+                    Accepted
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   disabled={pending}

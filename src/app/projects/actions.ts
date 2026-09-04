@@ -34,13 +34,13 @@ const optionalDate = z
 const projectFields = z
   .object({
     customerId: z.string().uuid('choose a customer'),
-    name: z.string().trim().min(1, 'a job needs a name').max(200, 'that name is too long'),
+    name: z.string().trim().min(1, 'this needs a name').max(200, 'that name is too long'),
     projectType: z.enum(
       [
         'custom_home', 'basement', 'renovation', 'kitchen', 'bathroom',
         'addition', 'commercial_ti', 'water_leak', 'other',
       ],
-      'choose a job type',
+      'choose a type of work',
     ),
     contractType: z
       .enum(['lump_sum', 'unit_price', 'cost_plus', 'time_and_material'])
@@ -72,7 +72,7 @@ const projectFields = z
     'the actual end cannot come before the actual start',
   );
 
-const withId = z.object({ id: z.string().uuid('that job id is not valid') });
+const withId = z.object({ id: z.string().uuid('that record id is not valid') });
 
 const stageFields = withId
   .extend({
@@ -89,7 +89,7 @@ const stageFields = withId
   // that takes an explanation, and it is never remembered a week later.
   .refine(
     (value) => value.stage !== 'lost' || value.lostReason !== null,
-    'say why the job was lost',
+    'say why it was lost',
   );
 
 function fields(formData: FormData): Record<string, string> {

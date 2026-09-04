@@ -46,7 +46,15 @@ export default async function TodayPage() {
 
   return (
     <div className="px-4 py-4 sm:px-6">
-      <h1 className="t-title mb-4">Today</h1>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <h1 className="t-title">Today</h1>
+        <Link
+          href="/quotes/new"
+          className="flex min-h-12 items-center rounded-[4px] bg-accent px-4 text-accent-fg hover:bg-accent-hover"
+        >
+          New quote
+        </Link>
+      </div>
 
       <section className="mb-6 rounded-[6px] border border-line bg-surface p-4">
         <p className="t-small text-muted">Out with customers, awaiting a decision</p>
@@ -89,7 +97,7 @@ function QuoteList({
       <h2 className="t-heading mb-2">{title}</h2>
       {rows.length === 0 ? (
         <p className="rounded-[6px] border border-line bg-surface p-4 t-small text-muted">
-          Nothing here. {title === 'Drafts' ? 'Start a quote from a customer.' : 'Send a draft to fill this list.'}
+          Nothing here. {title === 'Drafts' ? 'Start a quote and it appears here.' : 'Send a draft to fill this list.'}
         </p>
       ) : (
         <ul className="divide-y divide-line overflow-hidden rounded-[6px] border border-line bg-surface">

@@ -42,12 +42,24 @@ export default async function QuotesPage() {
 
   return (
     <div className="px-4 py-4 sm:px-6">
-      <h1 className="t-title mb-4">Quotes</h1>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <h1 className="t-title">Quotes</h1>
+        <Link
+          href="/quotes/new"
+          className="flex min-h-12 items-center rounded-[4px] bg-accent px-4 text-accent-fg hover:bg-accent-hover"
+        >
+          New quote
+        </Link>
+      </div>
 
       {rows.length === 0 ? (
         <p className="rounded-[6px] border border-line bg-surface p-6 text-muted">
-          No quotes yet. Run <span className="num">npm run db:seed</span> to load demo data, or
-          start one from a customer.
+          No quotes yet.{' '}
+          <Link href="/quotes/new" className="text-accent-text hover:underline">
+            Start one
+          </Link>
+          . The customer and the opportunity can both be created on the way through, so there is
+          nothing to set up first.
         </p>
       ) : (
         <div className="overflow-x-auto rounded-[6px] border border-line bg-surface">

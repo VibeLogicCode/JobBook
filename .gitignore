@@ -20,3 +20,6 @@ tsconfig.tsbuildinfo
 # a path under the repo otherwise, so a dev logo upload would otherwise show up
 # as an untracked binary.
 .data/
+
+# Accessibility snapshots and console logs from browser-driven checks.
+.playwright-mcp/

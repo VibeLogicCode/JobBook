@@ -29,19 +29,23 @@ export default async function NewProjectPage({
   const preselected = customerList.some((row) => row.id === customer) ? customer : undefined;
 
   return (
-    <div className="grid gap-4 px-4 py-4 sm:px-6">
+    <div className="grid max-w-4xl gap-4 px-4 py-4 sm:px-6">
       <header>
-        <h1 className="t-title">New job</h1>
+        <h1 className="t-title">New opportunity</h1>
         <p className="t-small text-muted">
-          The job carries the site address, the schedule and the stage. Its number is allocated when
-          it saves.
+          Holds every quote for one piece of work, and becomes a job when one of them is accepted.
+          Usually there is no need to come here:{' '}
+          <Link href="/quotes/new" className="text-accent-text hover:underline">
+            starting a quote
+          </Link>{' '}
+          creates the opportunity with it.
         </p>
       </header>
 
-      <Panel title="Job">
+      <Panel title="Opportunity">
         {customerList.length === 0 ? (
           <p className="p-2 t-small text-muted">
-            No customers yet, and a job belongs to one.{' '}
+            No customers yet, and an opportunity belongs to one.{' '}
             <Link href="/customers/new" className="text-accent-text hover:underline">
               Create a customer first
             </Link>
@@ -57,7 +61,7 @@ export default async function NewProjectPage({
             // hardcode a tenant's region into every deployment.
             defaultProvince={org?.province ?? ''}
             cancelHref="/projects"
-            submitLabel="Create job"
+            submitLabel="Create opportunity"
           />
         )}
       </Panel>

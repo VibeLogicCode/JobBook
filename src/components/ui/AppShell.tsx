@@ -10,7 +10,7 @@ import { useEffect, useState } from 'react';
 const DESTINATIONS = [
   { href: '/', label: 'Today', icon: Home },
   { href: '/quotes', label: 'Quotes', icon: FileText },
-  { href: '/projects', label: 'Jobs', icon: ClipboardList },
+  { href: '/projects', label: 'Pipeline', icon: ClipboardList },
   { href: '/customers', label: 'People', icon: Users },
   { href: '/rates', label: 'Rates', icon: Ruler },
   { href: '/templates', label: 'Templates', icon: LayoutTemplate },
@@ -97,7 +97,14 @@ export function AppShell({
           </div>
         </header>
 
-        <main className="min-w-0 flex-1 pb-20 sm:pb-0">{children}</main>
+        {/* Capped and centred. Unconstrained, a form on a 27-inch monitor
+            renders two 800px-wide text inputs, and a table row's first and
+            last cell end up a head-turn apart. The cap is generous because a
+            wide worksheet genuinely wants the room; the forms narrow further
+            themselves. */}
+        <main className="mx-auto min-w-0 w-full max-w-[100rem] flex-1 pb-20 sm:pb-0">
+          {children}
+        </main>
 
         {/* Bottom tabs are a second presentation of the same destinations, so
             they are marked presentational and hidden from the accessibility

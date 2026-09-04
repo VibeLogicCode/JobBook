@@ -4,7 +4,7 @@ import { db } from '@/db/client';
 import { customers, projects, quotes } from '@/db/schema';
 import { Pill } from '@/components/ui/Pill';
 import { formatCents } from '@/lib/money/format';
-import { PROJECT_STAGES, stageTone } from '@/components/detail/labels';
+import { PROJECT_STAGES, stageTone, workNoun } from '@/components/detail/labels';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,6 +26,11 @@ export default async function ProjectsPage() {
         where q.project_id = ${projects.id}
           and q.status = 'accepted' and q.record_status = 'active'
       ), 0)`,
+      acceptedQuotes: sql<number>`(
+        select count(*) from ${quotes} q
+        where q.project_id = ${projects.id}
+          and q.status = 'accepted' and q.record_status = 'active'
+      )`,
     })
     .from(projects)
     .innerJoin(customers, eq(projects.customerId, customers.id))
@@ -35,29 +40,29 @@ export default async function ProjectsPage() {
   return (
     <div className="px-4 py-4 sm:px-6">
       <div className="mb-4 flex flex-wrap items-center gap-3">
-        <h1 className="t-title">Jobs</h1>
+        <h1 className="t-title">Pipeline</h1>
         <Link
           href="/projects/new"
           className="no-print ml-auto flex min-h-11 items-center rounded-[4px] bg-accent px-3 text-accent-fg hover:bg-accent-hover"
         >
-          New job
+          New opportunity
         </Link>
       </div>
 
       {rows.length === 0 ? (
         <p className="rounded-[6px] border border-line bg-surface p-6 text-muted">
-          No jobs yet.{' '}
-          <Link href="/projects/new" className="text-accent-text hover:underline">
-            Book the first one
-          </Link>
-          , or load the demo tenant with <span className="num">npm run db:seed</span>.
+          Nothing in the pipeline yet.{' '}
+          <Link href="/quotes/new" className="text-accent-text hover:underline">
+            Start a quote
+          </Link>{' '}
+          and the opportunity is created with it.
         </p>
       ) : (
         <div className="overflow-x-auto rounded-[6px] border border-line bg-surface">
           <table className="data-table data-table--stack" style={{ minWidth: '46rem' }}>
             <thead>
               <tr>
-                <th scope="col">Job</th>
+                <th scope="col">Work</th>
                 <th scope="col">Number</th>
                 <th scope="col">Customer</th>
                 <th scope="col">Stage</th>
@@ -68,10 +73,13 @@ export default async function ProjectsPage() {
             <tbody>
               {rows.map((row) => (
                 <tr key={row.id}>
-                  <td data-label="Job">
+                  <td data-label="Work">
                     <Link href={`/projects/${row.id}`} className="text-accent-text hover:underline">
                       {row.name}
                     </Link>
+                    <span className="block t-small text-subtle">
+                      {workNoun(Number(row.acceptedQuotes) > 0)}
+                    </span>
                   </td>
                   <td data-label="Number" className="num t-small text-muted">
                     {row.projectNumber}

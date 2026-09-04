@@ -28,7 +28,8 @@ const options = (labels: Record<string, string>) =>
   Object.entries(labels).map(([value, label]) => ({ value, label }));
 
 /**
- * One form for creating and for editing a job.
+ * One form for creating and for editing an opportunity, which is the same row
+ * that later becomes a job.
  *
  * Stage is deliberately absent. It has its own control on the detail screen,
  * because every stage change writes a row of history through a trigger, and a
@@ -65,7 +66,7 @@ export function ProjectForm({
 
       <FormError error={state && !state.ok ? state.error : null} />
 
-      <FieldGroup legend="Job">
+      <FieldGroup legend="Work">
         <SelectField
           label="Customer"
           name="customerId"
@@ -82,7 +83,7 @@ export function ProjectForm({
           name="name"
           required
           maxLength={200}
-          hint="What this job is called on site."
+          hint="What this work is called on site."
           defaultValue={project?.name ?? ''}
         />
         <SelectField
