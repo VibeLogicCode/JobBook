@@ -557,7 +557,16 @@ White-labelling is only real if standing up a new company does not require SQL. 
 
 The wizard writes the `organization` row, `tax_rates`, `feature_flags`, and the first `users` row. It runs once; afterwards every field remains editable under Settings, owner role only.
 
-## 9. Testing
+## 9. Interface
+
+The visual system, responsive strategy, screen inventory, worksheet design, and document design live in a companion document: `2026-08-30-ui-design.md`.
+
+Two decisions from it that affect this spec:
+
+- **Full responsive parity**, including the quote worksheet on a phone. Accepted with its cost — roughly a third more interface work in Phase 1 — because the owner needs to build a quote in the field.
+- **Present mode**, a view toggle that hides cost, margin, internal notes, and rate codes. He shows quotes to customers on his own screen; without it, turning the laptop around exposes his margin. A view state only, no data or permission implications.
+
+## 10. Testing
 
 - **Unit** — quote calculation engine. Line type math, percent-line ordering, margin against markup, tax rounding, template quantity derivation. This is where money bugs live, so coverage here is high.
 - **Tax** — its own suite, because it is the most jurisdiction-sensitive logic in the system. Single-rate (Ontario HST), dual-rate (BC GST + PST), compound ordering, non-taxable lines, exempt customers, and a rate change mid-stream where a quote dated before the change gets the old rate and one dated after gets the new one.
@@ -571,7 +580,7 @@ The wizard writes the `organization` row, `tax_rates`, `feature_flags`, and the 
 - **Backup** — mount-detection is tested by unmounting the target and asserting the job aborts loudly rather than writing to the underlying path. Retention pruning, dump verification, and `age` round-trip encryption are each covered.
 - **Restore drill** — scripted, run against a clean container, verified in CI. Covers both the dump path and the SharePoint rebuild path.
 
-## 10. Definition of done, Phase 1
+## 11. Definition of done, Phase 1
 
 1. Owner signs in with his Microsoft account through Cloudflare Access and reaches the app on both phone and desktop.
 2. He creates a customer and a project.
@@ -602,7 +611,7 @@ The wizard writes the `organization` row, `tax_rates`, `feature_flags`, and the 
 27. A second tax line is added and both appear correctly on the PDF with their own labels and registration numbers.
 28. A line marked non-taxable is excluded from the taxable base; a tax-exempt customer produces a quote with no tax lines and the exemption number shown.
 
-## 11. Open items
+## 12. Open items
 
 - **Real rate figures.** The seed rate card ships with clearly marked placeholder GTA numbers so the app is usable on first run. The owner overwrites them in the UI. No code change required.
 - **Commercial bid mode.** Deferred pending confirmation that square-foot pricing is genuinely inadequate for his tenant improvement work.
