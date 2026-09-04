@@ -133,6 +133,8 @@ The review recommended cutting it permanently. Recorded as deferred rather than 
 
 Budget Tracker ships a working local receipt pipeline: `jscanify` and `@techstark/opencv-js` for edge detection and deskew, `tesseract.js` and `onnxruntime-node` for recognition, with vendored model assets and a runtime probe. **This phase reuses that stack.** It is free, local, offline, and has no per-page cost, which removes the Azure Document Intelligence dependency the architecture originally assumed.
 
+The file-by-file inventory, what does NOT port, and the image-size question are in `2026-09-04-reuse-from-budget-tracker.md` §2.
+
 Its exact version pins carry over. Those packages are pinned for documented reasons — the ONNX runtime's kernels and the OpenCV 4.7 to jscanify 1.4.3 pairing — and a silent minor bump is a real regression risk.
 
 ### 3.2 Data model
