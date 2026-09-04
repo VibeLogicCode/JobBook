@@ -23,7 +23,7 @@ The full requirement covers roughly seven subsystems. Building them at once prod
 |---|---|---|
 | **1** | Rate cards, scope templates, quote engine, customers, projects, branded quote PDF | **This document** |
 | 2 | CRM pipeline stages, recurring reminders, callbacks, email/call intake | Later spec |
-| 3 | Receipt capture with OCR, vendor records, cost-to-project rollups, accountant export | Later spec |
+| 3 | Receipt capture with OCR, vendor records, cost-to-project rollups, accountant export | Later spec — OCR stack already solved, see below |
 | 4 | Purchase orders, vendor invoices, customer invoices, AP/AR dashboard, holdback tracking | Later spec |
 | 5 | Subcontractor scheduling, planned vs actual dates, WSIB and COI expiry tracking | Later spec |
 
@@ -32,6 +32,8 @@ Phase 1 was chosen because the owner quotes daily. It delivers the fastest visib
 **Explicitly out of scope, permanently:** general ledger, payroll, tax filing. Those stay in QuickBooks or Xero. This system feeds them. Building bookkeeping is a compliance liability and a maintenance trap.
 
 **Out of scope for now:** subcontractor logins. Only owner, admin, and bookkeeper have accounts.
+
+**Phase 3 note, recorded now because it changes an earlier decision:** Budget Tracker already ships working local receipt capture — `tesseract.js`, `onnxruntime-node`, `jscanify`, and `@techstark/opencv-js`, with vendored model assets and a runtime probe. That removes the Azure Document Intelligence dependency the architecture previously assumed for OCR. Phase 3 reuses that stack: free, local, offline, no per-page cost, no external service. Note the pinning discipline in that project's `package.json` — those four packages are pinned exact for reasons documented inline, and the same pins apply here.
 
 ### 2.1 White-label constraint
 
@@ -57,12 +59,18 @@ One system is better. The client owns hardware. The application is built as a se
 
 ### 3.2 Stack
 
+Versions and library choices track the existing **Budget Tracker** project (`Documents/Budget Tracker`) — same maintainer, same deployment shape, same self-hosted Docker target. Its conventions are adopted rather than re-derived: `src/` layout with `(app)` and `(auth)` route groups, `src/db/{client,schema,seed}.ts`, `src/lib/<domain>/`, hand-rolled `src/components/ui/` primitives, `tests/{unit,integration,db,api,app,components,lib,ops,scripts}`, a maintained `CHANGELOG.md` and `INSTALL.md`, and GitHub Actions for tests and image releases.
+
 | Layer | Choice | Reason |
 |---|---|---|
-| Application | Next.js 15 (App Router), TypeScript | One deployable serving UI and API. PWA gives add-to-home-screen, camera access, offline shell |
-| UI | Tailwind CSS + shadcn/ui | Modern component set, fast to build, print-friendly CSS |
+| Application | Next.js 16 (App Router), React 19, TypeScript 6 | One deployable serving UI and API. PWA gives add-to-home-screen, camera access, offline shell |
+| UI | Tailwind 4 + hand-rolled primitives | Matches Budget Tracker; CSS-first theming, print-friendly |
 | Database | PostgreSQL 16 | Real transactions and aggregates. No delegation limits, no row thresholds |
-| ORM | Drizzle | Typed schema, explicit SQL, lightweight migrations |
+| ORM | Drizzle 0.45 | Typed schema, explicit SQL, lightweight migrations |
+| Validation | zod | Shared between API boundary and forms |
+| Scheduling | node-cron | Sync and backup jobs, in-process |
+| Icons / charts | lucide-react, recharts | |
+| Tests | Vitest 3 + Testing Library | |
 | PDF | Playwright (headless Chromium) | `page.pdf()` is Chrome's print engine. Full CSS control. Same dependency serves E2E tests |
 | Auth | Cloudflare Access JWT + Entra ID | Single Microsoft sign-in, no passwords stored |
 | Ingress | Cloudflare Tunnel | Outbound-only. No open ports, no VPN client on user devices |
@@ -89,7 +97,11 @@ Everything runs from one `docker-compose.yml`: app, postgres, cloudflared. The m
 
 ## 4. Data model
 
-PostgreSQL. All primary keys are UUIDs. All money columns are `numeric`, never floating point.
+PostgreSQL. All primary keys are UUIDs.
+
+**Money is integer cents**, following Budget Tracker's `src/lib/money.ts` (`formatCents`, `sumCents`, `parseAmountToCents`) and its `Money` component, so both codebases share one representation and one formatter. JavaScript numbers are never used to hold a monetary value mid-calculation.
+
+Rates and quantities are not cents, and this is where the quote engine differs: a rate is `numeric(12,4)` (a sell rate of `4.0000` per square foot) and a quantity is `numeric(12,3)` (`1240.500` square feet). Their product must be exact before it becomes a cent value. The calculation engine therefore holds rates and quantities as scaled integers, multiplies in a wider integer domain, and rounds **once** at the line boundary, half-up, to cents. Tax is computed on the summed taxable base and rounded once, not per line — rounding each line separately drifts by a cent or two across a forty-line quote, and the customer's arithmetic will not match the document.
 
 Every synced table carries these columns, and the sync in section 7 depends on all of them:
 
