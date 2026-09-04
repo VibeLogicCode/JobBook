@@ -36,6 +36,7 @@ is the failure that guards against.
 
 ```bash
 npm install
+npx playwright install chromium   # the PDF pipeline and its test need it
 docker compose up -d db       # Postgres on 127.0.0.1:5433
 npm run db:migrate            # then repeat against TEST_DATABASE_URL
 npm run db:seed
@@ -46,6 +47,11 @@ npm run dev
 npm test                      # unit, database, and integration
 npm run typecheck
 ```
+
+The PDF suite launches real Chromium, so `npx playwright install chromium` has
+to have been run once on the machine. The container needs no such step -- its
+base image carries the browser, pinned to the same version as the library,
+because Playwright refuses to drive a build it did not ship with.
 
 **One test run at a time.** The database suites truncate shared tables, so two
 concurrent runs against the same `quote_test` deadlock: one holds an

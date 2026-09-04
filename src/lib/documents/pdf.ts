@@ -26,6 +26,21 @@ async function getBrowser(): Promise<Browser> {
   return browserPromise;
 }
 
+/**
+ * Shuts the shared browser down.
+ *
+ * The service deliberately keeps one Chromium for the life of the process, so
+ * a test suite that rendered anything would otherwise hold a live browser and
+ * never exit. Production never calls this: the process ending is what closes
+ * it, and closing it between requests would give back the second and the few
+ * hundred megabytes that reusing it exists to save.
+ */
+export async function closeBrowser(): Promise<void> {
+  const browser = await browserPromise?.catch(() => null);
+  browserPromise = null;
+  if (browser?.isConnected()) await browser.close();
+}
+
 export interface PdfOptions {
   /** Absolute URL the container can reach. Localhost, not the public hostname. */
   url: string;
@@ -69,7 +84,13 @@ export async function renderPdf({ url, footerText }: PdfOptions): Promise<Buffer
   }
 }
 
-function escapeHtml(value: string): string {
+/**
+ * Exported for its test. The footer is built by interpolating this value into
+ * a markup string, so it is the one injection point in the pipeline, and a
+ * company whose legal name contains an ampersand is ordinary rather than
+ * adversarial.
+ */
+export function escapeHtml(value: string): string {
   return value
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
