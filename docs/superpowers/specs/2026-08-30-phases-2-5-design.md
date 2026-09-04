@@ -24,7 +24,7 @@ A lump-sum basement finish and a cost-plus commercial fit-out bill differently, 
 
 ### C2. Allowances
 
-`quote_lines.is_allowance boolean` plus `allowance_cents`.
+`quote_lines.is_allowance boolean`. No separate `allowance_cents` — it would duplicate `line_total_cents`.
 
 An allowance is a placeholder the customer will spend against — "$5,000 tile allowance". It prices into the quote but is not a fixed commitment, and at completion it reconciles against actual cost, producing a credit or an extra. Without the flag, an allowance is indistinguishable from a firm price, and the reconciliation conversation with the customer has no data behind it.
 
@@ -42,7 +42,7 @@ Under the Ontario Construction Act this date starts the holdback release clock. 
 
 ### C5. Vendor identity fields
 
-Recorded in Phase 3's `vendors`, but named here because two are statutory:
+Recorded in Phase 3's `vendors`, but named here because two are statutory. `cost_codes` itself moved into Phase 1, since quote lines snapshot a cost code and without it no Phase 1 quote can ever be costed.
 
 - `business_number` — required on a T5018 slip.
 - `tax_registration_number` — a supplier's GST/HST number is required on a receipt over $30 for the input tax credit to be claimable. Capturing it at receipt time is the difference between claiming an ITC and losing it.
@@ -86,7 +86,9 @@ reminder_rules          -- automations, editable in settings
 
 ### 2.2 Stage model
 
-`lead → contacted → site_visit_scheduled → site_visited → quoting → quote_sent → negotiating → won → in_progress → complete`, with `lost` and `on_hold` reachable from any stage.
+Phase 1's nine stages stand unchanged: `lead → site_visit → quoting → quote_sent → won → in_progress → complete`, with `lost` and `on_hold` reachable from any stage.
+
+An earlier draft added `contacted`, `site_visit_scheduled`, `site_visited`, and `negotiating`. They are dropped. Each extra stage is a column on a board, a filter, a reminder rule, and a row in every stage report — and for a contractor running four jobs, the distinction between "contacted" and "lead" is not one he will maintain by hand. Stages people do not update honestly are worse than fewer stages.
 
 Stage changes write `stage_history`. Time in stage is computed from it, never stored — a stored duration is wrong the moment the clock ticks.
 
@@ -110,7 +112,9 @@ Rules generate reminders idempotently: a rule that has already produced an open 
 
 **Outbound:** `nodemailer` over Microsoft 365 SMTP, or Graph `sendMail` when SharePoint sync is already configured. Sending a quote records an `email_out` activity and sets `quotes.sent_at`.
 
-**Inbound is deferred and explicitly so.** Polling a shared mailbox to create leads is genuinely useful and genuinely a project — threading, deduplication, attachment handling, spam. Phase 2 ships a "log an email" action and a paste-in-body form. Inbound automation is revisited after Phase 4, when there is evidence about whether it matters.
+**Inbound is deferred.** Polling a shared mailbox to create leads is genuinely useful and genuinely a project: threading, deduplication, attachment handling, spam. Phase 2 ships a "log an email" action and a paste-in-body form.
+
+The review recommended cutting it permanently. Recorded as deferred rather than cut, because the owner's own description of his process began with a call or an email — that is a stated requirement, and the reviewer was weighing scope rather than overriding him. Revisited after Phase 4, when there is evidence about whether the manual path is actually painful.
 
 ### 2.5 Screens
 
@@ -190,7 +194,17 @@ Per project, per cost code:
 
 Mapping quote lines to cost codes requires `rate_items.cost_code_id`. **That field must exist in Phase 1's `rate_items`**, or the first job-costing view has nothing to group by.
 
-### 3.5 Screens
+### 3.5 Payments arrive here, not in Phase 4
+
+`payments` (section 4.5) is built in Phase 3 rather than Phase 4.
+
+Deposits and progress payments are received long before the invoicing subsystem exists, and cash payments to subcontractors with no invoice behind them are routine on a residential job. Without a payments table in Phase 3, those either go unrecorded or get recorded as expenses, and the T5018 total — which is cash-basis on payments to subcontractors — cannot be reconstructed later.
+
+### 3.6 The accountant export ships here
+
+Moved forward from Phase 1. Phase 3 is the first phase with expenses and recoverable tax, which is the first point an export is a set of books rather than a list of quotes. Period logic derives from the Phase 1 settings (`fiscal_year_end_month`, `fiscal_year_end_day`, `tax_filing_frequency`).
+
+### 3.7 Screens
 
 Receipt capture (camera-first, mobile), review queue, bulk expense grid, vendors, project cost view.
 
@@ -200,31 +214,15 @@ Receipt capture (camera-first, mobile), review queue, bulk expense grid, vendors
 
 The largest phase and the one that decides whether the owner can plan cash.
 
-### 4.1 Change orders — first class, never an edited quote
+### 4.1 Change orders — already built, in Phase 1
 
-An accepted quote is what the customer signed. It must continue to say that. Scope changes after acceptance create a change order, which is separately priced, separately approved, and adjusts the contract value.
+An earlier draft specified `change_orders`, `change_order_lines`, and `change_order_taxes` as three new tables here. **All three are deleted.**
 
-```
-change_orders
-  id, project_id, number, title, description,
-  reason ENUM('customer_request','site_condition','design_change',
-              'code_requirement','error_omission'),
-  status ENUM('draft','sent','approved','rejected','void'),
-  requested_at, sent_at, approved_at, approved_by_name, signature_file_id,
-  subtotal_cents, tax_total_cents, total_cents, total_cost_cents, margin_bp,
-  schedule_impact_days int
+A change order is a quote with a parent: the same lines, the same tax snapshot, the same calculation engine, the same versioning and acceptance flow, and the same PDF with a different heading. Duplicating that produced three tables, a second engine to keep in step, and a second PDF template — and, worse, it put mid-job extras in Phase 4 when they are the single most common thing a contractor needs after a quote is accepted.
 
-change_order_lines   -- identical shape to quote_lines, same snapshot rule
-change_order_taxes   -- identical shape to quote_taxes
-```
+So `quotes` carries `kind`, `parent_quote_id`, `sequence`, `reason`, and `schedule_impact_days`, and change orders work from **Phase 1**. See sections 4 and 5.6 of the Phase 1 spec. Deductive change orders are negative rates.
 
-**Contract value is derived, never stored as a single editable number:**
-
-```
-contract_value = accepted_quote.total + sum(approved change_orders.total)
-```
-
-`schedule_impact_days` exists because unpriced time is how a contractor loses a job while appearing to break even on it. A change order that adds four days to a fixed-date job has a cost even when its line items are billed at full margin.
+Contract value is derived as the sum of accepted, active quotes on the project. There is no stored contract value column.
 
 ### 4.2 Purchase orders
 
@@ -234,7 +232,8 @@ purchase_orders
     'received','closed','void'),
   issue_date, expected_date, subtotal_cents, tax_total_cents, total_cents, notes
 purchase_order_lines
-  id, purchase_order_id, cost_code_id, description, qty_milli, unit_type,
+  id, purchase_order_id, cost_code_id, description, qty_milli,
+  calc_mode, unit_label,
   unit_price_ten_thou, line_total_cents, received_qty_milli
 ```
 
@@ -259,7 +258,8 @@ customer_invoices
   status ENUM('draft','sent','partial','paid','overdue','void'),
   sent_at, paid_at
 customer_invoice_lines
-  id, invoice_id, cost_code_id, description, qty_milli, unit_type,
+  id, invoice_id, cost_code_id, description, qty_milli,
+  calc_mode, unit_label,
   unit_price_ten_thou, line_total_cents, is_taxable,
   source_quote_line_id, source_change_order_line_id
 customer_invoice_taxes     -- snapshot, same rule as quotes
@@ -267,7 +267,17 @@ customer_invoice_taxes     -- snapshot, same rule as quotes
 
 **Deposit accounting.** A deposit taken before work is unearned revenue, not income. It sits as a liability and draws down against progress invoices via `deposit_applied_cents`. Treating a deposit as revenue on receipt overstates income and understates it later, and the accountant will have to unwind it.
 
-**Progress billing.** Amount = contract value × percent complete − previously invoiced. Holdback is withheld from the result, then tax applies. Order matters: tax is charged on the full progress amount, not on the post-holdback figure. Holdback is withheld from payment, not from the sale.
+**Progress billing.** Amount = contract value × percent complete − previously invoiced. Holdback is withheld from that result.
+
+**Tax ordering — corrected.** An earlier draft asserted that tax is charged on the full progress amount rather than the post-holdback figure, on the reasoning that holdback is withheld from payment rather than from the sale. **That is wrong for Canada.**
+
+Under Excise Tax Act s.168(7), where a holdback is retained under provincial legislation or a written construction contract, tax on the held-back amount is not payable until the holdback is paid out or is required to be paid out. Standard Ontario practice therefore taxes **(progress − holdback)** on each progress invoice, and taxes the holdback on the release invoice.
+
+`organization.tax_deferred_on_holdback` gates this, seeded true for Ontario, so a jurisdiction without the deferral still bills correctly.
+
+**Deposit tax.** A deposit invoice charges tax at the time it is issued. When the deposit is drawn down against a progress invoice, the drawdown reduces that invoice's **taxable base** before tax is computed — otherwise the same dollar is taxed twice.
+
+**Percent complete** is the owner's judgement, stored per invoice, with the cost-to-cost ratio displayed beside it for reference and never used for billing. Cost-to-cost is what an accountant will defend; judgement is what contractors actually use, and storing the figure that was billed is what makes the invoice reproducible.
 
 ### 4.4 Holdback
 
@@ -289,13 +299,21 @@ Holdback payable is the mirror: amounts withheld from subcontractors, owed on th
 ### 4.5 Payments and aging
 
 ```
-payments
+payments                  -- built in Phase 3; see section 3.5
   id, direction ENUM('in','out'),
   entity_type ENUM('customer_invoice','vendor_invoice','deposit','holdback'),
-  entity_id, paid_at, amount_cents,
+  entity_id,              -- nullable: a cash payment may have no invoice
+  counterparty_type ENUM('customer','vendor'), counterparty_id,
+  paid_at, amount_cents,
   method ENUM('cash','cheque','etransfer','eft','credit','other'),
   reference, notes
 ```
+
+`counterparty_type` and `counterparty_id` are not redundant with `entity_id`. T5018 reporting is cash-basis on payments to subcontractors, and a cash payment with no invoice behind it still has to appear on the slip — so the payee must be recorded on the payment itself, not inferred through an invoice that may not exist.
+
+`customer_invoices` additionally snapshots `contract_value_at_invoice_cents`, `percent_complete_ten_thou`, and `previously_billed_cents`. Without them a progress invoice cannot be reproduced once a later change order moves the contract value.
+
+`expenses` gains `allowance_quote_line_id`, so an allowance reconciles against the actual cost that was spent under it.
 
 Partial payments are the norm, so an invoice's status derives from the sum of its payments rather than being set by hand.
 
@@ -343,6 +361,8 @@ Both pairs of dates are stored so slippage is measurable. Overwriting a planned 
 
 Dependencies are single-predecessor with a lag. Full critical-path scheduling is deliberately excluded: a GC running four residential jobs does not need CPM, and it would be the most complex code in the product serving the least-used screen.
 
+The "simple Gantt" an earlier draft promised is also cut. A list ordered by planned date, plus a calendar view, answers every question the owner actually asked — who is on site this week, what is late — without a custom timeline renderer to maintain across three breakpoints.
+
 ### 5.3 Compliance gate
 
 Paying a subcontractor whose WSIB clearance has lapsed transfers liability for their premiums to the general contractor. That is a real financial exposure, not paperwork.
@@ -353,7 +373,7 @@ Expiry reminders at 30 and 7 days, through Phase 2's reminder engine.
 
 ### 5.4 Screens
 
-Schedule (calendar and a simple Gantt), subcontractor directory, assignment board, compliance dashboard.
+Schedule (a date-ordered list and a calendar), subcontractor directory, assignment board, compliance dashboard.
 
 ---
 
@@ -384,14 +404,21 @@ Extends section 9 of the Phase 1 spec.
 
 ---
 
-## Decisions this document defers to review
+## Decisions, resolved
 
-Recorded explicitly so they are answered rather than assumed.
+These were deferred to review and have been decided. Recorded with the reasoning so they are not silently revisited.
 
-1. **Percent complete** — owner's judgement, cost-to-cost ratio, or schedule-weighted? Cost-to-cost is defensible to an accountant; judgement is what contractors actually use. Proposal: store the owner's figure, display the cost-to-cost ratio beside it.
-2. **Retainage on subcontractors** — does he actually withhold from subs, or only have it withheld from him? Changes whether `holdback_ledger` payable is built in Phase 4 or dropped.
-3. **Multi-currency** — assumed no. Any US work would change `organization.currency` from a display setting into a transaction-level field.
-4. **Inbound email** — deferred past Phase 4 above. Confirm or override.
-5. **Time tracking** — his own hours and any employees'. Not in any phase. Absent from the requirements, but it is the usual next request after job costing, and adding it later means `expenses` needs a labour source.
-6. **Customer portal** — quote acceptance by link, invoice viewing. Would remove the "did you get my quote" phone call, and needs anonymous tokenised access, which is a security surface. Not in any phase.
-7. **Cost code standard** — a custom short list, or CSI MasterFormat divisions? MasterFormat is what an estimator expects and what a bookkeeper will recognise; a custom list is faster to use. Proposal: seed a short custom list, allow hierarchy so MasterFormat can be adopted later.
+| Question | Decision |
+|---|---|
+| Percent complete | Owner's judgement, stored per progress invoice. Cost-to-cost ratio shown beside it, never used for billing |
+| Subcontractor retainage | `holdback_ledger.direction` stays. Receivable is built in Phase 4; the payable UI waits until the owner confirms he withholds from subs |
+| Multi-currency | No. One currency per deployment, display-only |
+| Inbound email | Deferred past Phase 4, not cut — it is a stated requirement (section 2.4) |
+| Time tracking | Not in any phase. `expenses.source` is an extensible enum, so no schema accommodation is needed now |
+| Customer portal | No. Acceptance is recorded by the owner against an uploaded signed PDF. A portal needs anonymous routes through Cloudflare Access, which would undo the security posture |
+| Cost code standard | A short custom list with `parent_id`, seeded from the rate categories. MasterFormat can be adopted later if the accountant asks |
+
+Two further calls affecting these phases:
+
+- **`admin` stays in the role enum, and nothing is built for it.** Owner and bookkeeper are the two real roles for now; removing the value later is a migration, keeping it costs nothing.
+- **The `payments` table moves to Phase 3**, so deposits and cash payments to subs are recordable before the invoicing subsystem exists.

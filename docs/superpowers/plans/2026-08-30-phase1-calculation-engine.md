@@ -721,7 +721,7 @@ git commit -m "feat: add money, quantity, and rate formatting and parsing"
 - Produces:
   - `auditColumns` — spread into every synced table: `createdAt`, `updatedAt`, `createdBy`, `recordStatus`, `voidedAt`, `voidedBy`, `voidReason`
   - `cents(name)`, `qty(name)`, `rate(name)` column builders
-  - Enums: `recordStatusEnum`, `roleEnum`, `customerTypeEnum`, `leadSourceEnum`, `projectTypeEnum`, `projectStageEnum`, `unitTypeEnum`, `quoteStatusEnum`, `entityTypeEnum`, `filingFrequencyEnum`
+  - Enums: `recordStatusEnum`, `roleEnum`, `customerTypeEnum`, `leadSourceEnum`, `projectTypeEnum`, `projectStageEnum`, `calcModeEnum`, `quoteStatusEnum`, `entityTypeEnum`, `filingFrequencyEnum`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -729,7 +729,7 @@ git commit -m "feat: add money, quantity, and rate formatting and parsing"
 // tests/unit/columns.test.ts
 import { describe, expect, it } from 'vitest';
 import { auditColumns } from '@/db/columns';
-import { recordStatusEnum, unitTypeEnum } from '@/db/enums';
+import { recordStatusEnum, calcModeEnum } from '@/db/enums';
 
 describe('auditColumns', () => {
   it('carries every column the sync watermark and void model require', () => {
@@ -751,7 +751,7 @@ describe('enums', () => {
   });
 
   it('offers the five quote line unit types', () => {
-    expect(unitTypeEnum.enumValues).toEqual(['sqft', 'each', 'flat', 'percent', 'hour']);
+    expect(calcModeEnum.enumValues).toEqual(['sqft', 'each', 'flat', 'percent', 'hour']);
   });
 });
 ```
@@ -780,9 +780,36 @@ export const projectStageEnum = pgEnum('project_stage', [
   'lead', 'site_visit', 'quoting', 'quote_sent', 'won',
   'lost', 'in_progress', 'complete', 'on_hold',
 ]);
-export const unitTypeEnum = pgEnum('unit_type', ['sqft', 'each', 'flat', 'percent', 'hour']);
+export const contractTypeEnum = pgEnum('contract_type', [
+  'lump_sum', 'unit_price', 'cost_plus', 'time_and_material',
+]);
+
+/**
+ * How a line calculates -- deliberately separate from what it is labelled.
+ *
+ * An earlier fused enum ('sqft'|'each'|'flat'|'percent'|'hour') conflated the
+ * two: sqft, each and hour all compute identically, and only flat and percent
+ * differ at all. Worse, it had no member for linear feet, so baseboard, trim,
+ * countertop and fencing -- priced per linear foot by every contractor --
+ * could not be entered, and a metric deployment could not say m2.
+ */
+export const calcModeEnum = pgEnum('calc_mode', ['qty', 'flat', 'percent']);
+
+export const quoteKindEnum = pgEnum('quote_kind', ['estimate', 'change_order']);
+export const changeReasonEnum = pgEnum('change_reason', [
+  'customer_request', 'site_condition', 'design_change',
+  'code_requirement', 'error_omission', 'allowance_reconciliation',
+]);
+export const pricingDisplayEnum = pgEnum('pricing_display', [
+  'detailed', 'group_totals', 'lump_sum',
+]);
+export const clauseKindEnum = pgEnum('clause_kind', ['exclusion', 'assumption']);
+export const areaUnitEnum = pgEnum('area_unit', ['sqft', 'sqm']);
+
+// 'expired' is deliberately absent: it derives from valid_until, and a stored
+// value is wrong the moment the clock passes it.
 export const quoteStatusEnum = pgEnum('quote_status', [
-  'draft', 'sent', 'accepted', 'declined', 'expired', 'superseded',
+  'draft', 'sent', 'accepted', 'declined', 'superseded',
 ]);
 export const qtySourceEnum = pgEnum('qty_source', [
   'area', 'washrooms', 'kitchens', 'bedrooms', 'fixed', 'manual',
@@ -1018,9 +1045,16 @@ export const taxRates = pgTable('tax_rates', {
   ...auditColumns,
 });
 
+/**
+ * Keyed on email. The Cloudflare Access JWT does not carry an Entra object id
+ * without additional identity-provider claim configuration, and email suffices
+ * for three users.
+ *
+ * Deactivated via `isActive`, never voided: `email` is UNIQUE, so a voided row
+ * would permanently block re-adding the same person.
+ */
 export const users = pgTable('users', {
   id: uuid('id').primaryKey().defaultRandom(),
-  entraObjectId: text('entra_object_id'),
   email: text('email').notNull(),
   displayName: text('display_name').notNull(),
   role: roleEnum('role').notNull(),
@@ -1239,7 +1273,7 @@ describe('rateItems', () => {
     const card = await seedCard();
     const [item] = await db.insert(rateItems).values({
       rateCardId: card.id, code: 'DEM-01', description: 'Strip existing',
-      category: 'Demolition', unitType: 'sqft',
+      category: 'Demolition', calcMode: 'qty', unitLabel: 'sqft',
       costRateTenThou: 28000n, sellRateTenThou: 40000n,
     }).returning();
     expect(item.costRateTenThou).toBe(28000n);
@@ -1251,7 +1285,7 @@ describe('rateItems', () => {
     const card = await seedCard();
     const base = {
       rateCardId: card.id, description: 'X', category: 'Demolition',
-      unitType: 'flat' as const, costRateTenThou: 1n, sellRateTenThou: 2n,
+      calcMode: 'flat', unitLabel: '' as const, costRateTenThou: 1n, sellRateTenThou: 2n,
     };
     await db.insert(rateItems).values({ ...base, code: 'DUP' });
     await expect(db.insert(rateItems).values({ ...base, code: 'DUP' })).rejects.toThrow();
@@ -1261,7 +1295,7 @@ describe('rateItems', () => {
     const card = await seedCard();
     const [item] = await db.insert(rateItems).values({
       rateCardId: card.id, code: 'PRM-01', description: 'Building permit',
-      category: 'Permits', unitType: 'flat',
+      category: 'Permits', calcMode: 'flat', unitLabel: '',
       costRateTenThou: 35000000n, sellRateTenThou: 35000000n, isTaxable: false,
     }).returning();
     expect(item.isTaxable).toBe(false);
@@ -1273,7 +1307,7 @@ describe('scopeTemplateItems', () => {
     const card = await seedCard();
     const [item] = await db.insert(rateItems).values({
       rateCardId: card.id, code: 'ELE-02', description: 'Pot lights',
-      category: 'Electrical', unitType: 'each',
+      category: 'Electrical', calcMode: 'qty', unitLabel: 'ea',
       costRateTenThou: 900000n, sellRateTenThou: 1400000n,
     }).returning();
     const [template] = await db.insert(scopeTemplates)
@@ -1298,7 +1332,7 @@ Expected: FAIL — `rateCards` is not exported.
 ```ts
 import { boolean, date, integer, pgTable, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { auditColumns, qty, rate } from '@/db/columns';
-import { projectTypeEnum, qtySourceEnum, unitTypeEnum } from '@/db/enums';
+import { projectTypeEnum, qtySourceEnum, calcModeEnum } from '@/db/enums';
 
 export const rateCards = pgTable('rate_cards', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -1321,7 +1355,8 @@ export const rateItems = pgTable('rate_items', {
   code: text('code').notNull(),
   description: text('description').notNull(),
   category: text('category').notNull(),
-  unitType: unitTypeEnum('unit_type').notNull(),
+  calcMode: calcModeEnum('calc_mode').notNull(),
+  unitLabel: text('unit_label').notNull(),
   costRateTenThou: rate('cost_rate_ten_thou').notNull(),
   sellRateTenThou: rate('sell_rate_ten_thou').notNull(),
   /** False for pass-through disbursements such as municipal permit fees. */
@@ -1446,13 +1481,19 @@ describe('quoteLines', () => {
     }).returning();
     const [line] = await db.insert(quoteLines).values({
       quoteId: quote.id, sortOrder: 1, lineGroup: 'Demolition',
-      code: 'DEM-01', description: 'Strip existing', unitType: 'sqft',
+      code: 'DEM-01', description: 'Strip existing', calcMode: 'qty', unitLabel: 'sqft',
       qtyMilli: 1240500n, unitCostTenThou: 28000n, unitPriceTenThou: 40000n,
       lineCostCents: 347340, lineTotalCents: 496200, isTaxable: true,
     }).returning();
     expect(line.unitPriceTenThou).toBe(40000n);
     expect(line.lineTotalCents).toBe(496200);
-    expect('rateItemId' in line).toBe(false);
+    // rate_item_id and cost_code_id are PRESENT, as provenance. The snapshot
+    // rule is about prices, not origin -- without cost_code_id, Phase 3 job
+    // costing has nothing to group actual spend against. What must hold is
+    // that changing the rate item does not move this line's price, which the
+    // snapshot test in tests/integration/repository.test.ts asserts.
+    expect(line.rateItemId).not.toBeNull();
+    expect(line.costCodeId).not.toBeNull();
   });
 });
 
@@ -1485,7 +1526,7 @@ import {
   bigint, boolean, date, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid,
 } from 'drizzle-orm/pg-core';
 import { auditColumns, cents, qty, rate } from '@/db/columns';
-import { entityTypeEnum, quoteStatusEnum, unitTypeEnum } from '@/db/enums';
+import { entityTypeEnum, quoteStatusEnum, calcModeEnum } from '@/db/enums';
 import { projects } from '@/db/schema/customers';
 
 export const quotes = pgTable('quotes', {
@@ -1537,7 +1578,8 @@ export const quoteLines = pgTable('quote_lines', {
   lineGroup: text('line_group').notNull(),
   code: text('code').notNull(),
   description: text('description').notNull(),
-  unitType: unitTypeEnum('unit_type').notNull(),
+  calcMode: calcModeEnum('calc_mode').notNull(),
+  unitLabel: text('unit_label').notNull(),
   qtyMilli: qty('qty_milli').notNull(),
   unitCostTenThou: rate('unit_cost_ten_thou').notNull(),
   unitPriceTenThou: rate('unit_price_ten_thou').notNull(),
@@ -1672,12 +1714,20 @@ describe('updated_at trigger', () => {
 describe('no-delete grant', () => {
   it('refuses a DELETE issued as the application role', async () => {
     await db.insert(customers).values({ name: 'Eleanor Vance', customerType: 'residential' });
+
+    // SET LOCAL is scoped to a transaction. Outside one it is a no-op, so the
+    // DELETE would run as the connection's own (superuser) role -- the test
+    // would either fail for the wrong reason or actually empty the table while
+    // appearing to prove that deletion is impossible.
     await expect(
-      db.execute(sql`
-        set local role quote_app;
-        delete from customers;
-      `),
+      db.transaction(async (tx) => {
+        await tx.execute(sql`set local role quote_app`);
+        await tx.execute(sql`delete from customers`);
+      }),
     ).rejects.toThrow(/permission denied/i);
+
+    const rows = await db.select().from(customers);
+    expect(rows).toHaveLength(1);
   });
 });
 ```
@@ -1787,8 +1837,8 @@ The engine is pure. It takes plain data and returns plain data, reads nothing, a
 **Interfaces:**
 - Consumes: `lineTotalCents` from `@/lib/money/scale`
 - Produces:
-  - `type UnitType = 'sqft' | 'each' | 'flat' | 'percent' | 'hour'`
-  - `interface LineInput { code, description, unitType, qtyMilli, unitCostTenThou, unitPriceTenThou, isTaxable, isOptional, isIncluded, lineGroup, sortOrder }`
+  - `type CalcMode = 'qty' | 'flat' | 'percent'`
+  - `interface LineInput { code, description, calcMode, qtyMilli, unitCostTenThou, unitPriceTenThou, isTaxable, isOptional, isIncluded, lineGroup, sortOrder }`
   - `interface ComputedLine extends LineInput { lineCostCents: number; lineTotalCents: number }`
   - `computeLine(line: LineInput): ComputedLine`
 
@@ -1806,7 +1856,8 @@ function line(overrides: Partial<LineInput> = {}): LineInput {
     description: 'Strip existing',
     lineGroup: 'Demolition',
     sortOrder: 1,
-    unitType: 'sqft',
+    calcMode: 'qty',
+    unitLabel: 'sqft',
     qtyMilli: 1240500n,
     unitCostTenThou: 28000n,
     unitPriceTenThou: 40000n,
@@ -1826,7 +1877,7 @@ describe('computeLine', () => {
 
   it('multiplies count by rate for an each line', () => {
     const result = computeLine(line({
-      unitType: 'each', qtyMilli: 2000n,
+      calcMode: 'qty', unitLabel: 'ea', qtyMilli: 2000n,
       unitCostTenThou: 5000000n, unitPriceTenThou: 7200000n,
     }));
     expect(result.lineTotalCents).toBe(144000);
@@ -1834,7 +1885,7 @@ describe('computeLine', () => {
 
   it('ignores quantity for a flat line and charges the rate once', () => {
     const result = computeLine(line({
-      unitType: 'flat', qtyMilli: 9999n,
+      calcMode: 'flat', unitLabel: '', qtyMilli: 9999n,
       unitCostTenThou: 30000000n, unitPriceTenThou: 35000000n,
     }));
     expect(result.lineTotalCents).toBe(350000);
@@ -1843,14 +1894,14 @@ describe('computeLine', () => {
 
   it('multiplies hours by rate for an hour line', () => {
     const result = computeLine(line({
-      unitType: 'hour', qtyMilli: 7500n,
+      calcMode: 'qty', unitLabel: 'hr', qtyMilli: 7500n,
       unitCostTenThou: 650000n, unitPriceTenThou: 950000n,
     }));
     expect(result.lineTotalCents).toBe(71250);
   });
 
   it('computes a percent line as zero here, since it needs the subtotal', () => {
-    const result = computeLine(line({ unitType: 'percent', unitPriceTenThou: 1000n }));
+    const result = computeLine(line({ calcMode: 'percent', unitLabel: '%', unitPriceTenThou: 1000n }));
     expect(result.lineTotalCents).toBe(0);
     expect(result.lineCostCents).toBe(0);
   });
@@ -1870,27 +1921,48 @@ Expected: FAIL — cannot resolve `@/lib/quote/lines`.
 - [ ] **Step 3: Write `src/lib/quote/types.ts`**
 
 ```ts
-export type UnitType = 'sqft' | 'each' | 'flat' | 'percent' | 'hour';
+/** How a line computes. Deliberately separate from its unit label. */
+export type CalcMode = 'qty' | 'flat' | 'percent';
 
 export interface LineInput {
   code: string;
   description: string;
   lineGroup: string;
   sortOrder: number;
-  unitType: UnitType;
-  /** Integer thousandths. Ignored for `flat` and `percent`. */
+  calcMode: CalcMode;
+  /** Display only: 'sqft', 'lnft', 'ea', 'hr', 'm2'. Never affects arithmetic. */
+  unitLabel: string;
+  /** Integer thousandths. Ignored when calcMode is 'flat' or 'percent'. */
   qtyMilli: bigint;
-  /** Integer ten-thousandths. For `percent`, this is the percentage itself. */
+  /**
+   * Integer ten-thousandths. For 'percent', this IS the percentage.
+   * May be negative: discounts and deductive change orders.
+   */
   unitCostTenThou: bigint;
   unitPriceTenThou: bigint;
   isTaxable: boolean;
   isOptional: boolean;
   isIncluded: boolean;
+  /** A customer-spendable placeholder, reconciled against actual cost later. Passthrough only. */
+  isAllowance: boolean;
+  /** Provenance, never read for pricing. Nullable for ad-hoc lines. */
+  rateItemId: string | null;
+  costCodeId: string | null;
 }
 
 export interface ComputedLine extends LineInput {
   lineCostCents: number;
   lineTotalCents: number;
+  /**
+   * For an EXCLUDED optional line: what accepting it actually adds to the
+   * quote -- its own total plus every included percent rate applied to it.
+   * Equal to lineTotalCents for included lines.
+   *
+   * Percent lines apply only to included lines, so a $500 upgrade under 10%
+   * overhead and 15% profit raises the total by $625. Printing the raw line
+   * total would quote one price and invoice another.
+   */
+  displayPriceCents: number;
 }
 ```
 
@@ -1913,11 +1985,11 @@ import type { ComputedLine, LineInput } from '@/lib/quote/types';
  * a mixed list in one pass.
  */
 export function computeLine(line: LineInput): ComputedLine {
-  if (line.unitType === 'percent') {
+  if (line.calcMode === 'percent') {
     return { ...line, lineCostCents: 0, lineTotalCents: 0 };
   }
 
-  const effectiveQty = line.unitType === 'flat' ? QTY_SCALE : line.qtyMilli;
+  const effectiveQty = line.calcMode === 'flat' ? QTY_SCALE : line.qtyMilli;
 
   return {
     ...line,
@@ -1962,7 +2034,7 @@ import type { LineInput } from '@/lib/quote/types';
 function base(overrides: Partial<LineInput> = {}): LineInput {
   return {
     code: 'X', description: 'X', lineGroup: 'G', sortOrder: 1,
-    unitType: 'flat', qtyMilli: 1000n,
+    calcMode: 'flat', unitLabel: '', qtyMilli: 1000n,
     unitCostTenThou: 0n, unitPriceTenThou: 0n,
     isTaxable: true, isOptional: false, isIncluded: true,
     ...overrides,
@@ -1973,7 +2045,7 @@ describe('applyPercentLines', () => {
   it('computes a percent line against the included non-percent subtotal', () => {
     const result = applyPercentLines([
       base({ code: 'A', unitPriceTenThou: 10000000n, unitCostTenThou: 8000000n }), // $1000 / $800
-      base({ code: 'OH', unitType: 'percent', sortOrder: 2, unitPriceTenThou: 1000n }), // 10%
+      base({ code: 'OH', calcMode: 'percent', unitLabel: '%', sortOrder: 2, unitPriceTenThou: 1000n }), // 10%
     ]);
     expect(result[1].lineTotalCents).toBe(10000); // 10% of $1000.00
   });
@@ -1982,7 +2054,7 @@ describe('applyPercentLines', () => {
     const result = applyPercentLines([
       base({ code: 'A', unitPriceTenThou: 10000000n, unitCostTenThou: 8000000n }),
       base({
-        code: 'OH', unitType: 'percent', sortOrder: 2,
+        code: 'OH', calcMode: 'percent', unitLabel: '%', sortOrder: 2,
         unitPriceTenThou: 1000n, unitCostTenThou: 1000n,
       }),
     ]);
@@ -1994,7 +2066,7 @@ describe('applyPercentLines', () => {
     const result = applyPercentLines([
       base({ code: 'A', unitPriceTenThou: 10000000n }),
       base({ code: 'OPT', sortOrder: 2, unitPriceTenThou: 5000000n, isOptional: true, isIncluded: false }),
-      base({ code: 'OH', unitType: 'percent', sortOrder: 3, unitPriceTenThou: 1000n }),
+      base({ code: 'OH', calcMode: 'percent', unitLabel: '%', sortOrder: 3, unitPriceTenThou: 1000n }),
     ]);
     expect(result[2].lineTotalCents).toBe(10000); // 10% of $1000, not $1500
   });
@@ -2002,8 +2074,8 @@ describe('applyPercentLines', () => {
   it('does not compound one percent line onto another', () => {
     const result = applyPercentLines([
       base({ code: 'A', unitPriceTenThou: 10000000n }),
-      base({ code: 'OH', unitType: 'percent', sortOrder: 2, unitPriceTenThou: 1000n }),
-      base({ code: 'PR', unitType: 'percent', sortOrder: 3, unitPriceTenThou: 1500n }),
+      base({ code: 'OH', calcMode: 'percent', unitLabel: '%', sortOrder: 2, unitPriceTenThou: 1000n }),
+      base({ code: 'PR', calcMode: 'percent', unitLabel: '%', sortOrder: 3, unitPriceTenThou: 1500n }),
     ]);
     expect(result[1].lineTotalCents).toBe(10000); // 10% of $1000
     expect(result[2].lineTotalCents).toBe(15000); // 15% of $1000, not of $1100
@@ -2011,7 +2083,7 @@ describe('applyPercentLines', () => {
 
   it('preserves input order', () => {
     const result = applyPercentLines([
-      base({ code: 'OH', unitType: 'percent', sortOrder: 1, unitPriceTenThou: 1000n }),
+      base({ code: 'OH', calcMode: 'percent', unitLabel: '%', sortOrder: 1, unitPriceTenThou: 1000n }),
       base({ code: 'A', sortOrder: 2, unitPriceTenThou: 10000000n }),
     ]);
     expect(result.map((l) => l.code)).toEqual(['OH', 'A']);
@@ -2050,17 +2122,17 @@ export function applyPercentLines(lines: LineInput[]): ComputedLine[] {
 
   const baseCents = computed.reduce(
     (total, line) =>
-      line.unitType !== 'percent' && line.isIncluded ? total + line.lineTotalCents : total,
+      line.calcMode !== 'percent' && line.isIncluded ? total + line.lineTotalCents : total,
     0,
   );
   const baseCostCents = computed.reduce(
     (total, line) =>
-      line.unitType !== 'percent' && line.isIncluded ? total + line.lineCostCents : total,
+      line.calcMode !== 'percent' && line.isIncluded ? total + line.lineCostCents : total,
     0,
   );
 
   return computed.map((line) => {
-    if (line.unitType !== 'percent') return line;
+    if (line.calcMode !== 'percent') return line;
     return {
       ...line,
       lineTotalCents: Number(applyPercentCents(BigInt(baseCents), line.unitPriceTenThou)),
@@ -2120,7 +2192,7 @@ function rate(overrides: Partial<TaxRateInput> = {}): TaxRateInput {
 
 function line(totalCents: number, isTaxable = true, isIncluded = true): ComputedLine {
   return {
-    code: 'X', description: 'X', lineGroup: 'G', sortOrder: 1, unitType: 'flat',
+    code: 'X', description: 'X', lineGroup: 'G', sortOrder: 1, calcMode: 'flat', unitLabel: '',
     qtyMilli: 1000n, unitCostTenThou: 0n, unitPriceTenThou: 0n,
     isTaxable, isOptional: false, isIncluded,
     lineCostCents: 0, lineTotalCents: totalCents,
@@ -2338,7 +2410,7 @@ const hst: TaxRateInput = {
 
 function line(overrides: Partial<LineInput> = {}): LineInput {
   return {
-    code: 'X', description: 'X', lineGroup: 'G', sortOrder: 1, unitType: 'flat',
+    code: 'X', description: 'X', lineGroup: 'G', sortOrder: 1, calcMode: 'flat', unitLabel: '',
     qtyMilli: 1000n, unitCostTenThou: 0n, unitPriceTenThou: 0n,
     isTaxable: true, isOptional: false, isIncluded: true,
     ...overrides,
@@ -2371,7 +2443,7 @@ describe('computeQuote', () => {
   it('includes percent lines in the subtotal', () => {
     const result = computeQuote([
       line({ unitPriceTenThou: 10000000n, unitCostTenThou: 8000000n }),
-      line({ code: 'OH', sortOrder: 2, unitType: 'percent', unitPriceTenThou: 1000n, unitCostTenThou: 0n }),
+      line({ code: 'OH', sortOrder: 2, calcMode: 'percent', unitLabel: '%', unitPriceTenThou: 1000n, unitCostTenThou: 0n }),
     ], [hst], { onDate: '2026-09-01', customerExempt: false });
     expect(result.subtotalCents).toBe(110000);
     expect(result.totalCostCents).toBe(80000);
@@ -2490,7 +2562,7 @@ git commit -m "feat: assemble quote subtotal, tax, total, cost, and margin"
 - Produces:
   - `type QtySource = 'area' | 'washrooms' | 'kitchens' | 'bedrooms' | 'fixed' | 'manual'`
   - `interface ScopeInputs { areaSqftMilli, washroomCount, kitchenCount, bedroomCount }`
-  - `interface TemplateItem { code, description, lineGroup, sortOrder, unitType, qtySource, qtyMultiplierTenThou, fixedQtyMilli, costRateTenThou, sellRateTenThou, isTaxable, isOptional }`
+  - `interface TemplateItem { code, description, lineGroup, sortOrder, calcMode, qtySource, qtyMultiplierTenThou, fixedQtyMilli, costRateTenThou, sellRateTenThou, isTaxable, isOptional }`
   - `expandTemplate(items: TemplateItem[], inputs: ScopeInputs): LineInput[]`
 
 - [ ] **Step 1: Write the failing test**
@@ -2508,7 +2580,7 @@ const inputs: ScopeInputs = {
 function item(overrides: Partial<TemplateItem> = {}): TemplateItem {
   return {
     code: 'DEM-01', description: 'Strip existing', lineGroup: 'Demolition', sortOrder: 1,
-    unitType: 'sqft', qtySource: 'area', qtyMultiplierTenThou: 10000n, fixedQtyMilli: null,
+    calcMode: 'qty', unitLabel: 'sqft', qtySource: 'area', qtyMultiplierTenThou: 10000n, fixedQtyMilli: null,
     costRateTenThou: 28000n, sellRateTenThou: 40000n, isTaxable: true, isOptional: false,
     ...overrides,
   };
@@ -2527,26 +2599,26 @@ describe('expandTemplate', () => {
   });
 
   it('reads a room count as a whole quantity', () => {
-    const [line] = expandTemplate([item({ qtySource: 'washrooms', unitType: 'each' })], inputs);
+    const [line] = expandTemplate([item({ qtySource: 'washrooms', calcMode: 'qty', unitLabel: 'ea' })], inputs);
     expect(line.qtyMilli).toBe(1000n);
   });
 
   it('uses the fixed quantity when the source is fixed', () => {
     const [line] = expandTemplate([
-      item({ qtySource: 'fixed', fixedQtyMilli: 2000n, unitType: 'each' }),
+      item({ qtySource: 'fixed', fixedQtyMilli: 2000n, calcMode: 'qty', unitLabel: 'ea' }),
     ], inputs);
     expect(line.qtyMilli).toBe(2000n);
   });
 
   it('emits a manual line at zero for the owner to fill in', () => {
-    const [line] = expandTemplate([item({ qtySource: 'manual', unitType: 'hour' })], inputs);
+    const [line] = expandTemplate([item({ qtySource: 'manual', calcMode: 'qty', unitLabel: 'hr' })], inputs);
     expect(line.qtyMilli).toBe(0n);
   });
 
   it('drops a line whose derived quantity is zero, except manual ones', () => {
     const lines = expandTemplate([
-      item({ code: 'KIT-01', qtySource: 'kitchens', unitType: 'each' }),
-      item({ code: 'TM-01', qtySource: 'manual', unitType: 'hour', sortOrder: 2 }),
+      item({ code: 'KIT-01', qtySource: 'kitchens', calcMode: 'qty', unitLabel: 'ea' }),
+      item({ code: 'TM-01', qtySource: 'manual', calcMode: 'qty', unitLabel: 'hr', sortOrder: 2 }),
     ], inputs);
     expect(lines.map((l) => l.code)).toEqual(['TM-01']);
   });
@@ -2574,7 +2646,7 @@ Expected: FAIL — cannot resolve `@/lib/quote/template`.
 
 ```ts
 import { QTY_SCALE, RATE_SCALE, divRoundHalfUp } from '@/lib/money/scale';
-import type { LineInput, UnitType } from '@/lib/quote/types';
+import type { CalcMode, LineInput } from '@/lib/quote/types';
 
 export type QtySource = 'area' | 'washrooms' | 'kitchens' | 'bedrooms' | 'fixed' | 'manual';
 
@@ -2590,7 +2662,8 @@ export interface TemplateItem {
   description: string;
   lineGroup: string;
   sortOrder: number;
-  unitType: UnitType;
+  calcMode: CalcMode;
+  unitLabel: string;
   qtySource: QtySource;
   qtyMultiplierTenThou: bigint;
   fixedQtyMilli: bigint | null;
@@ -2645,7 +2718,8 @@ export function expandTemplate(items: TemplateItem[], inputs: ScopeInputs): Line
         description: item.description,
         lineGroup: item.lineGroup,
         sortOrder: item.sortOrder,
-        unitType: item.unitType,
+        calcMode: item.calcMode,
+        unitLabel: item.unitLabel,
         qtyMilli,
         unitCostTenThou: item.costRateTenThou,
         unitPriceTenThou: item.sellRateTenThou,
@@ -2853,7 +2927,7 @@ beforeEach(async () => {
     .values({ name: 'Default', effectiveFrom: '2026-01-01', targetMarginBp: 2500 }).returning();
   const [item] = await db.insert(rateItems).values({
     rateCardId: card.id, code: 'DEM-01', description: 'Strip existing',
-    category: 'Demolition', unitType: 'sqft',
+    category: 'Demolition', calcMode: 'qty', unitLabel: 'sqft',
     costRateTenThou: 28000n, sellRateTenThou: 40000n,
   }).returning();
   rateItemId = item.id;
@@ -3038,7 +3112,8 @@ export async function createQuoteFromTemplate(args: {
     description: item.description,
     lineGroup: template.lineGroup,
     sortOrder: template.sortOrder,
-    unitType: item.unitType,
+    calcMode: item.calcMode,
+        unitLabel: item.unitLabel,
     qtySource: template.qtySource,
     qtyMultiplierTenThou: template.qtyMultiplierTenThou,
     fixedQtyMilli: template.fixedQtyMilli,
@@ -3084,7 +3159,8 @@ export async function createQuoteFromTemplate(args: {
         lineGroup: line.lineGroup,
         code: line.code,
         description: line.description,
-        unitType: line.unitType,
+        calcMode: line.calcMode,
+        unitLabel: line.unitLabel,
         qtyMilli: line.qtyMilli,
         unitCostTenThou: line.unitCostTenThou,
         unitPriceTenThou: line.unitPriceTenThou,

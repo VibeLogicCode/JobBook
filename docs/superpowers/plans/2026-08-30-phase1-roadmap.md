@@ -15,10 +15,15 @@
 | 1 | Foundation & calculation engine | Migrated schema; pure, tested quote and tax engine; document numbering; create, revise, void | — |
 | 2 | Application & worksheet | Auth, API, app shell, screens, the worksheet at all widths, Present mode | 1 |
 | 3 | Documents | Playwright PDF pipeline, quote template, print CSS | 1, 2 |
-| 4 | SharePoint & durability | Schema generator, provisioning script, sync, restore, backup tiers, monitoring | 1 |
-| 5 | First run & accountant export | Setup wizard, seed data, `.xlsx` export, second-tenant proof | 1, 2, 4 |
+| **4a** | Backup | Hourly encrypted dumps to disk, USB, and SharePoint; dead-man's switch; restore drill | 1 |
+| **4b** | SharePoint mirror | Schema generator, provisioning script, sync job, monitoring | 1 |
+| 5 | First run & white-label | Setup wizard, seed data, second-tenant proof | 1, 2 |
 
-Plans 3 and 4 are independent of each other and can be built in either order, or in parallel.
+**Plan 4 is split, and 4a comes early.** Backups must exist before the owner enters a single real quote — the ordering is not negotiable, and it is cheap: 4a needs only the Phase 1 schema.
+
+The accountant export moved out of Phase 1 entirely. Phase 1 has no revenue and no expenses, so its only financial sheet would be "Quotes", which is not a set of books. It ships in Phase 3, the first phase with expenses and recoverable tax. Phase 1 still carries the settings it depends on — fiscal year end and filing frequency — because those are tenant configuration.
+
+Plans 3 and 4b are independent of each other and can be built in either order, or together.
 
 ---
 
@@ -30,26 +35,49 @@ Plans 3 and 4 are independent of each other and can be built in either order, or
 
 ```ts
 // @/lib/quote/types
-type UnitType = 'sqft' | 'each' | 'flat' | 'percent' | 'hour'
-interface LineInput { code, description, lineGroup, sortOrder, unitType,
-  qtyMilli: bigint, unitCostTenThou: bigint, unitPriceTenThou: bigint,
-  isTaxable, isOptional, isIncluded }
-interface ComputedLine extends LineInput { lineCostCents: number; lineTotalCents: number }
+type CalcMode = 'qty' | 'flat' | 'percent'
+interface LineInput {
+  code, description, lineGroup, sortOrder,
+  calcMode: CalcMode,
+  unitLabel: string,            // 'sqft' | 'lnft' | 'ea' | 'hr' | 'm2' -- display only
+  qtyMilli: bigint,
+  unitCostTenThou: bigint,      // may be negative: discounts, deductive change orders
+  unitPriceTenThou: bigint,
+  isTaxable, isOptional, isIncluded, isAllowance,
+  rateItemId: string | null,    // provenance; never read for pricing
+  costCodeId: string | null,    // snapshotted; what Phase 3 costs against
+}
+interface ComputedLine extends LineInput {
+  lineCostCents: number
+  lineTotalCents: number
+  displayPriceCents: number     // excluded lines: grossed up by included percent lines
+}
 
 // @/lib/quote/totals
 computeQuote(lines, rates, { onDate, customerExempt }): QuoteTotals
 
 // @/lib/quote/repository
 createQuoteFromTemplate(args): Promise<{ quoteId }>
-reviseQuote(args): Promise<{ quoteId, version }>
+reviseQuote(args): Promise<{ quoteId, version }>   // refuses draft, accepted, superseded, void
 voidQuote(args): Promise<void>
+
+// @/lib/quote/numbering
+allocateDocumentNumber(tx, kind, businessDate): Promise<string>   // document_sequences
 
 // @/lib/money/format
 formatCents, sumCents, parseAmountToCents, parseQtyToMilli,
 parseRateToTenThou, formatQty, formatRate, formatBasisPoints
 ```
 
-**Scale contract, binding on all five plans.** Money is integer cents. Quantities are integer thousandths. Rates and percents are integer ten-thousandths. Margin is basis points. Multiplication happens in `BigInt` because a maximum quantity times a maximum rate exceeds `Number.MAX_SAFE_INTEGER`.
+`calcMode` is separate from `unitLabel` because `sqft`, `each` and `hour` all compute identically — only `flat` and `percent` differ. The earlier fused enum had no member for linear feet, so baseboard, trim, countertop and fencing were unenterable.
+
+`displayPriceCents` exists because percent lines apply only to *included* lines: a $500 upgrade under 10% overhead and 15% profit raises the total by $625, so printing the raw line total would quote one price and invoice another.
+
+**Scale contract, binding on every plan.** Money is integer cents. Quantities are integer thousandths. Rates and percents are integer ten-thousandths. Margin is basis points. Multiplication happens in `BigInt` because a maximum quantity times a maximum rate exceeds `Number.MAX_SAFE_INTEGER`.
+
+Cent *sums* may be plain `number` — they stay safe integers. The constraint is that no **product** passes through a float.
+
+**Scale is internal.** Anything leaving the system for a human — SharePoint, an export, a PDF — is unscaled. A rate appears as `4.0000`, never `40000`. Plan 4b owns that boundary and must test it in both directions.
 
 ---
 
@@ -58,8 +86,8 @@ parseRateToTenThou, formatQty, formatRate, formatBasisPoints
 The largest plan, and the one carrying the most design risk.
 
 **Scope**
-- Cloudflare Access JWT validation in middleware; role resolution from `users`
-- API route handlers for customers, projects, quotes, lines, rate cards, templates
+- Cloudflare Access JWT validation in `proxy.ts` (Next.js 16's name for middleware, on the Node runtime); role resolution from `users`
+- API route handlers for customers, projects, quotes, change orders, lines, rate items, cost codes, templates
 - `AppShell` — expanded rail, collapsed rail, bottom tab bar
 - Token layer: `globals.css` with the Budget Tracker palette, both themes, tenant accent injected from `organization`
 - Primitives ported from Budget Tracker: `Money`, `TableWrap`, `AmountCell`, `ListRow`, `StatTile`, `EmptyState`, `Pill`, `PageHeader`, `RowDialog`, `Notice`, `Button`, `Card`
@@ -71,7 +99,9 @@ The largest plan, and the one carrying the most design risk.
 
 **Risk, and where it actually is.** Not the CRUD screens. It is the worksheet: one DOM tree that is a table at `sm` and above and a stacked card list below, whose cells hold live inputs at every width. Budget Tracker's `data-table--stack` handles read-only tables; an editing surface is the untested extension. **This is the first thing to build and the first thing to look at on a real phone** — if the single-tree approach fails for editable rows, that is a Plan 2 architecture change, and it is far cheaper to discover in week one than week four.
 
-**Security, non-negotiable and verified by test.** The app and database containers publish no ports. Access JWT signature, audience, and expiry are all verified. If the app is reachable directly, the header can be forged and authentication is bypassed entirely.
+**Security, non-negotiable and verified by test.** Verify the signature against Cloudflare's JWKS plus `iss`, `aud` and `exp`. Reject service-token JWTs, which carry no `email`. Never read `Cf-Access-Authenticated-User-Email`. Fail closed. The app and database containers publish no ports.
+
+An earlier draft justified the no-ports rule by claiming a directly reachable app would let the header be forged. **That reasoning was wrong** — a forged header fails signature verification. The rule stands for replay resistance and defence in depth, and the correction matters because the bad version invites skipping validation on the grounds that the tunnel protects us.
 
 ---
 
@@ -79,49 +109,74 @@ The largest plan, and the one carrying the most design risk.
 
 **Scope**
 - Playwright and Chromium in the Docker image
-- `/print/quote/[id]` — server-rendered, authenticated, print-only
+- `/print/quote/[id]` — server-rendered, print-only, authenticated by an `INTERNAL_RENDER_SECRET` header accepted for that path prefix alone. Chromium reaches it over localhost from inside the container, so it never passes through Cloudflare and carries no Access JWT; calling it "a normal authenticated page" left it either unauthenticated or unspecified
 - PDF service: launch, navigate to localhost, `page.pdf()`, write to disk, record on the quote
 - Quote template: Plex Serif headings, letterhead from `organization`, logo inlined as a data URI, grouped lines, optional-upgrades block, tax breakdown by line with registration numbers, holdback and payment terms, exclusions, signature block
 - Print CSS: `@page`, `break-inside: avoid`, repeating headers, `displayHeaderFooter` page numbering
 
 **Tasks:** roughly 8–10.
 
-**Risks.** Chromium adds ~300MB to the image and needs its font and system dependencies installed explicitly. PDF output must be deterministic enough to assert on — snapshot the extracted text and the page count, never the rendered bytes. Every string comes from `organization`; the white-label guard from Plan 1 Task 17 covers the templates too.
+**Risks.** Chromium adds ~300MB to the image and needs its font and system dependencies installed explicitly. PDF output must be deterministic enough to assert on — snapshot the extracted text and the page count, never the rendered bytes. Every string comes from `organization` or the quote; the white-label guard from Plan 1 Task 17 covers the templates too.
+
+The template also honours `quotes.pricing_display`, defaulting to `group_totals` — most residential contractors will not send a homeowner a document showing quantity times unit rate — and prints available upgrades at their grossed-up price.
 
 ---
 
-## Plan 4 — SharePoint & durability
+## Plan 4a — Backup
+
+Built early, immediately after the two spikes, and **before the owner enters a single real quote.** It depends only on the Phase 1 schema.
 
 **Scope**
-- Generator: Drizzle schema → PnP provisioning template XML → `Provision-MapleQuote.ps1`
-- Reserved-name mapping (`id` → `pg_id`, `created_at` → `pg_created_at`, `updated_at` → `pg_updated_at`), with the generator failing the build on a collision
-- Provisioning script: lists, fields, views, indexes, six libraries, read-only permissions on synced lists, and bootstrapping the app-only registration
-- Sync job: hourly, watermark per list, Graph `$batch`, 429 backoff, void propagation, chunked upload above 4MB
-- `npm run restore:sharepoint` — rebuild in FK dependency order, download library files, rebuild watermarks, verify row counts
-- Backup: hourly encrypted `pg_dump` to internal volume and USB with mount verification, nightly to SharePoint, retention ladder, weekly restore verification
-- Staleness monitoring and alerting
+- Hourly `pg_dump -Fc`, encrypted with `age` to a public key whose private half lives off the machine
+- One artifact, three destinations: internal volume, USB drive, and the SharePoint `Backups` library
+- USB mount verification — `mountpoint -q` plus a sentinel file, aborting loudly on failure
+- Retention: hourly kept 48 hours, last-of-day kept 30 days
+- Files and generated PDFs backed up, not just the database
+- Verification on the **plaintext** stream before encryption, since the decryption key is deliberately off-box; weekly scratch-database restore with row counts
+- Dead-man's-switch ping to an external monitor on every success
+- Migrate-on-boot: dump, then migrate, then serve — failing closed
+- Scripted restore drill
 
-**Tasks:** roughly 18–22.
+**Tasks:** roughly 10–12.
 
-**The seam that must not be missed.** Plan 1 stores scaled integers. **SharePoint must receive unscaled values** — a rate appears there as `4.0000`, not `40000`; a total as `4962.00`, not `496200`. The mirror is read by an accountant and by Power BI, so it carries human values. The restore path re-scales on the way back in. A round-trip test that asserts scale symmetry is mandatory, because getting this wrong is silent and only surfaces when someone reads a report.
-
-**Everything here is behind `feature_flags.sharepoint_sync`,** off by default, and the full suite runs a second time with it disabled and no Graph credentials present.
+**Why the USB tier survived review.** The reviewer argued it duplicates the hourly SharePoint dump at the same recovery point, which is true on paper. It is kept because it covers failures SharePoint does not: no internet, a tenant lockout, an account dispute, or a deployment with sync switched off. The monthly retention tier was dropped as the reviewer suggested — every tier is pruning code that can fail silently.
 
 ---
 
-## Plan 5 — First run & accountant export
+## Plan 4b — SharePoint mirror
 
 **Scope**
-- Setup wizard: organization, branding upload, financial including tax rates and fiscal year end, documents, features, first user, rate card
-- Seed data: a placeholder rate card and scope templates, clearly marked, in `src/db/seed/` — the only directory the white-label guard exempts
-- Accountant export: `exceljs` workbook plus CSV per sheet; Phase 1 sheets are cover and manifest, customers, projects, quotes with tax breakdown, pipeline summary
-- Period calculation from fiscal year end and filing frequency
-- Monthly write to the SharePoint `Exports` library, and on demand from Settings
-- Second-tenant proof: stand up a different fictional company and assert its PDF and export carry none of the first one's details
+- Generator: Drizzle schema → PnP provisioning template XML → PowerShell wrapper
+- Reserved-name mapping (`id` → `pg_id`, `created_at` → `pg_created_at`, `updated_at` → `pg_updated_at`), failing the build on a collision
+- Provisioning: lists, fields, views, indexes, six libraries, site-level Read for humans, and bootstrapping the app-only certificate registration
+- Sync job: hourly, keyset cursor `(updated_at, id)` with a five-minute safety lag, `sp_item_map` for item ids, Graph `$batch` with per-sub-request status parsing, 4xx skipped and surfaced, 429/5xx retried without advancing, void propagation, chunked upload above 4MB
+- Staleness monitoring
 
-**Tasks:** roughly 12–14.
+**Tasks:** roughly 14–16.
 
-**The cover sheet must state what is not included.** A Phase 1 export has no revenue and no expenses. An accountant handed a workbook with a "Quotes" sheet and no disclaimer may reasonably assume it is a complete set of books.
+**The seam that must not be missed.** Plan 1 stores scaled integers. **SharePoint receives unscaled values** — a rate appears as `4.0000`, not `40000`; a total as `4962.00`, not `496200`. The mirror is read by an accountant and by Power BI, so it carries human values. A scale-symmetry test is mandatory: getting this wrong is silent until someone reads a report.
+
+**Three sync bugs to test explicitly**, each a silent data loss in an earlier draft: a cohort of rows sharing one `updated_at` must sync completely (a 40-line quote loses lines 21–40 under a bare watermark); a row committed during a run must not be skipped (`now()` is transaction start time); and one 400 must not stall a table's cursor forever.
+
+**Not in scope: restore-from-lists.** The mirror is for reading. Values round-trip through IEEE doubles, 255-character Text caps, and Choice validation, while the dump in the same tenant is byte-exact with the same recovery point. Recovery is Plan 4a's job.
+
+Enums mirror as **Text, not Choice** — a Choice column rejects any value not in its member list, so adding an enum value in a migration would fail every sync of that row until someone edited the list by hand.
+
+**Authentication.** PnP's registration cmdlet produces a **certificate**, not a client secret; the sync authenticates from Node with MSAL client-certificate credentials. `Connect-PnPOnline -Interactive` has needed an explicit `-ClientId` since the shared PnP app was removed in September 2024.
+
+---
+
+## Plan 5 — First run & white-label
+
+**Scope**
+- Setup wizard: organization, branding upload, financial (tax rates with effective dates, fiscal year end, filing frequency, holdback), documents, environment validation, first user, rate items
+- Environment validation rather than credential collection: the wizard confirms `SHAREPOINT_SYNC_ENABLED` and that the Graph certificate loads, and that the USB path is mounted. Credentials never pass through a form, because a form writes to the database and the database is mirrored and dumped
+- Seed data: placeholder rate items, cost codes, and scope templates, clearly marked, in `src/db/seed/` — the only directory the white-label guard exempts
+- Second-tenant proof: stand up a different fictional company and assert its PDF carries none of the first one's details
+
+**Tasks:** roughly 8–10.
+
+**The accountant export is not here.** It moved to Phase 3, the first phase with expenses and recoverable tax. A Phase 1 workbook whose only financial sheet is "Quotes" is not a set of books, and handing an accountant one invites the assumption that it is.
 
 ---
 
@@ -138,6 +193,23 @@ Every plan is held to these; each states them in its own Global Constraints.
 
 ## Sequencing
 
-Plan 1, then Plan 2. Plans 3 and 4 in either order or together. Plan 5 last, since it depends on the export sheets existing and on the wizard having screens to render.
+1. **Plan 1** — the calculation engine and schema.
+2. **Two spikes, in parallel, one day each.** The editable worksheet on a real phone, and Playwright `page.pdf()` inside the Docker image against a static page. These are the two packaging risks in Phase 1, and both are far cheaper to be wrong about in week one than week four.
+3. **Plan 4a — backup.** Before the owner enters a single real quote.
+4. **Plan 2** — the application, informed by whatever the worksheet spike found.
+5. **Plan 3** — documents.
+6. **Plan 4b** — the SharePoint mirror.
+7. **Plan 5** — first run, seed data, second-tenant proof.
 
-**Recommended checkpoint:** build the worksheet at the start of Plan 2, on a real phone, before the rest of Plan 2 is written. It is the highest-risk assumption in Phase 1 and the cheapest thing to be wrong about early.
+The worksheet spike is the highest-risk assumption in Phase 1: one DOM tree that is a table at `sm` and above and stacked cards below, with live inputs at every width. The read-only stacking pattern it builds on is proven; an editing surface on top of it is not. If it fails, that is a Plan 2 architecture change.
+
+**Changes to Plan 1 before Task 1 begins**, all from the review:
+
+- `client.ts` selects `TEST_DATABASE_URL` under Vitest — as written, every database test truncates whatever `DATABASE_URL` points at.
+- `fileParallelism: false` for the database suites, so ten files truncating one database do not interleave.
+- `drizzle-kit generate` plus `migrate`, not `push`. `push` gives production no reproducible migration path.
+- Task 9's no-DELETE test must run inside a transaction; `SET LOCAL role` outside one is a no-op, so the `DELETE` ran as superuser and the test proved nothing.
+- Task 15 rewritten against `document_sequences`: as written, `allocateProjectNumber` incremented the invoice counter, and the year came from `getUTCFullYear()` rather than the tenant's business date.
+- Task 8's assertion that `rateItemId` is absent from a quote line is **inverted** — it is present as provenance; what must be asserted is that changing the rate item does not move an existing line's price.
+- The type contract gains `calcMode`, `unitLabel`, `rateItemId`, `costCodeId`, `isAllowance`, and `displayPriceCents`.
+- Schema tasks gain every cross-phase field: contract type, substantial performance and certificate dates, exclusions, assumptions, `quote_clauses`, cost codes, change-order columns on `quotes`, per-quote holdback, `pricing_display`, timezone, area unit.
