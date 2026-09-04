@@ -24,6 +24,7 @@ import {
   saveLocaleStep,
   saveTaxRateStep,
 } from '@/app/setup/actions';
+import { saveAccessStep } from '@/app/setup/access/actions';
 import { runEnvironmentChecks } from '@/app/setup/environment';
 import { SETUP_STATE_KEY, readSetupGate, stepMarkerKey } from '@/app/setup/state';
 import type { ActionResult } from '@/app/settings/result';
@@ -113,6 +114,13 @@ const OWNER = {
   email: 'marta.ilves@ravensworth.example',
 };
 
+/**
+ * The access step, in its office-network posture: the one that needs no
+ * credentials and so keeps this suite about the wizard's order rather than
+ * about deployment configuration, which `deploy-config.test.ts` covers.
+ */
+const ACCESS = { posture: 'lan', localUserEmail: OWNER.email };
+
 function form(values: Record<string, string>): FormData {
   const data = new FormData();
   for (const [key, value] of Object.entries(values)) data.append(key, value);
@@ -195,6 +203,7 @@ describe('the wizard refuses to run once a company exists', () => {
       [saveFinancialStep, FINANCIAL],
       [saveTaxRateStep, TAX_RATE],
       [saveFirstUserStep, OWNER],
+      [saveAccessStep, ACCESS],
       [acknowledgeEnvironmentStep, {}],
       [finishSetup, {}],
     ] as const;
@@ -210,6 +219,7 @@ describe('the wizard refuses to run once a company exists', () => {
     await runStepsThroughFinancial();
     expect((await saveTaxRateStep(null, form(TAX_RATE))).ok).toBe(true);
     expect((await saveFirstUserStep(null, form(OWNER))).ok).toBe(true);
+    expect((await saveAccessStep(null, form(ACCESS))).ok).toBe(true);
     expect((await acknowledgeEnvironmentStep(null, form({}))).ok).toBe(true);
     expect((await finishSetup(null, form({}))).ok).toBe(true);
 
@@ -357,6 +367,7 @@ describe('a partial setup can be resumed', () => {
 
     await saveTaxRateStep(null, form(TAX_RATE));
     await saveFirstUserStep(null, form(OWNER));
+    await saveAccessStep(null, form(ACCESS));
     await acknowledgeEnvironmentStep(null, form({}));
     expect((await openGate()).resumeAt).toBe('done');
 

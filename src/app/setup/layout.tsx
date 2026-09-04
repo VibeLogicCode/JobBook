@@ -17,7 +17,7 @@ export default function SetupLayout({ children }: { children: React.ReactNode })
       <p className="mb-4 max-w-prose t-small text-muted">
         This runs once. Nothing about your company is built into the product — the names, the
         address, the tax rate, the holdback and the words on every document are all
-        configuration, which is why there are eight steps and not a welcome screen. Each one
+        configuration, which is why there are nine steps and not a welcome screen. Each one
         saves as you finish it, so a closed laptop costs you the step you were on and nothing
         before it.
       </p>

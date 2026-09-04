@@ -51,6 +51,17 @@ export const SETUP_STEPS = [
     why: 'Authorization is a lookup against this table on every request, in every mode.',
   },
   {
+    slug: 'access',
+    title: 'Access',
+    summary: 'Where this deployment sits on the network, and who may reach it.',
+    /**
+     * After the first user, because the office-network posture names an
+     * address that has to match a real account, and before the environment
+     * report, because that report reads what this step wrote.
+     */
+    why: 'The software cannot tell whether this machine is reachable from the internet, and the wrong answer here hands the company away.',
+  },
+  {
     slug: 'environment',
     title: 'Environment',
     summary: 'What the deployment already has, and what it is missing.',

@@ -5,6 +5,13 @@ import { eq, sql } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { users } from '@/db/schema';
 import { AuthModeError, assertModeIsCoherent, authMode } from '@/lib/auth/mode';
+import {
+  authConfigPath,
+  compareToProcessEnv,
+  configState,
+  readAuthConfig,
+} from '@/lib/deploy/auth-config';
+import { postureOfEntries, restartPlan } from '@/lib/deploy/posture';
 
 /**
  * The environment check: step 7 of first-run setup.
@@ -25,7 +32,7 @@ import { AuthModeError, assertModeIsCoherent, authMode } from '@/lib/auth/mode';
  *
  * Nothing here throws. A missing variable is the normal case on a fresh box
  * and is exactly what the installer opened this page to find out; a check that
- * threw would replace eight answers with one stack trace.
+ * threw would replace every answer given so far with one stack trace.
  */
 
 export type CheckStatus = 'pass' | 'fail' | 'off';
@@ -141,11 +148,55 @@ export function configuredOidcProviders(): string[] {
     .map((name) => name.toLowerCase());
 }
 
+/**
+ * The mode the access step wrote to disk, when it differs from the mode this
+ * process is running.
+ *
+ * Null when there is no file, when it names no mode, or when the running
+ * process already agrees with it. Anything it returns is a sentence about the
+ * gap between the two, which is the distinction this whole report would
+ * otherwise be unable to draw: a value in a file is CONFIGURED, and a value in
+ * `process.env` is IN EFFECT, and only a restart turns the first into the
+ * second.
+ */
+async function configuredButNotRunning(): Promise<string | null> {
+  try {
+    const file = await readAuthConfig();
+    const configured = file?.entries.get('AUTH_MODE');
+    if (!configured || configured === process.env.AUTH_MODE) return null;
+    return configured;
+  } catch {
+    // The dedicated check below reports an unreadable file properly. This
+    // helper exists to enrich a message and must not become a second failure.
+    return null;
+  }
+}
+
 async function authModeCheck(): Promise<Omit<EnvironmentCheck, 'id' | 'title' | 'variables'>> {
   let mode;
   try {
     mode = authMode();
   } catch (error) {
+    // Before saying "AUTH_MODE is not set", look at what the access step
+    // wrote. "You have not configured this" and "you configured this and the
+    // container has not been restarted" are different problems with different
+    // next actions, and reporting the first when the second is true sends an
+    // installer back to redo a step he already finished.
+    const configured = await configuredButNotRunning();
+    if (configured) {
+      return {
+        status: 'fail',
+        detail:
+          `AUTH_MODE is configured as ${configured} in ${authConfigPath()}, and this running ` +
+          'process has no value for it — so the file was written after the process started. ' +
+          'Configured on disk is not the same thing as in effect.',
+        remedy:
+          `Restart the application container: ${restartPlan(configured === 'sso' ? 'sso' : 'tunnel').command}. ` +
+          'The file is read once, at boot, by the entrypoint. A process’s environment is fixed ' +
+          'when it starts, so the application cannot pick this up on its own — and it ' +
+          'deliberately has no way to restart itself.',
+      };
+    }
     return {
       status: 'fail',
       detail:
@@ -585,6 +636,167 @@ async function usbBackupCheck(): Promise<Omit<EnvironmentCheck, 'id' | 'title' |
 }
 
 // ---------------------------------------------------------------------------
+// The deployment configuration file
+// ---------------------------------------------------------------------------
+
+/**
+ * Only the path is named as a variable.
+ *
+ * The keys inside the file are named in the detail instead, and only the ones
+ * that are actually a problem: thirteen variable names in the report's second
+ * column is a wall an installer skims past, and the whole value of that column
+ * is that it is short enough to read.
+ */
+const DEPLOY_VARIABLES = ['DEPLOY_CONFIG_PATH'] as const;
+
+/** Anything looser than owner-only on a file of credentials. */
+const REQUIRED_CONFIG_MODE = 0o600;
+
+/**
+ * What the access step wrote, and whether this process is running it.
+ *
+ * ---------------------------------------------------------------------------
+ * CONFIGURED ON DISK IS NOT IN EFFECT.
+ *
+ * This check exists because of one honest limitation: the application cannot
+ * restart itself. A process's environment is fixed when it starts, the file is
+ * read at boot by `docker/entrypoint.sh`, and so every value the access step
+ * writes takes effect at the next start of the container and not a moment
+ * before. A wizard that said "saved" and stopped there would leave an
+ * installer testing a posture that is not loaded, and concluding the product
+ * is broken.
+ *
+ * So the comparison is made explicitly, key by key, between the file and
+ * `process.env`, and each key comes out as one of three things: running,
+ * waiting on a restart, or overridden by the container environment. The third
+ * is not a fault — the environment winning is what keeps a value an operator
+ * pinned in a compose file out of reach of anything this application writes.
+ * ---------------------------------------------------------------------------
+ */
+async function deployConfigCheck(): Promise<Omit<EnvironmentCheck, 'id' | 'title' | 'variables'>> {
+  const file = await readAuthConfig();
+
+  if (!file) {
+    return {
+      status: 'off',
+      detail:
+        `There is no configuration file at ${authConfigPath()}, so the container environment ` +
+        'alone decides how this deployment signs people in.',
+      remedy:
+        'That is a legitimate arrangement: an operator who sets every value in his compose ' +
+        'file never needs this file. Use the access step if you would rather the wizard held ' +
+        'the credentials in one place at mode 0600 instead.',
+    };
+  }
+
+  // The loudest finding, and it comes first. A refused line means something
+  // wrote AUTH_MODE=local into a file the application can write, and that is
+  // the exact shape of a privilege escalation: local mode treats every visitor
+  // as one named user, so a mode chosen by this file would turn one file write
+  // inside the app into a promotion to owner. It is dropped rather than
+  // honoured, three times over — here, by the parser, and by the entrypoint —
+  // but it is never silent.
+  const refusedLines = file.dropped.filter((line) => line.reason === 'refused-value');
+  if (refusedLines.length > 0) {
+    return {
+      status: 'fail',
+      detail:
+        `${file.path} contains AUTH_MODE=local, which is refused and was not loaded. Nothing ` +
+        'is running as a result of it. Local mode makes every visitor the owner, so it may ' +
+        'only be set in the container environment, where the application cannot reach it.',
+      remedy:
+        'Remove that line. If this deployment is genuinely meant to run on an office network ' +
+        'with no sign-in, set AUTH_MODE=local in the compose file or the .env beside it — that ' +
+        'is a decision for whoever runs the machine, and deliberately not one this application ' +
+        'can make for itself. If nobody put it there on purpose, treat it as evidence that ' +
+        'something wrote into this file and look at how.',
+    };
+  }
+
+  if (file.mode !== null && (file.mode & 0o077) !== 0) {
+    return {
+      status: 'fail',
+      detail:
+        `${file.path} is at permissions ${file.mode.toString(8).padStart(3, '0')}, so a client ` +
+        'secret and a tunnel token in it are readable by more than the account that owns them.',
+      remedy: `chmod ${REQUIRED_CONFIG_MODE.toString(8)} ${file.path}. The writer sets this on every write, so a looser mode means something else changed it.`,
+    };
+  }
+
+  const effects = compareToProcessEnv(file.entries);
+  const state = configState(effects);
+  const posture = postureOfEntries(file.entries);
+
+  // Lines naming a key this file does not manage. Reported wherever they are,
+  // because the allowlist silently ignoring them is what keeps a write into
+  // this file from reaching DATABASE_URL — and silence about it is how a
+  // hand-edit in the wrong file stays a mystery for a week.
+  const foreign = file.dropped.filter((line) => line.reason === 'not-managed');
+  const foreignNote =
+    foreign.length > 0
+      ? ` ${foreign.length} other line${foreign.length === 1 ? '' : 's'} (${foreign
+          .map((line) => line.key)
+          .join(', ')}) name keys this file does not manage and were ignored.`
+      : '';
+
+  if (state === 'empty') {
+    return {
+      status: 'fail',
+      detail: `${file.path} exists and carries no key this deployment reads.${foreignNote}`,
+      remedy: 'Run the access step again, or delete the file and configure the environment directly.',
+    };
+  }
+
+  const waiting = effects.filter((entry) => entry.effect === 'awaiting-restart');
+  if (state === 'awaiting-restart') {
+    return {
+      status: 'fail',
+      detail:
+        `Configured on disk and NOT in effect. ${file.path} sets ${waiting
+          .map((entry) => entry.key)
+          .join(', ')}, and this running process has no value for ${
+          waiting.length === 1 ? 'it' : 'them'
+        } — so the file was written after the process started.${foreignNote}`,
+      remedy:
+        `${posture ? `${restartPlan(posture).command}. ` : 'Restart the application container. '}` +
+        'The file is read once, at boot. The application cannot pick it up on its own and ' +
+        'deliberately cannot restart itself: doing that would mean mounting the Docker socket ' +
+        'into this container, which is root on the host.',
+    };
+  }
+
+  const overridden = effects.filter((entry) => entry.effect === 'overridden');
+  if (state === 'overridden') {
+    return {
+      status: 'pass',
+      detail:
+        `The file is loaded, and the container environment is overriding ${overridden
+          .map((entry) => entry.key)
+          .join(', ')}. The environment wins by design, so what is running is the ` +
+        `environment's value and not the file's.${foreignNote}`,
+      remedy:
+        'Nothing, if that is intended — a value pinned in a compose file staying out of reach ' +
+        'of anything the application writes is the point. If the file is meant to be the ' +
+        'authority for one of these keys, remove that key from the compose file and restart.',
+    };
+  }
+
+  return {
+    status: 'pass',
+    detail:
+      `${posture ? `The ${posture} posture is` : 'This file is'} configured at ${file.path} and ` +
+      `in effect: all ${effects.length} values match what this process is running with. Mode ` +
+      `0600, and mirrored nowhere — these are credentials, so they are in a file rather than ` +
+      `in the settings table, which is mirrored to SharePoint and lands in every backup.${foreignNote}`,
+    remedy:
+      posture === 'lan'
+        ? 'This posture also needs AUTH_MODE=local in the container environment, which this ' +
+          'application cannot write and the sign-in check above reports on.'
+        : null,
+  };
+}
+
+// ---------------------------------------------------------------------------
 
 /**
  * The whole report, in the order an installer can act on it: sign-in first,
@@ -595,6 +807,11 @@ async function usbBackupCheck(): Promise<Omit<EnvironmentCheck, 'id' | 'title' |
 export async function runEnvironmentChecks(): Promise<EnvironmentCheck[]> {
   return Promise.all([
     safely('auth-mode', 'Sign-in mode', AUTH_VARIABLES, authModeCheck),
+    // Immediately after the mode, because it is the same subject read from the
+    // other side: the mode above is what this process is RUNNING, and this is
+    // what the access step CONFIGURED. When the two disagree, the pair of rows
+    // read together says so.
+    safely('deploy-config', 'Deployment configuration file', DEPLOY_VARIABLES, deployConfigCheck),
     safely('render-secret', 'Document render secret', ['INTERNAL_RENDER_SECRET'], renderSecretCheck),
     safely('database', 'Database', ['DATABASE_URL'], databaseCheck),
     safely('sharepoint', 'SharePoint mirror', SHAREPOINT_VARIABLES, sharePointCheck),

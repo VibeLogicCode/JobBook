@@ -18,6 +18,7 @@ import {
   requiredText,
 } from '@/app/settings/validate';
 import { configuredOidcProviders } from '@/app/setup/environment';
+import { persistStep } from '@/app/setup/persist';
 import {
   type ClosedGate,
   type Executor,
@@ -56,62 +57,10 @@ import { authMode } from '@/lib/auth/mode';
  * ---------------------------------------------------------------------------
  *
  * Persisting per step is the requirement that shapes the rest. A wizard that
- * held eight forms in memory and wrote once at the end would lose an hour of
+ * held every form in memory and wrote once at the end would lose an hour of
  * an owner's typing to a closed laptop, and the marker rows that make a resume
  * possible are what let it pick up at step 5 instead of step 1.
  */
-
-function gateRefusal(gate: ClosedGate): ActionResult {
-  if (gate.reason === 'unreachable') {
-    return refused(`Nothing was saved: the database did not answer. ${gate.detail}`);
-  }
-  return refused(
-    `${gate.detail} This wizard writes nothing once a company exists, because the only thing ` +
-      'it could do to a live one is overwrite it.',
-  );
-}
-
-/**
- * The guard and the write, in one transaction.
- *
- * The gate is re-read INSIDE the transaction rather than before it. Read
- * outside, two requests could both see an unclaimed database and both believe
- * the tenant was theirs to create; read inside, the second one sees the first
- * one's claim.
- */
-async function persistStep(
-  slug: SetupStepSlug,
-  write: (tx: Executor, gate: OpenGate) => Promise<ActionResult>,
-  /** True on the final step, which closes the wizard for good. */
-  closesSetup = false,
-): Promise<ActionResult> {
-  const result = await db.transaction(async (tx) => {
-    const gate = await readSetupGate(tx);
-    if (!gate.open) return gateRefusal(gate);
-
-    if (!stepIsReachable(gate, slug)) {
-      const waiting = stepAt(gate.resumeAt);
-      return refused(
-        `The ${waiting.title.toLowerCase()} step has not been completed yet, and each step ` +
-          'builds on the one before it. Nothing was saved.',
-      );
-    }
-
-    const written = await write(tx, gate);
-    if (written.ok) {
-      await markStepComplete(tx, slug, closesSetup ? 'complete' : 'in_progress');
-    }
-    return written;
-  });
-
-  if (result.ok) {
-    // The root layout reads the organization row for the tab title, the shell
-    // heading and the accent colour, so a step that names the company has to
-    // invalidate the layout and not only this route.
-    revalidatePath('/', 'layout');
-  }
-  return result;
-}
 
 /**
  * Writes the single organization row.
