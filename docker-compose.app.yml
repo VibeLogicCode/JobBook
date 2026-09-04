@@ -49,7 +49,9 @@ services:
       # both at once, so a half-configured tunnel cannot fall back to trusting
       # everyone.
       AUTH_MODE: ${AUTH_MODE:-local}
-      LOCAL_USER_EMAIL: ${LOCAL_USER_EMAIL:-owner@example.com}
+      # Must match a users row: authorization is a lookup against users, and
+      # local mode is not exempt. The demo seed creates this address.
+      LOCAL_USER_EMAIL: ${LOCAL_USER_EMAIL:-owner@northgate.example}
       CF_ACCESS_TEAM_DOMAIN: ${CF_ACCESS_TEAM_DOMAIN:-}
       CF_ACCESS_AUD: ${CF_ACCESS_AUD:-}
       # Loads the fictional demo tenant on first boot so there is something to

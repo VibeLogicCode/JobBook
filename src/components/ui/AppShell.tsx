@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
-  ClipboardList, FileText, Home, Moon, Ruler, Sun, Users,
+  ClipboardList, FileText, Home, LayoutTemplate, Moon, Ruler, Settings, Sun, Users,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
@@ -13,7 +13,19 @@ const DESTINATIONS = [
   { href: '/projects', label: 'Jobs', icon: ClipboardList },
   { href: '/customers', label: 'People', icon: Users },
   { href: '/rates', label: 'Rates', icon: Ruler },
+  { href: '/templates', label: 'Templates', icon: LayoutTemplate },
+  { href: '/settings', label: 'Setup', icon: Settings },
 ];
+
+/**
+ * The bottom bar carries five, per the UI spec's breakpoint table; the rail
+ * carries all of them.
+ *
+ * Templates and Setup are the two that lose the seat. Both are things a person
+ * does at a desk while configuring the system, not on a phone at a job site,
+ * which is what a bottom tab bar is for.
+ */
+const BOTTOM_BAR = DESTINATIONS.slice(0, 5);
 
 /**
  * Desktop gets a rail, mobile gets a bottom tab bar -- one tree, reflowed by
@@ -94,7 +106,7 @@ export function AppShell({
           aria-hidden
           className="no-print fixed inset-x-0 bottom-0 z-10 flex border-t border-line-strong bg-surface sm:hidden"
         >
-          {DESTINATIONS.map(({ href, label, icon: Icon }) => {
+          {BOTTOM_BAR.map(({ href, label, icon: Icon }) => {
             const active = href === '/' ? pathname === '/' : pathname?.startsWith(href);
             return (
               <Link

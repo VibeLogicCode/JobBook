@@ -1,35 +1,39 @@
-import { and, eq } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { headers } from 'next/headers';
 import { db } from '@/db/client';
 import { users } from '@/db/schema';
 import { refused, type ActionResult } from '@/app/settings/result';
+import {
+  PermissionError,
+  can,
+  resolveActor as resolveCanonicalActor,
+  type Actor as CanonicalActor,
+  type Capability as CanonicalCapability,
+  type Role,
+} from '@/lib/auth/permissions';
 
 /**
- * Who is asking, and what their role permits.
+ * Who is asking, for the settings screens.
  *
- * ---------------------------------------------------------------------------
- * THIS FILE IS TEMPORARY. It moves to `src/lib/auth/permissions.ts`, which is
- * being written concurrently and which the SSO design (section 10.3) makes the
- * one place the capability matrix lives, exporting a single
- * `require(capability)`. Nothing here imports that module yet because it may
- * not exist; when it lands, delete `CAPABILITIES` and `can()` below and call
- * it instead. The checks are inline rather than deferred because a settings
- * screen shipped without them is not an incomplete feature, it is an open
- * door.
- * ---------------------------------------------------------------------------
+ * The capability matrix used to be duplicated here, because this area was
+ * built while `src/lib/auth/permissions.ts` was being written and a settings
+ * screen shipped without a check is not an incomplete feature but an open
+ * door. That module now exists and is the single place the matrix lives (SSO
+ * design, section 10.3), so this file is nothing but the mapping from the
+ * names these screens use to the canonical capabilities, plus the identity
+ * lookup.
  *
- * Two rules from that design are load-bearing here:
+ * Two rules from that design stay load-bearing here:
  *
  * 1. Authentication establishes an identity; authorization is a separate
- *    lookup against `users`, performed on every request. No permission is ever
- *    read from a token, a form field, or a client component's props -- a
- *    provider can be reconfigured by somebody who has never seen this
- *    application, and a role in a form field is a role the browser can edit.
- * 2. Deny by default. An identity with no `users` row, or a request that
- *    arrives without one, gets nothing.
+ *    lookup against `users`, on every request. No permission is read from a
+ *    token, a form field, or a client component's props -- a provider can be
+ *    reconfigured by somebody who has never seen this application, and a role
+ *    in a form field is a role the browser can edit.
+ * 2. Deny by default. An identity with no active `users` row gets nothing.
  */
 
-export type Role = 'owner' | 'admin' | 'bookkeeper';
+export type { Role };
 
 export interface Actor {
   id: string;
@@ -41,38 +45,42 @@ export interface Actor {
 export type ActorState = { actor: Actor; reason: null } | { actor: null; reason: string };
 
 /**
- * The capability matrix, from the SSO design section 10.2.
+ * The names these screens ask in, mapped to the canonical capabilities.
  *
- * The five capabilities reserved to `owner` are the ones whose blast radius is
- * the whole deployment rather than one job: the tax rate every future quote
- * inherits, and the company's own identity on every document it sends.
+ * `settings.read` maps to `worksheet:read`, which every active role holds: the
+ * matrix has no separate read-settings capability, and reading the company's
+ * own address is not a privilege worth inventing one for. Editing is where the
+ * distinctions live.
  */
-export const CAPABILITIES = {
-  /** Read the settings screens at all. */
-  'settings.read': ['owner', 'admin', 'bookkeeper'],
-  /** Identity, branding, contact, locale, financial terms and document text. */
-  'organization.edit': ['owner'],
-  /** Tax rates and their effective dates. */
-  'taxRates.edit': ['owner'],
-  /** Add, deactivate, set role. Four further guardrails apply per row. */
-  'users.manage': ['owner', 'admin'],
-  /** Rate items, cost codes, scope templates. */
-  'scopeTemplates.edit': ['owner', 'admin'],
-} as const satisfies Record<string, readonly Role[]>;
+const SETTINGS_CAPABILITIES = {
+  'settings.read': 'worksheet:read',
+  'organization.edit': 'organization:edit',
+  'taxRates.edit': 'tax:edit',
+  'users.manage': 'user:manage',
+  'scopeTemplates.edit': 'rates:edit',
+} as const satisfies Record<string, CanonicalCapability>;
 
-export type Capability = keyof typeof CAPABILITIES;
+export type SettingsCapability = keyof typeof SETTINGS_CAPABILITIES;
 
-export function can(role: Role, capability: Capability): boolean {
-  return (CAPABILITIES[capability] as readonly Role[]).includes(role);
+/** Whether a role holds one of the settings capabilities. */
+export function canSettings(role: Role, capability: SettingsCapability): boolean {
+  return can(role, SETTINGS_CAPABILITIES[capability]);
 }
+
+// The names the screens in this area were written against. Kept as aliases
+// rather than renamed across thirty files, so the mapping above stays the only
+// thing that had to change when the canonical matrix landed.
+export type Capability = SettingsCapability;
+export { canSettings as can };
 
 /**
  * The signed-in user's row, or the reason there is not one.
  *
- * The email comes from `x-identity-email`, which `proxy.ts` strips from the
- * inbound request and rewrites after verifying the Access JWT. Reading the
- * header rather than re-verifying is the seam that file documents; reading any
- * OTHER identity header would be trusting something a client can set.
+ * The email comes from `x-identity-email`, which `proxy.ts` deletes from the
+ * inbound request and rewrites after verifying the Access JWT or reading the
+ * session. Reading the header rather than re-verifying is the seam that file
+ * documents; reading any OTHER identity header would be trusting something a
+ * client can set.
  */
 export async function resolveActor(): Promise<ActorState> {
   const email = (await headers()).get('x-identity-email');
@@ -84,48 +92,56 @@ export async function resolveActor(): Promise<ActorState> {
     };
   }
 
-  const [row] = await db
-    .select()
-    .from(users)
-    .where(and(eq(users.email, email), eq(users.isActive, true)));
+  try {
+    // The canonical Actor carries only what authorization reads -- id, email,
+    // role -- deliberately, so a display name cannot become an input to a
+    // permission decision. These screens greet the person, so they read it
+    // separately.
+    const canonical: CanonicalActor = await resolveCanonicalActor({ email, local: false });
+    const [row] = await db
+      .select({ displayName: users.displayName })
+      .from(users)
+      .where(eq(users.id, canonical.id));
 
-  if (!row) {
-    // Named, not hidden: an administrator reading this needs to know which
-    // address has no account. The address is the signed-in person's own, so
-    // there is nothing to leak to them.
     return {
-      actor: null,
-      reason: `There is no active user account for ${email}, so nothing on this screen can be changed.`,
+      actor: {
+        id: canonical.id,
+        email: canonical.email,
+        displayName: row?.displayName ?? canonical.email,
+        role: canonical.role,
+      },
+      reason: null,
     };
+  } catch (error) {
+    if (error instanceof PermissionError) {
+      // Named rather than hidden: the address is the signed-in person's own,
+      // so there is nothing to leak to them, and an administrator reading it
+      // needs to know which address has no account.
+      return {
+        actor: null,
+        reason:
+          error.reason === 'no-account'
+            ? `There is no user account for ${email}, so nothing on this screen can be changed.`
+            : `The account for ${email} is not active, so nothing on this screen can be changed.`,
+      };
+    }
+    throw error;
   }
-
-  return {
-    actor: {
-      id: row.id,
-      email: row.email,
-      displayName: row.displayName,
-      role: row.role,
-    },
-    reason: null,
-  };
 }
 
 /**
  * The guard every action in this area opens with, before it reads a single
- * argument. A route whose check sits further down is a route somebody can add
- * a branch to that never reaches it.
+ * argument. A check further down is a check somebody can add a branch above.
  */
 export async function requireCapability(
-  capability: Capability,
+  capability: SettingsCapability,
 ): Promise<{ ok: true; actor: Actor } | { ok: false; result: ActionResult }> {
   const state = await resolveActor();
   if (!state.actor) return { ok: false, result: refused(state.reason) };
-  if (!can(state.actor.role, capability)) {
+  if (!canSettings(state.actor.role, capability)) {
     return {
       ok: false,
-      result: refused(
-        `A ${state.actor.role} cannot change this. Ask an owner.`,
-      ),
+      result: refused(`A ${state.actor.role} cannot change this. Ask an owner.`),
     };
   }
   return { ok: true, actor: state.actor };
