@@ -77,6 +77,27 @@ async function* walk(dir: string): AsyncGenerator<string> {
   }
 }
 
+/**
+ * Comments are stripped before matching, and prose files are held to a
+ * narrower standard.
+ *
+ * The guard exists to catch a tenant value the CODE would use. A comment
+ * explaining "somebody types a tax rate as 0.13, so this converts it" is the
+ * opposite of the defect -- it is the documentation of the conversion -- and
+ * failing the build on it teaches people to delete the explanation. Likewise a
+ * README showing an example command with a number in it.
+ *
+ * So: strip comments from code, and in Markdown apply only the tenant-name
+ * patterns from the local list, never the generic numeric shapes.
+ */
+function stripComments(text: string): string {
+  return text
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/(^|[^:])\/\/.*$/gm, '$1')
+    .replace(/^\s*--.*$/gm, ' ')
+    .replace(/^\s*#.*$/gm, ' ');
+}
+
 async function findOffences(root: string, dirs: string[]): Promise<string[]> {
   const patterns = await loadPatterns();
   const offences: string[] = [];
@@ -86,8 +107,17 @@ async function findOffences(root: string, dirs: string[]): Promise<string[]> {
       const relative = path.relative(root, file);
       if (EXEMPT.some((exempt) => relative.startsWith(exempt))) continue;
       if (relative.endsWith(LOCAL_LIST)) continue;
-      const text = await readFile(file, 'utf8');
+
+      const raw = await readFile(file, 'utf8');
+      const isProse = relative.endsWith('.md');
+      const text = isProse ? raw : stripComments(raw);
+
       for (const pattern of patterns) {
+        // A generic numeric shape in prose is an example, not a hardcoded
+        // value. A tenant NAME in prose still ships to another company.
+        if (isProse && pattern.why !== 'a tenant-specific literal' && !pattern.why.startsWith('the tenant literal')) {
+          continue;
+        }
         if (pattern.regex.test(text)) offences.push(`${relative} contains ${pattern.why}`);
       }
     }
@@ -109,6 +139,34 @@ describe('white-label guard', () => {
       const offences = await findOffences(scratch, ['.']);
       expect(offences).toHaveLength(1);
       expect(offences[0]).toContain('tax.ts');
+    } finally {
+      await rm(scratch, { recursive: true, force: true });
+    }
+  });
+
+  it('ignores a value that appears only in a comment', async () => {
+    // The comment explaining a conversion is the documentation of the fix, not
+    // the defect. Failing on it teaches people to delete the explanation.
+    const scratch = await mkdtemp(path.join(tmpdir(), 'white-label-'));
+    try {
+      await writeFile(
+        path.join(scratch, 'convert.ts'),
+        ['// somebody types a rate as 0.13, so this converts at the edge', 'export const SCALE = 10000;', ''].join('\n'),
+      );
+      expect(await findOffences(scratch, ['.'])).toEqual([]);
+    } finally {
+      await rm(scratch, { recursive: true, force: true });
+    }
+  });
+
+  it('still catches the same value in code beside that comment', async () => {
+    const scratch = await mkdtemp(path.join(tmpdir(), 'white-label-'));
+    try {
+      await writeFile(
+        path.join(scratch, 'convert.ts'),
+        ['// a rate is 0.13 in this comment', 'export const HST = 0.13;', ''].join('\n'),
+      );
+      expect(await findOffences(scratch, ['.'])).toHaveLength(1);
     } finally {
       await rm(scratch, { recursive: true, force: true });
     }

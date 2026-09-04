@@ -7,3 +7,4 @@ export * from '@/db/schema/customers';
 export * from '@/db/schema/rates';
 export * from '@/db/schema/quotes';
 export * from '@/db/schema/system';
+export * from '@/db/schema/auth';

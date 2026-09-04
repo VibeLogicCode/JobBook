@@ -36,6 +36,20 @@
       "when": 1788530940259,
       "tag": "0004_quote_mutability",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1788536405157,
+      "tag": "0005_past_gambit",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1788536870949,
+      "tag": "0006_auth_triggers_and_owner_guard",
+      "breakpoints": true
     }
   ]
 }

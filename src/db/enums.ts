@@ -71,3 +71,12 @@ export const entityTypeEnum = pgEnum('entity_type', [
   'vendor_invoice', 'purchase_order',
 ]);
 export const filingFrequencyEnum = pgEnum('filing_frequency', ['annual', 'quarterly', 'monthly']);
+
+/**
+ * How a person signs in, chosen per user by an administrator.
+ *
+ * Only meaningful in `sso` mode. Under Cloudflare Access the Access policy
+ * decides, and in local mode the environment does, so the column is ignored in
+ * both -- which is why it is nullable rather than defaulted.
+ */
+export const loginMethodEnum = pgEnum('login_method', ['google', 'microsoft', 'apple']);

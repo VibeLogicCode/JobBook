@@ -1,7 +1,7 @@
 import { sql } from 'drizzle-orm';
 import { boolean, check, date, integer, pgTable, primaryKey, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { auditColumns, rate } from '@/db/columns';
-import { areaUnitEnum, filingFrequencyEnum, roleEnum } from '@/db/enums';
+import { areaUnitEnum, filingFrequencyEnum, loginMethodEnum, roleEnum } from '@/db/enums';
 
 /**
  * Single-row tenant configuration. Every company-specific string in the product
@@ -101,8 +101,11 @@ export const taxRates = pgTable('tax_rates', {
 });
 
 /**
- * Keyed on email. The Access JWT does not carry an Entra object id without
- * extra identity-provider claim configuration, and email suffices here.
+ * Keyed on email, for the ROW's identity: it is the field an administrator
+ * types and the field that is UNIQUE. Authentication is a different matter --
+ * after a first successful sign-in it keys on the provider's stable subject in
+ * `user_identities`, because an email address changes, goes unverified, and
+ * with Apple is sometimes a relay.
  *
  * Deactivated via `isActive`, never voided: `email` is UNIQUE, so a voided row
  * would permanently block re-adding the same person.
@@ -112,6 +115,12 @@ export const users = pgTable('users', {
   email: text('email').notNull(),
   displayName: text('display_name').notNull(),
   role: roleEnum('role').notNull(),
+  /**
+   * The administrator's CHOICE of how this person signs in. NULL means no
+   * method has been chosen, and in `sso` mode such a user cannot sign in.
+   * WHICH account actually linked is recorded in user_identities, not here.
+   */
+  loginMethod: loginMethodEnum('login_method'),
   isActive: boolean('is_active').notNull().default(true),
   ...auditColumns,
 }, (t) => [uniqueIndex('users_email_unique').on(t.email)]);
