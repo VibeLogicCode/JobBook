@@ -41,4 +41,9 @@ export const SETTINGS_SECTIONS: NavItem[] = [
     label: 'Users',
     summary: 'Who has an account, and what their role permits.',
   },
+  {
+    href: '/settings/sync',
+    label: 'SharePoint mirror',
+    summary: 'Optional, off by default, one-way, and not a restore path.',
+  },
 ];

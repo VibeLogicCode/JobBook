@@ -58,6 +58,10 @@ const SETTINGS_CAPABILITIES = {
   'taxRates.edit': 'tax:edit',
   'users.manage': 'user:manage',
   'scopeTemplates.edit': 'rates:edit',
+  // Owner only, and on that list because its blast radius is the whole
+  // deployment: it decides whether this company's records leave the box for a
+  // Microsoft tenant.
+  'sync.configure': 'sync:configure',
 } as const satisfies Record<string, CanonicalCapability>;
 
 export type SettingsCapability = keyof typeof SETTINGS_CAPABILITIES;
