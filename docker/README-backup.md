@@ -28,9 +28,17 @@ Each run backs up **two** artifacts, and a recovery needs both:
 
 ## Prerequisites
 
-The runtime image does not carry these yet. The scripts check for every one of
-them before they touch anything, and refuse to run rather than produce a backup
-that only looks like one.
+**Wired.** The runner stage installs `postgresql-client-16`, `age`, `util-linux`
+and `curl`, and copies both scripts to `/usr/local/bin`. The snippets below are
+kept as the record of what was added and why.
+
+The client major version is pinned deliberately: `pg_dump` refuses to dump a
+server newer than itself, so an unpinned client is a backup that stops working
+the day Postgres is upgraded -- silently, since nothing else about the system
+changes.
+
+The scripts still check for every tool before they touch anything, and refuse
+to run rather than produce a backup that only looks like one.
 
 In the `Dockerfile`, in the runner stage, **before** it drops to `USER pwuser`:
 
@@ -58,9 +66,35 @@ path `BACKUP_USB_DIR` names, plus the backup variables:
       BACKUP_HEARTBEAT_URL: ${BACKUP_HEARTBEAT_URL:-}
 ```
 
-The pre-migration dump is `entrypoint.sh`'s to call, before it migrates:
-`BACKUP_LABEL=pre-migration /usr/local/bin/backup.sh`. Failing that dump should
-fail the boot — a migration with no dump behind it has no way back.
+The pre-migration dump is wired into `entrypoint.sh`, before it migrates, and it
+is fatal: a migration with no dump behind it has no way back, and the container
+updates itself unattended at 3am. It is skipped only when
+`BACKUP_AGE_PUBLIC_KEY` is unset, which is the development case and a fresh
+install with nothing yet to lose — and the boot says so on stderr, because a
+deployment taking no backups at all should not be a quiet condition.
+
+## Verified round trip
+
+Run inside the image on 2026-09-04, against the seeded demo tenant:
+
+```
+verified: 23 tables with data
+wrote 1 artifact(s) to the internal volume copy
+backup complete: db-20260904T174318Z-hourly.dump.age
+```
+
+then decrypted with the private half and restored into a scratch database:
+
+```
+quotes 3   quote_lines 33   customers 3   projects 3   rate_items 17
+```
+
+Matching the live database exactly. What that proves: the dump is complete, the
+encryption is reversible with the key held off the machine, and `pg_restore`
+accepts the artifact. What it does not prove is that **this** deployment's
+recipient key has a private half anybody still holds — only a real drill with
+the real key does that, which is why the quarterly workstation drill below is
+not optional.
 
 ## The age keypair
 

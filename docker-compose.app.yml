@@ -57,11 +57,27 @@ services:
       # Loads the fictional demo tenant on first boot so there is something to
       # click. Set to 0 before a real company's data goes in.
       SEED_DEMO: ${SEED_DEMO:-1}
+
+      # Backup. The recipient is a PUBLIC age key: this machine writes backups
+      # it cannot itself read, so a stolen mini PC yields no data. Unset means
+      # no backups are taken at all, and the boot says so out loud.
+      BACKUP_AGE_PUBLIC_KEY: ${BACKUP_AGE_PUBLIC_KEY:-}
+      # Bind-mounted below at the same path, because a path that exists inside
+      # the container but is not a mount lands on the container filesystem and
+      # fills the disk holding the database. backup.sh verifies the mount and a
+      # sentinel file before every write for exactly that reason.
+      BACKUP_USB_DIR: ${BACKUP_USB_DIR:-}
+      BACKUP_HEARTBEAT_URL: ${BACKUP_HEARTBEAT_URL:-}
     ports:
       - '${APP_PORT:-3000}:3000'
     volumes:
       - files:/data/files
       - backups:/data/backups
+      # The USB drive, at the same path BACKUP_USB_DIR names. Commented out
+      # rather than guessed: an unset host path silently becomes an anonymous
+      # volume, which is a backup destination on the same disk as the database
+      # and defeats the point of having one.
+      # - /mnt/backup:/mnt/backup
     restart: unless-stopped
 
 volumes:

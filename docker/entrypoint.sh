@@ -31,6 +31,26 @@ for attempt in $(seq 1 60); do
   sleep 1
 done
 
+# A dump before the migration, and the boot fails if it cannot be taken.
+#
+# A migration with no dump behind it has no way back: the container updates
+# itself unattended at 3am, and a migration that half-applies or that turns out
+# to be wrong leaves the owner with a database he cannot return to the state it
+# was in ten seconds earlier. That is the one failure this whole backup tier
+# exists for, so it is fatal rather than a warning.
+#
+# Skipped only when no recipient key is configured, which is the case on a
+# development machine and during the first boot of a fresh install where there
+# is nothing yet to lose. It is announced either way; a silent skip is how a
+# deployment ends up with no dumps and nobody aware of it.
+if [ -n "${BACKUP_AGE_PUBLIC_KEY:-}" ]; then
+  echo "taking a pre-migration dump"
+  BACKUP_LABEL=pre-migration /usr/local/bin/backup.sh
+else
+  echo "no BACKUP_AGE_PUBLIC_KEY set: skipping the pre-migration dump" >&2
+  echo "  this deployment is taking no backups at all -- see docker/README-backup.md" >&2
+fi
+
 echo "applying migrations"
 # The config carries absolute paths, because the project root the repository
 # config was written against does not exist in this image.

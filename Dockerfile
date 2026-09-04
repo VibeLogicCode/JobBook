@@ -64,9 +64,21 @@ COPY --from=build /app/package.json ./package.json
 # imports, which is why the seed and the migrator need this.
 COPY --from=deps /app/node_modules ./node_modules
 COPY docker/drizzle.container.config.ts ./drizzle.container.config.ts
+# Backup prerequisites. pg_dump refuses to dump a server NEWER than itself, so
+# the client major version is pinned to the one the db service runs -- an
+# unpinned client is a backup that silently stops working the day Postgres is
+# upgraded. age encrypts the dump to a public key whose private half lives off
+# this machine; mountpoint (util-linux) is how the USB destination is verified
+# before anything is written to it; curl posts the dead-man's-switch ping.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+       postgresql-client-16 age util-linux curl \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY docker/backup.sh docker/restore.sh /usr/local/bin/
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 
-RUN chmod +x /usr/local/bin/entrypoint.sh \
+RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/backup.sh /usr/local/bin/restore.sh \
     && mkdir -p /data/files /data/backups \
     && chown -R pwuser:pwuser /app /data
 
