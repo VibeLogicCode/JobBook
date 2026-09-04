@@ -26,7 +26,11 @@ COPY . .
 # rendered at build time would be a quote frozen at build time.
 RUN npm run build
 
-FROM mcr.microsoft.com/playwright:v1.57.0-noble AS runner
+# The tag MUST match the playwright version in package-lock.json exactly
+# (1.62.1 today). Playwright refuses to launch a browser build it did not
+# ship with, and the error surfaces only when the first PDF is requested --
+# long after the image looked fine.
+FROM mcr.microsoft.com/playwright:v1.62.1-noble AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production \
@@ -49,7 +53,17 @@ COPY --from=build /app/scripts ./scripts
 # tsx resolves the @/ alias from tsconfig, so the seed script needs it present.
 COPY --from=build /app/tsconfig.json ./tsconfig.json
 COPY --from=build /app/package.json ./package.json
-COPY --from=deps /app/node_modules ./migrate_modules
+# The full dependency tree, merged OVER the standalone one, for boot-time
+# migrations and the optional demo seed.
+#
+# It has to sit at /app/node_modules rather than in a directory of its own.
+# Node resolves a bare import relative to the FILE doing the importing, so
+# /app/scripts/seed.ts and everything under /app/src look for drizzle-orm in
+# /app/node_modules and nowhere else -- no cwd, NODE_PATH or tsconfig setting
+# changes that. Standalone's traced tree carries only what the server itself
+# imports, which is why the seed and the migrator need this.
+COPY --from=deps /app/node_modules ./node_modules
+COPY docker/drizzle.container.config.ts ./drizzle.container.config.ts
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 
 RUN chmod +x /usr/local/bin/entrypoint.sh \

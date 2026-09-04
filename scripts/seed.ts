@@ -7,7 +7,7 @@
  * data" must never be one keystroke away from wiping a real company's quotes.
  */
 import { eq, sql } from 'drizzle-orm';
-import { db, queryClient } from '@/db/client';
+import { closeDb, db } from '@/db/client';
 import {
   costCodes, customers, organization, projects, quotes, rateItems, scopeTemplateItems,
   scopeTemplates, taxRates, users,
@@ -143,4 +143,4 @@ main()
     console.error(error instanceof Error ? error.message : error);
     process.exitCode = 1;
   })
-  .finally(() => queryClient.end());
+  .finally(() => closeDb());

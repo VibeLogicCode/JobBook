@@ -4,7 +4,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const ROOT = path.resolve(import.meta.dirname, '../..');
-const SEARCH_DIRS = ['src', 'scripts', 'drizzle'];
+const SEARCH_DIRS = ['src', 'scripts', 'drizzle', 'docker'];
 /** Seed data is allowed to name a company: that is what seed data is. */
 const EXEMPT = [path.join('src', 'db', 'seed')];
 
@@ -36,7 +36,7 @@ async function* walk(dir: string): AsyncGenerator<string> {
     if (entry.isDirectory()) {
       if (entry.name === 'node_modules' || entry.name === '.next') continue;
       yield* walk(full);
-    } else if (/\.(ts|tsx|css|sql|json)$/.test(entry.name)) {
+    } else if (/\.(ts|tsx|css|sql|json|sh|md)$/.test(entry.name)) {
       yield full;
     }
   }

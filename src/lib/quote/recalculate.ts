@@ -34,7 +34,12 @@ export async function recalculateQuote(quoteId: string): Promise<void> {
       .where(and(eq(quoteLines.quoteId, quoteId), eq(quoteLines.recordStatus, 'active')))
       .orderBy(asc(quoteLines.sortOrder));
 
-    const inputs: LineInput[] = rows.map((line) => ({
+    // Keyed by line id, not by position: the write-back below matches each
+    // computed line to the row it came from. Positional matching held only
+    // while computeQuote preserved length and order, and the day something
+    // filtered a line it would write every figure onto its neighbour.
+    const inputs: (LineInput & { id: string })[] = rows.map((line) => ({
+      id: line.id,
       code: line.code,
       description: line.description,
       lineGroup: line.lineGroup,
@@ -75,8 +80,10 @@ export async function recalculateQuote(quoteId: string): Promise<void> {
 
     // Percent lines only know their value once the whole list is known, so
     // their computed totals are written back to the rows they came from.
-    for (const [index, line] of totals.lines.entries()) {
-      const row = rows[index];
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    for (const line of totals.lines) {
+      const id = (line as LineInput & { id?: string }).id;
+      const row = id ? byId.get(id) : undefined;
       if (!row) continue;
       if (row.lineCostCents === line.lineCostCents && row.lineTotalCents === line.lineTotalCents) {
         continue;

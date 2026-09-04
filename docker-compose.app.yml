@@ -8,6 +8,12 @@
 #   docker compose -f docker-compose.app.yml up -d --build
 #   open http://<this machine's LAN address>:3000
 #
+# A distinct project name, so this stack does not adopt the development
+# database container from docker-compose.yml. It did: same directory, same
+# default project, same service name -- and recreating it here without the
+# published port left every local database test unable to connect.
+name: maple-quote-app
+
 services:
   db:
     image: postgres:16-alpine

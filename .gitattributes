@@ -1,0 +1,8 @@
+# Shell scripts and Dockerfiles must keep LF endings whatever the checkout
+# platform. A CRLF entrypoint.sh fails inside the container with
+# "bad interpreter: /usr/bin/env bash^M", which reads as a missing shell rather
+# than a line-ending problem and costs an hour to find.
+*.sh text eol=lf
+Dockerfile text eol=lf
+*.yml text eol=lf
+docker/* text eol=lf

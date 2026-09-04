@@ -1,0 +1,1 @@
+Static assets live here. The directory is committed with this note because the Dockerfile copies it and an empty directory does not survive git.
