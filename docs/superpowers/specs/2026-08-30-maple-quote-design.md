@@ -1,9 +1,11 @@
-# Maple Custom Homes — Quote & Project Management System
+# Contractor Quote & Project Management System
 
 **Design document**
 Date: 2026-08-30
 Status: Awaiting review
-Client: Maple Custom Homes (maplecustomhomes.ca) — general contractor, GTA / Golden Horseshoe, Ontario
+First deployment: Maple Custom Homes (maplecustomhomes.ca) — general contractor, GTA / Golden Horseshoe, Ontario
+
+The product is white-label (section 2.1). Company identity, branding, tax rules, and document terms are configuration. Maple Custom Homes is the first tenant, not the subject of the code.
 
 ---
 
@@ -30,6 +32,16 @@ Phase 1 was chosen because the owner quotes daily. It delivers the fastest visib
 **Explicitly out of scope, permanently:** general ledger, payroll, tax filing. Those stay in QuickBooks or Xero. This system feeds them. Building bookkeeping is a compliance liability and a maintenance trap.
 
 **Out of scope for now:** subcontractor logins. Only owner, admin, and bookkeeper have accounts.
+
+### 2.1 White-label constraint
+
+The system is a product configured for one company, not an application written about one company. **No company-specific value appears anywhere in code, templates, or seed logic.** Name, logo, address, contact details, tax registration, owner name, tax rate, holdback percentage, document prefixes, and terms text are all configuration, editable in the UI by the owner.
+
+Maple Custom Homes is the first deployment, not the subject of the codebase. A build that hardcodes "Maple Custom Homes" or "13%" anywhere outside a seed file has a bug.
+
+**Tenancy: one deployment per company.** Each company gets its own container stack, its own Postgres, its own SharePoint site, and its own domain. Multi-tenancy in a shared database was rejected — it introduces an entire class of cross-tenant data leak that cannot occur when the databases are separate, and deployment is already a twenty-minute Compose operation. The `organization` table nonetheless carries an `id` so a future multi-tenant variant is an addition rather than a rewrite.
+
+A consequence worth stating: **the Ontario rules in section 6.3 become seeded defaults, not logic.** They ship as the default configuration because the first client is in Ontario. They are editable, and nothing in the calculation engine assumes them.
 
 ## 3. Architecture
 
@@ -142,12 +154,16 @@ scope_template_items
   qty_multiplier numeric(10,4) DEFAULT 1,
   is_optional bool, line_group, sort_order
 
+quote_taxes   -- snapshotted tax breakdown per quote
+  id, quote_id FK, label, rate numeric(6,5), tax_amount numeric(12,2),
+  sort_order
+
 quotes
   id, project_id FK, quote_number, version int,
   status ENUM('draft','sent','accepted','declined','expired','superseded'),
   quote_date, valid_until,
   area_sqft numeric, washroom_count int, kitchen_count int, bedroom_count int,
-  subtotal numeric(12,2), hst_rate numeric(5,4), hst_amount numeric(12,2),
+  subtotal numeric(12,2), tax_total numeric(12,2),
   total numeric(12,2), total_cost numeric(12,2), margin_pct numeric(5,2),
   terms, notes, internal_notes,
   sent_at, accepted_at, declined_at, pdf_path
@@ -161,12 +177,35 @@ quote_lines
   line_cost numeric(12,2), line_total numeric(12,2),
   is_optional bool, is_included bool, notes
 
-app_settings   -- single row
-  company_name, legal_name, hst_number, address, phone, email, website,
-  logo_path, hst_rate numeric(5,4) DEFAULT 0.13,
-  quote_validity_days int DEFAULT 30,
-  default_holdback_pct numeric(5,4) DEFAULT 0.10,
-  quote_number_prefix, next_quote_seq
+organization   -- single row per deployment; all branding and locale
+  id,
+  -- identity
+  legal_name, display_name, operating_name, tagline,
+  owner_name, owner_title,
+  logo_file_id FK files, favicon_file_id FK files, brand_color,
+  -- contact
+  address_line1, address_line2, city, province, postal_code, country,
+  phone, alt_phone, email, website,
+  -- financial and legal
+  tax_registration_number, tax_registration_label,   -- 'HST Number'
+  business_number, currency DEFAULT 'CAD', locale DEFAULT 'en-CA',
+  holdback_pct numeric(5,4), holdback_label, holdback_terms_text,
+  payment_terms_days int, payment_terms_text,
+  insurance_statement,        -- 'Fully insured and bonded'
+  -- documents
+  quote_number_prefix, next_quote_seq,
+  invoice_number_prefix, next_invoice_seq,
+  po_number_prefix, next_po_seq,
+  quote_validity_days int, quote_terms_text, document_footer_text
+  CHECK (id = 1)              -- exactly one row
+
+feature_flags   -- named toggles, one row per feature
+  key (unique), enabled bool, config jsonb, updated_at, updated_by
+  -- 'sharepoint_sync', 'receipt_ocr', 'usb_backup'
+
+tax_rates
+  id, label, rate numeric(6,5), sort_order, is_active
+  -- Ontario seeds one row: 'HST', 0.13
 
 files        -- polymorphic attachment table, one row per stored file
   id, entity_type ENUM('quote','project','customer','receipt',
@@ -277,16 +316,25 @@ Documents are React components using Tailwind print CSS. They use `@page` for ma
 
 Quote template content, taken from the live site branding: logo, "General Contracting Done Right", contact details, HST registration number, service area, and the fully insured and bonded footer.
 
-### 6.3 Ontario requirements
+### 6.3 Regional rules — configured, not coded
 
-These are built in from Phase 1 because retrofitting them is expensive.
+The capability is built in from Phase 1 because retrofitting it is expensive. The *values* are seeded configuration, because of the white-label constraint in section 2.1.
 
-- **HST at 13%**, shown as a separate line, with the HST registration number on every document. The rate is snapshotted onto each quote so historical documents stay correct if the rate ever changes.
-- **Construction Act holdback of 10%** stated in the quote terms. Holdback becomes a tracked AR bucket in Phase 4; if it is not separated there, the cash-flow view will overstate available cash by ten percent of every active job.
-- **Prompt Payment** timelines — 28 days to pay a proper invoice, 7 days onward to subcontractors — drive the Phase 4 reminder schedule. Noted here so the invoice schema anticipates it.
-- **WSIB clearance and subcontractor certificates of insurance** with expiry tracking arrive in Phase 5. Paying a subcontractor with lapsed clearance transfers liability to the general contractor.
+| Requirement | Mechanism | Ontario seed |
+|---|---|---|
+| Sales tax | `tax_rates` rows, snapshotted per quote into `quote_taxes` | One row: HST, 13% |
+| Tax registration on documents | `organization.tax_registration_number` and `..._label` | Label "HST Number" |
+| Statutory holdback | `organization.holdback_pct`, `holdback_label`, `holdback_terms_text` | Construction Act, 10% |
+| Payment timeline | `organization.payment_terms_days`, `payment_terms_text` | Prompt Payment, 28 days |
+| Insurance statement | `organization.insurance_statement` | "Fully insured and bonded" |
 
-Commercial tenant improvement work, which the site advertises, does not price by square foot. Phase 1 supports it through flat and hourly line types assembled by trade. A dedicated commercial bid mode is deferred until the owner confirms he wants one.
+Why `tax_rates` is a table rather than one rate column: Ontario has a single HST line, but British Columbia charges GST plus PST, Alberta charges GST only, and a US deployment may charge state sales tax or none at all on construction labour. A single `hst_rate` column would have to be migrated away from the first time this is deployed outside Ontario. A table with one seeded row costs almost nothing now.
+
+Tax is snapshotted onto each quote as `quote_taxes` rows, following the same rule as line rates in section 4.1. Changing the tax rate must never retroactively alter a quote already sent to a customer.
+
+Phase-4 and Phase-5 items that follow the same pattern: holdback becomes a tracked AR bucket, where failing to separate it overstates available cash by the holdback percentage of every active job. Subcontractor compliance documents — WSIB clearance in Ontario, equivalents elsewhere — become a generic expiring-document type with configurable labels rather than a WSIB-specific field.
+
+Commercial tenant improvement work, which the first client advertises, does not price by square foot. Phase 1 supports it through flat and hourly line types assembled by trade. A dedicated commercial bid mode is deferred until the owner confirms he wants one.
 
 ## 7. SharePoint mirror and sync
 
@@ -347,7 +395,7 @@ The template is **idempotent** — `Invoke-PnPSiteTemplate` is safe to re-run, s
 
 The generator also emits indexes on `pg_id` and on every foreign key column. Without them, a list past 5,000 items throws the list view threshold error on ordinary queries.
 
-**Lists created:** one per Postgres table — `users`, `customers`, `projects`, `rate_cards`, `rate_items`, `scope_templates`, `scope_template_items`, `quotes`, `quote_lines`, `app_settings`, `audit_log`.
+**Lists created:** one per Postgres table — `users`, `customers`, `projects`, `rate_cards`, `rate_items`, `scope_templates`, `scope_template_items`, `quotes`, `quote_lines`, `organization`, `feature_flags`, `tax_rates`, `quote_taxes`, `audit_log`.
 
 **Document libraries created:**
 
@@ -418,6 +466,8 @@ The client secret lives in a Docker secret, never in the image and never in git,
 | Hourly list sync | SharePoint | Microsoft | Fire, theft, flood, the whole site going away |
 | Nightly dump | SharePoint | Microsoft | Same, byte-exact |
 
+Both SharePoint rows are conditional on `feature_flags.sharepoint_sync` (section 7.0). With it off, the last two rows disappear and the USB drive is the only copy that survives loss of the internal disk — which is why the interlock in section 7.0 refuses to let both be off quietly.
+
 One artifact, three destinations. The same encrypted `pg_dump` file is written to the internal volume, copied to the USB drive, and uploaded to the `Backups` library. Not three separate backup implementations.
 
 ### 8.2 Local and USB backup
@@ -454,6 +504,8 @@ Pick by failure mode, not by habit:
 | Machine and USB both gone — fire, theft, flood | Nightly dump from SharePoint | 24 hours |
 | Dumps missing, corrupt, or stale | **Rebuild from SharePoint lists** | 1 hour |
 
+The last two rows require SharePoint sync to be enabled. A deployment with it off has no disaster path beyond the USB drive, and the operator needs to know that before the disaster, not during it.
+
 The USB drive is the working restore path and handles almost every realistic failure. SharePoint is the disaster path. Note the last row: if the dumps themselves are bad, the list rebuild still has a 1-hour recovery point and is the better option than an old dump.
 
 ### 8.4 Rebuilding from SharePoint
@@ -463,7 +515,7 @@ The last resort, and the only path that survives loss of the site itself. This i
 
 1. Authenticate app-only, same credentials as the sync.
 2. Read every list, paging through Graph.
-3. Insert in foreign-key dependency order: `users`, `app_settings`, `customers`, `projects`, `rate_cards`, `rate_items`, `scope_templates`, `scope_template_items`, `quotes`, `quote_lines`, `files`, `audit_log`.
+3. Insert in foreign-key dependency order: `users`, `organization`, `feature_flags`, `tax_rates`, `customers`, `projects`, `rate_cards`, `rate_items`, `scope_templates`, `scope_template_items`, `quotes`, `quote_lines`, `quote_taxes`, `files`, `audit_log`.
 4. Download every library file to local disk and reconcile `files.storage_path` against `sp_drive_item_id`.
 5. Rebuild `sync_state` watermarks from the maximum `pg_updated_at` per table, so the first sync after recovery does not resend the entire database.
 6. Verify: compare row counts per table against the source lists, and report any mismatch as a failure rather than a warning.
@@ -483,6 +535,20 @@ Silent backup failure is the normal way backups fail. Every mechanism reports st
 
 **A backup that has never been restored is not a backup.** A scripted restore drill against a clean container is part of the Phase 1 definition of done, not a follow-up task.
 
+### 8.6 First-run setup
+
+White-labelling is only real if standing up a new company does not require SQL. A fresh deployment with an empty database redirects to a setup wizard, completable by the owner:
+
+1. **Organization** — legal and display name, operating name, tagline, owner name, address, phone, email, website.
+2. **Branding** — logo and favicon upload, brand colour. Logo is stored through the `files` table and inlined as a data URI when rendering PDFs, so document generation never depends on an authenticated fetch.
+3. **Financial** — currency, locale, tax registration number and its label, one or more tax rates, holdback percentage and terms, payment terms.
+4. **Documents** — number prefixes and starting sequences, quote validity days, terms and footer text.
+5. **Features** — SharePoint sync on or off; if on, collect Graph credentials and validate them before completing. USB backup path, validated as mounted.
+6. **First user** — the signed-in identity becomes `owner`.
+7. **Rate card** — start from a seeded placeholder card or an empty one.
+
+The wizard writes the `organization` row, `tax_rates`, `feature_flags`, and the first `users` row. It runs once; afterwards every field remains editable under Settings, owner role only.
+
 ## 9. Testing
 
 - **Unit** — quote calculation engine. Line type math, percent-line ordering, margin against markup, HST rounding, template quantity derivation. This is where money bugs live, so coverage here is high.
@@ -491,6 +557,8 @@ Silent backup failure is the normal way backups fail. Every mechanism reports st
 - **Sync** — against a real SharePoint dev site. Covers upsert idempotency (running the same batch twice produces no duplicates), void propagation, watermark non-advancement on partial failure, chunked upload of a file over 4MB, and 429 backoff behaviour.
 - **Round trip** — the decisive test. Seed a database, sync it, drop it entirely, restore from SharePoint, and assert the result is equivalent row for row and file for file. This is the test that proves the recovery story is real rather than aspirational.
 - **E2E (Playwright)** — build a quote from a template, adjust lines, generate the PDF, assert it renders with the correct total.
+- **White-label** — a test greps the built application, seed-file directory excluded, for the first client's name, domain, phone number, and the literal `0.13`. Any hit fails the build. This is the only reliable way to keep hardcoded values out over time.
+- **Feature flag** — the full suite runs a second time with `sharepoint_sync` disabled and no Graph credentials configured, asserting the app boots, quoting works end to end, and nothing reaches for Graph.
 - **Backup** — mount-detection is tested by unmounting the target and asserting the job aborts loudly rather than writing to the underlying path. Retention pruning, dump verification, and `age` round-trip encryption are each covered.
 - **Restore drill** — scripted, run against a clean container, verified in CI. Covers both the dump path and the SharePoint rebuild path.
 
@@ -516,6 +584,11 @@ Silent backup failure is the normal way backups fail. Every mechanism reports st
 18. The USB drive is unmounted mid-schedule; the backup job aborts with a visible error rather than silently writing to the internal disk.
 19. Uploaded files and generated PDFs are present on the USB drive, not only the database dump.
 20. Staleness alerting fires: stop the sync, confirm the admin banner and the email arrive.
+21. A fresh deployment against an empty database completes the setup wizard end to end and produces a working, fully branded quote PDF with no SQL and no file editing.
+22. A second deployment is stood up under a different fictional company name, address, tax label, tax rate, and logo. Its quote PDF shows none of the first company's details.
+23. The app boots and quotes correctly with `sharepoint_sync` disabled and no Graph credentials present.
+24. Enabling `sharepoint_sync` on a populated database backfills every row, and enabling it a second time creates no duplicates.
+25. Disabling `sharepoint_sync` while no USB backup path is configured surfaces the single-copy warning.
 
 ## 11. Open items
 
