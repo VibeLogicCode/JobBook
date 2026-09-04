@@ -6,3 +6,4 @@ node_modules/
 *.pem
 *.pfx
 backups/
+dev-db/
