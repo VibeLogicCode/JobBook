@@ -33,7 +33,13 @@ export const files = pgTable('files', {
 export const auditLog = pgTable('audit_log', {
   id: uuid('id').primaryKey().defaultRandom(),
   tableName: text('table_name').notNull(),
-  recordId: uuid('record_id').notNull(),
+  /**
+   * Text, not uuid. The log is polymorphic across every audited table, and
+   * `organization` has an integer primary key by design (CHECK id = 1). A uuid
+   * column silently could not record the one table where every change is a
+   * branding, tax or holdback setting -- the insert failed outright.
+   */
+  recordId: text('record_id').notNull(),
   action: text('action').notNull(),
   changedBy: uuid('changed_by'),
   changedAt: timestamp('changed_at', { withTimezone: true }).notNull().defaultNow(),
@@ -47,7 +53,8 @@ export const auditLog = pgTable('audit_log', {
  */
 export const spItemMap = pgTable('sp_item_map', {
   tableName: text('table_name').notNull(),
-  pgId: uuid('pg_id').notNull(),
+  /** Text for the same reason as audit_log.record_id: organization.id is an integer. */
+  pgId: text('pg_id').notNull(),
   spItemId: text('sp_item_id').notNull(),
   syncedAt: timestamp('synced_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [primaryKey({ columns: [t.tableName, t.pgId] })]);

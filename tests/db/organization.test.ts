@@ -1,11 +1,11 @@
-import { sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { db } from '@/db/client';
-import { documentSequences, organization, settings, taxRates, users } from '@/db/schema';
+import { auditLog, documentSequences, organization, settings, taxRates, users } from '@/db/schema';
 
 beforeEach(async () => {
   await db.execute(
-    sql`truncate table tax_rates, users, organization, document_sequences, settings restart identity cascade`,
+    sql`truncate table audit_log, tax_rates, users, organization, document_sequences, settings restart identity cascade`,
   );
 });
 
@@ -40,6 +40,16 @@ describe('organization', () => {
     await db.insert(organization).values({ id: 1, legalName: 'Acme Ltd', displayName: 'Acme' });
     const [row] = await db.select().from(organization);
     expect(row?.taxDeferredOnHoldback).toBe(true);
+  });
+
+  it('is audited, despite having an integer primary key', async () => {
+    // audit_log.record_id is text for exactly this reason. As uuid it could not
+    // record the one table where every change is a branding, tax or holdback
+    // setting, and the insert failed outright.
+    await db.insert(organization).values({ id: 1, legalName: 'Acme Ltd', displayName: 'Acme' });
+    await db.update(organization).set({ phone: '555-0100' }).where(eq(organization.id, 1));
+    const entries = await db.select().from(auditLog).where(eq(auditLog.recordId, '1'));
+    expect(entries.map((e) => e.action)).toEqual(['insert', 'update']);
   });
 
   it('holds no document sequence counters of its own', async () => {

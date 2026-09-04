@@ -72,7 +72,7 @@ declare
 begin
   if tg_op = 'INSERT' then
     insert into audit_log (table_name, record_id, action, changed_by, diff)
-    values (tg_table_name, new.id, 'insert', coalesce(actor, new.created_by), to_jsonb(new));
+    values (tg_table_name, new.id::text, 'insert', coalesce(actor, new.created_by), to_jsonb(new));
     return new;
   end if;
 
@@ -94,7 +94,7 @@ begin
   insert into audit_log (table_name, record_id, action, changed_by, diff)
   values (
     tg_table_name,
-    new.id,
+    new.id::text,
     case when new.record_status = 'void' and old.record_status <> 'void'
       then 'void' else 'update' end,
     actor,
