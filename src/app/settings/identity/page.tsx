@@ -1,4 +1,5 @@
 import { saveIdentity } from '@/app/settings/actions';
+import { LogoField } from '@/app/settings/identity/logo/LogoField';
 import { loadSettings, readOnlyNote } from '@/app/settings/load';
 import { ActionForm } from '@/components/settings/ActionForm';
 import { FieldGrid, ReadOnlyField, TextField } from '@/components/settings/Fields';
@@ -120,39 +121,11 @@ export default async function IdentitySettingsPage() {
         title="Logo and favicon"
         description="Printed on the letterhead of every document, and shown in the browser tab."
       >
-        {/*
-          Left disabled rather than faked. The upload needs the file store --
-          a row in `files` plus a byte range on local disk, served by id from a
-          UUID filename -- which this screen does not own. A field that
-          accepted a file and dropped it would be worse than one that says so.
-        */}
-        <FieldGrid>
-          <div className="flex flex-col gap-1 sm:col-span-2">
-            <label htmlFor="logo" className="t-small font-semibold">
-              Logo
-            </label>
-            <input
-              id="logo"
-              name="logo"
-              type="file"
-              disabled
-              accept="image/png,image/jpeg"
-              aria-describedby="logo-hint"
-              className="field opacity-60"
-            />
-            <p id="logo-hint" className="t-small text-subtle">
-              PNG or JPEG. SVG is refused deliberately: an SVG can carry script, and one
-              served from this application&apos;s own origin would run with the same rights as
-              the application — a cross-site scripting vector on every page that shows the
-              logo.
-            </p>
-          </div>
-        </FieldGrid>
+        <LogoField allowed={context.allowed} disabledNote={readOnlyNote(context, OWNER_ONLY)} />
         <div className="mt-4">
-          <Notice tone="warning" title="Upload is not wired yet">
-            Storing the file needs the file store, which is not part of this screen. The
-            columns exist and the restriction above is the rule the upload will enforce.
-            {org?.logoFileId ? ' A logo is already on file for this deployment.' : ''}
+          <Notice tone="warning" title="The favicon upload is not wired yet">
+            The logo above stores through the file store; the favicon does not yet. The column
+            exists and the same PNG-or-JPEG restriction is the rule it will enforce.
             {org?.faviconFileId ? ' A favicon is already on file.' : ''}
           </Notice>
         </div>

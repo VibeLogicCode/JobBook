@@ -2,6 +2,7 @@ import { eq } from 'drizzle-orm';
 import { notFound } from 'next/navigation';
 import { db } from '@/db/client';
 import { organization } from '@/db/schema';
+import { logoDataUri } from '@/lib/documents/branding';
 import { loadQuote } from '@/lib/quote/load';
 import { formatCents, formatQty, formatRate } from '@/lib/money/format';
 
@@ -26,6 +27,11 @@ export default async function PrintQuote({ params }: { params: Promise<{ id: str
   const [org] = await db.select().from(organization).where(eq(organization.id, 1));
   if (!org) notFound();
 
+  // Inlined, because Chromium fetches this page with only the render secret and
+  // would get a 401 from the authenticated file route -- the customer would
+  // receive a contract with a broken image where the letterhead should be.
+  const logo = await logoDataUri(org.logoFileId);
+
   const { quote, lines, taxes } = data;
   const included = lines.filter((line) => line.isIncluded);
   const upgrades = lines.filter((line) => !line.isIncluded);
@@ -48,6 +54,11 @@ export default async function PrintQuote({ params }: { params: Promise<{ id: str
 
       <header className="letterhead">
         <div>
+          {logo ? (
+            // eslint-disable-next-line @next/next/no-img-element -- a data URI
+            // must not go through the image optimiser, which would fetch it.
+            <img src={logo} alt={org.displayName} className="logo" />
+          ) : null}
           <h1 className="company">{org.displayName}</h1>
           {org.tagline ? <p className="tagline">{org.tagline}</p> : null}
           <p className="contact">
@@ -234,6 +245,7 @@ const DOCUMENT_CSS = `
 .doc h1, .doc h2, .doc h3 { font-family: 'IBM Plex Serif', Georgia, serif; margin: 0; }
 .doc .num { font-family: 'IBM Plex Mono', monospace; font-variant-numeric: tabular-nums; }
 .letterhead { display: flex; justify-content: space-between; gap: 12mm; border-bottom: 1.5pt solid #16162b; padding-bottom: 4mm; }
+.logo { max-height: 22mm; max-width: 70mm; margin-bottom: 3mm; }
 .company { font-size: 20pt; }
 .tagline { font-style: italic; color: #5a5a72; margin: 1mm 0 2mm; }
 .contact { color: #5a5a72; font-size: 9pt; margin: 0.5mm 0; }

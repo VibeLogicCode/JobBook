@@ -15,7 +15,15 @@ import { entityTypeEnum } from '@/db/enums';
 export const files = pgTable('files', {
   id: uuid('id').primaryKey().defaultRandom(),
   entityType: entityTypeEnum('entity_type').notNull(),
-  entityId: uuid('entity_id').notNull(),
+  /**
+   * The record this file belongs to, or NULL when it belongs to the tenant
+   * itself -- the logo and the favicon.
+   *
+   * Nullable rather than a sentinel: `organization` has an integer primary key
+   * by design, so there is no UUID to point at, and a nil UUID standing for
+   * "not really a reference" is a value somebody eventually joins on.
+   */
+  entityId: uuid('entity_id'),
   fileName: text('file_name').notNull(),
   mimeType: text('mime_type').notNull(),
   sizeBytes: bigint('size_bytes', { mode: 'number' }).notNull(),

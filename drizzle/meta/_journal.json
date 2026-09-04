@@ -50,6 +50,13 @@
       "when": 1788536870949,
       "tag": "0006_auth_triggers_and_owner_guard",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1788542011658,
+      "tag": "0007_organization_owned_files",
+      "breakpoints": true
     }
   ]
 }

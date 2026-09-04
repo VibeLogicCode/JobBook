@@ -15,3 +15,8 @@ tests/ops/tenant-literals.local.json
 # TypeScript's incremental build cache. Tracked once by accident: it is rewritten
 # by every typecheck, so it turns every run into a dirty tree.
 tsconfig.tsbuildinfo
+
+# Uploaded files in development. FILES_ROOT is /data/files in the container and
+# a path under the repo otherwise, so a dev logo upload would otherwise show up
+# as an untracked binary.
+.data/
