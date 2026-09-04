@@ -239,6 +239,7 @@ export default async function ProjectPage({
             projectId={project.id}
             stage={project.stage}
             lostReason={project.lostReason}
+            hasAcceptedQuote={accepted.length > 0}
           />
         </Panel>
       ) : null}

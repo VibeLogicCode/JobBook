@@ -80,3 +80,47 @@ export const filingFrequencyEnum = pgEnum('filing_frequency', ['annual', 'quarte
  * both -- which is why it is nullable rather than defaulted.
  */
 export const loginMethodEnum = pgEnum('login_method', ['google', 'microsoft', 'apple']);
+
+/**
+ * Customer invoicing (spec 4.3 and 4.4).
+ *
+ * `invoice_kind` mirrors `InvoiceKind` in lib/invoice/types.ts member for
+ * member. The engine declares its own union because it is pure and has to be
+ * testable without a schema; this is the half the database enforces, and the
+ * two lists drifting is the failure the mirroring comment there guards against.
+ */
+export const invoiceKindEnum = pgEnum('invoice_kind', [
+  'deposit', 'progress', 'final', 'holdback_release', 'change_order',
+]);
+
+/**
+ * Spec 4.3 lists 'overdue' and 'void' as members too. Both are dropped, for the
+ * reasons this codebase has already settled elsewhere.
+ *
+ * 'overdue' derives from `due_date` against today, exactly as 'expired' derives
+ * from `valid_until` on a quote -- and a stored value is wrong the moment the
+ * clock passes it, with nobody to notice. 'void' is `record_status`; a second
+ * place to say a record is void is a second place for the two to disagree.
+ *
+ * 'partial' and 'paid' stay, but nothing in this layer writes them: spec 4.5
+ * derives an invoice's payment status from the sum of its payments, and the
+ * payments table arrives in Phase 3. They are here so that layer has somewhere
+ * to land rather than needing a migration to say what it already knows.
+ */
+export const invoiceStatusEnum = pgEnum('invoice_status', [
+  'draft', 'sent', 'partial', 'paid',
+]);
+
+/** Receivable is withheld from us; payable is what we withhold from a sub. */
+export const holdbackDirectionEnum = pgEnum('holdback_direction', ['receivable', 'payable']);
+export const counterpartyTypeEnum = pgEnum('counterparty_type', ['customer', 'vendor']);
+
+/**
+ * What one holdback ledger row records.
+ *
+ * The ledger is a list of events, not a running balance -- see the note on
+ * `holdbackLedger`. Without this column the event kind would have to be
+ * inferred from which of the two amount columns is non-zero, and a corrective
+ * accrual of zero cents would then be unreadable either way.
+ */
+export const holdbackEntryKindEnum = pgEnum('holdback_entry_kind', ['accrual', 'release']);

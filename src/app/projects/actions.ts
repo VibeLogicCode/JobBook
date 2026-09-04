@@ -1,14 +1,19 @@
 'use server';
 
-import { eq } from 'drizzle-orm';
+import { and, count, desc, eq } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
 import { db } from '@/db/client';
-import { customers, projects } from '@/db/schema';
+import { customers, projects, quotes, stageHistory } from '@/db/schema';
 import { allocateDocumentNumber } from '@/lib/quote/numbering';
 import type { FormResult } from '@/components/detail/form-state';
 import { guard } from '@/lib/auth/guard';
+import {
+  PROJECT_STAGES,
+  type ProjectStage,
+  stagesOpenTo,
+} from '@/components/detail/labels';
 
 const optionalText = (max: number) =>
   z
@@ -84,12 +89,21 @@ const stageFields = withId
       'choose a stage',
     ),
     lostReason: optionalText(300),
+    holdReason: optionalText(300),
   })
-  // A lost job with no reason recorded teaches nothing. This is the one stage
-  // that takes an explanation, and it is never remembered a week later.
+  // A lost bid with no reason recorded teaches nothing, and it is never
+  // remembered a week later.
   .refine(
     (value) => value.stage !== 'lost' || value.lostReason !== null,
     'say why it was lost',
+  )
+  // On hold is the stage a job disappears into. Without a reason, three months
+  // later nobody knows whether it is waiting on a permit, on the customer's
+  // financing, or on a decision somebody owes an answer to -- and the ones
+  // waiting on us are the ones worth chasing.
+  .refine(
+    (value) => value.stage !== 'on_hold' || value.holdReason !== null,
+    'say what it is waiting on',
   );
 
 function fields(formData: FormData): Record<string, string> {
@@ -197,7 +211,7 @@ export async function setProjectStage(
 ): Promise<FormResult> {
   const parsed = stageFields.safeParse(fields(formData));
   if (!parsed.success) return { ok: false, error: firstProblem(parsed.error) };
-  const { id, stage, lostReason } = parsed.data;
+  const { id, stage, lostReason, holdReason } = parsed.data;
 
   try {
     const allowed = await guard('quote:write');
@@ -210,13 +224,82 @@ export async function setProjectStage(
     }
     if (existing.stage === stage) return { ok: true };
 
-    await db
-      .update(projects)
-      // The reason is written only on a move INTO lost. A move back out
-      // leaves the recorded reason alone -- it is what happened -- and the
-      // screen shows it only while the job is actually lost.
-      .set({ stage, ...(stage === 'lost' ? { lostReason } : {}) })
-      .where(eq(projects.id, id));
+    // Which stages are legal depends on whether this record has been won, and
+    // that is a database question rather than a form question: the dropdown
+    // that produced this value is a hint, and a stale tab or a hand-made POST
+    // carries whatever it likes.
+    //
+    // `won` is refused outright. A job exists because a quote on it was
+    // accepted; setting the stage by hand would manufacture a job with no
+    // accepted quote behind it -- no contract value, no agreed lines, nothing
+    // to invoice against -- and the stage history would show it winning
+    // without ever having been quoted.
+    const [{ accepted } = { accepted: 0 }] = await db
+      .select({ accepted: count(quotes.id) })
+      .from(quotes)
+      .where(
+        and(
+          eq(quotes.projectId, id),
+          eq(quotes.status, 'accepted'),
+          eq(quotes.recordStatus, 'active'),
+        ),
+      );
+    const isJob = Number(accepted) > 0;
+
+    if (stage === 'won') {
+      return {
+        ok: false,
+        error:
+          'Winning is not a stage you set. Accept a quote on this opportunity — that is what ' +
+          'turns it into a job, and it also records which lines the customer agreed to.',
+      };
+    }
+
+    if (!stagesOpenTo(isJob, existing.stage as ProjectStage).includes(stage)) {
+      return {
+        ok: false,
+        error: isJob
+          ? `This is a job: work has been won on it, so it cannot go back to ${
+              PROJECT_STAGES[stage]
+            }. Void the accepted quote if it was accepted in error.`
+          : `This is an opportunity: nothing has been won on it yet, so it cannot be ${
+              PROJECT_STAGES[stage]
+            }. Accept a quote first.`,
+      };
+    }
+
+    // The reason lands on the stage_history ROW, not in a column on the
+    // project, because a job can go on hold three times for three different
+    // reasons and one column would overwrite the history. `lost_reason` stays
+    // on the project as well: it is the current reason the screen shows while
+    // a bid is lost, and it predates this.
+    //
+    // stage_history rows are written by a trigger, so the note is applied to
+    // the row the trigger just created, inside the same transaction that
+    // caused it.
+    const note = stage === 'lost' ? lostReason : stage === 'on_hold' ? holdReason : null;
+
+    await db.transaction(async (tx) => {
+      await tx
+        .update(projects)
+        // The reason is written only on a move INTO lost. A move back out
+        // leaves the recorded reason alone -- it is what happened -- and the
+        // screen shows it only while the bid is actually lost.
+        .set({ stage, ...(stage === 'lost' ? { lostReason } : {}) })
+        .where(eq(projects.id, id));
+
+      if (note) {
+        const [written] = await tx
+          .select({ id: stageHistory.id })
+          .from(stageHistory)
+          .where(eq(stageHistory.projectId, id))
+          .orderBy(desc(stageHistory.changedAt), desc(stageHistory.id))
+          .limit(1);
+        if (written) {
+          await tx.update(stageHistory).set({ note }).where(eq(stageHistory.id, written.id));
+        }
+      }
+    });
   } catch (error) {
     return { ok: false, error: failureText(error) };
   }

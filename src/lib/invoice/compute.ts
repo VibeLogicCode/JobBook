@@ -1,5 +1,9 @@
 import { holdbackDeltaCents, holdbackOutstandingCents } from '@/lib/invoice/holdback';
-import { FULL_PERCENT_TEN_THOU, earnedToDateCents } from '@/lib/invoice/progress';
+import {
+  FULL_PERCENT_TEN_THOU,
+  assertPercentTenThou,
+  earnedToDateCents,
+} from '@/lib/invoice/progress';
 import { computeInvoiceTaxes, invoiceTaxableBaseCents } from '@/lib/invoice/tax';
 import type {
   ComputedInvoice,
@@ -240,6 +244,19 @@ function assertRequestShape(request: InvoiceRequest): void {
   }
   if (!needsPercent && request.percentCompleteTenThou !== undefined) {
     throw new Error(`a ${request.kind} invoice does not bill by percent complete`);
+  }
+  if (needsPercent) {
+    // The range check lives here because this is the only path a caller
+    // reaches. `progressAmountCents` asserts it too, but `billedFigures` calls
+    // `earnedToDateCents` directly, so nothing on THIS path bounded the figure:
+    // a progress request at 15000 (150%) against a $100,000 contract returned a
+    // $150,000 draw and a `nextState` billed to $150,000, with no error and a
+    // document internally consistent enough that nobody would question it.
+    //
+    // Over-billing a contract is not a rounding complaint. It is an invoice for
+    // work that was never agreed, and the contract is the only thing that says
+    // so.
+    assertPercentTenThou(request.percentCompleteTenThou!, 'percent complete');
   }
   if (needsAmount && request.amountCents === undefined) {
     throw new Error(`a ${request.kind} invoice needs an amount`);

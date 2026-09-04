@@ -459,8 +459,13 @@ export async function contractValueCents(projectId: string): Promise<number> {
  * function and a comment. The invoice engine takes this one; the figure on the
  * job screen is the other.
  */
-export async function contractSubtotalCents(projectId: string): Promise<number> {
-  const rows = await db
+export async function contractSubtotalCents(projectId: string, tx?: Tx): Promise<number> {
+  // Takes an optional executor for the same reason `loadTaxRatesFor` does: an
+  // invoice has to read the contract INSIDE the transaction that writes it, and
+  // a function that can only use its own connection forces the caller to keep
+  // a second copy of this query. Two copies of the sum that every invoice bills
+  // against is not a duplication worth having.
+  const rows = await (tx ?? db)
     .select({ subtotal: quotes.subtotalCents })
     .from(quotes)
     .where(

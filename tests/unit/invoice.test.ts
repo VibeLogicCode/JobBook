@@ -323,6 +323,40 @@ describe('invoice kinds', () => {
   });
 });
 
+describe('a percentage outside 0-100 is refused on the path callers use', () => {
+  /**
+   * A regression, and a nasty one: `progressAmountCents` asserted the range,
+   * but `computeInvoice` reaches `earnedToDateCents` through `billedFigures`
+   * and never went near that assertion. So the only bounded path was the one
+   * the tests called and not the one the application called.
+   *
+   * At 150% on a $100,000 contract it returned a $150,000 draw and a state
+   * billed to $150,000, with no error anywhere -- an invoice for work that was
+   * never agreed, internally consistent enough that nothing would look wrong.
+   */
+  it('refuses a progress invoice above 100%', () => {
+    expect(() =>
+      computeInvoice(state(), request({ percentCompleteTenThou: 15000n }), [HST], DEFERRED),
+    ).toThrow(/percent complete/i);
+  });
+
+  it('refuses a negative percentage', () => {
+    expect(() =>
+      computeInvoice(state(), request({ percentCompleteTenThou: -1n }), [HST], DEFERRED),
+    ).toThrow(/percent complete/i);
+  });
+
+  it('still allows exactly 100%', () => {
+    const invoice = computeInvoice(state(), request({ percentCompleteTenThou: FULL }), [HST], DEFERRED);
+    expect(invoice.subtotalCents).toBe(CONTRACT);
+  });
+
+  it('still allows exactly 0%, which bills nothing', () => {
+    const invoice = computeInvoice(state(), request({ percentCompleteTenThou: 0n }), [HST], DEFERRED);
+    expect(invoice.subtotalCents).toBe(0);
+  });
+});
+
 describe('a deposit', () => {
   it('charges tax in full when it is issued', () => {
     const invoice = computeInvoice(

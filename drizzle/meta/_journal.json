@@ -57,6 +57,13 @@
       "when": 1788542011658,
       "tag": "0007_organization_owned_files",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1788550210146,
+      "tag": "0008_customer_invoicing",
+      "breakpoints": true
     }
   ]
 }

@@ -102,8 +102,27 @@ export function AppShell({
             last cell end up a head-turn apart. The cap is generous because a
             wide worksheet genuinely wants the room; the forms narrow further
             themselves. */}
-        <main className="mx-auto min-w-0 w-full max-w-[100rem] flex-1 pb-20 sm:pb-0">
+        {/* The bottom clearance is a MARGIN on the last box rather than
+            padding on `main`.
+
+            `main` is `flex-1` inside a column flex parent, so the flex
+            algorithm decides its height and its content overflows it on a long
+            page -- padding-bottom then sits above the overflow instead of
+            below the last element, which is why 80px of it did nothing and the
+            fixed tab bar covered the acceptance band's buttons entirely. They
+            were not merely hard to hit: a hit test at their centre returned a
+            nav link, so on a phone the button that wins a job could not be
+            pressed at all.
+
+            The margin is on a spacer sibling, which cannot be swallowed the
+            same way, and it clears the bar plus the home-indicator inset. */}
+        <main className="mx-auto min-w-0 w-full max-w-[100rem] flex-1">
           {children}
+          <div
+            aria-hidden
+            className="no-print h-20 sm:hidden"
+            style={{ height: 'calc(5rem + env(safe-area-inset-bottom))' }}
+          />
         </main>
 
         {/* Bottom tabs are a second presentation of the same destinations, so

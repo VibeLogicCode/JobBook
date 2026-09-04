@@ -392,14 +392,55 @@
       content: none;
     }
 
+    /* A row emits a grid item for every column, so a cell this row has nothing
+       to put in -- the action column of a quote nobody may edit any more, a
+       rate carrying no cost code -- was still charged its min-height, its rule
+       and its gap, and still printed its data-label against no value. Twenty
+       of those down a worksheet is most of a phone screen of blank card.
+
+       Keyed on :empty rather than on a class the component sets, because a
+       component that decides to skip the cell is the second render path R5
+       forbids; and not on :nth-child of the columns that are usually blank,
+       because usually-blank is this row's data talking, not the column's.
+
+       :empty is also the only test here that cannot swallow a figure: it reads
+       child nodes, so $0.00, a bare 0 and the em-dash placeholder each hold a
+       text node and stay put. A cell padded with a literal space or &nbsp;
+       would not -- it would survive as a labelled blank -- which is why
+       tests/ops/stacked-table.test.ts holds the markup to a real value or
+       nothing at all. */
+    .data-table--stack tbody td:empty {
+      display: none;
+    }
+
     .data-table--stack .group-band td {
       position: static;
       background: var(--surface-3);
+      min-height: 0;
+      padding: 0;
     }
 
+    /* A band is a heading: a trade and its total, nothing else. Wearing the
+       card's border, radius and 12px of padding it read as a record with one
+       field in it, and six of them down a phone screen made the trades look
+       like lines. A full-bleed strip instead.
+
+       Its padding goes to zero rather than being trimmed because the
+       disclosure button inside is already the 44px target and sets the height;
+       buying the same 24px back off the button is what would cost a gloved
+       thumb the tap. */
     .data-table--stack .group-band {
       background: var(--surface-3);
       border-color: var(--line-strong);
+      padding-block: 0;
+      border-radius: 0;
+      border-inline-width: 0;
+    }
+
+    /* The first card sits against its band, so the band reads as owning the
+       rows under it rather than floating between two trades. */
+    .data-table--stack tbody .group-band + tr {
+      margin-top: 0;
     }
   }
 

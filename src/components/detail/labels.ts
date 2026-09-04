@@ -72,6 +72,49 @@ export const PROJECT_STAGES: Record<ProjectStage, string> = {
  * customer who bought one basement in 2019 could never be closed out.
  */
 /**
+ * Which stages a record may be in, decided by whether it has been won.
+ *
+ * A job cannot be at `quoting`, and an opportunity cannot be `in_progress`:
+ * they are stages of two different halves of one life, and offering all nine
+ * in one dropdown invites a won job back to "quote sent", which would leave a
+ * job with an accepted quote sitting in a pre-sale stage and its stage history
+ * saying it un-won itself.
+ *
+ * `won` is deliberately absent from BOTH lists. It is not a stage anybody
+ * types -- it is what accepting a quote does. A job does not exist until a
+ * quote on it is won, so a dropdown that can set `won` can manufacture a job
+ * with no accepted quote and therefore no contract value, no lines and nothing
+ * to invoice against. It stays visible as the current stage when the record is
+ * already there; it is just never a destination.
+ *
+ * `lost` belongs only to an opportunity. Abandoning work already under
+ * contract is not the same event as losing a bid, and folding them together
+ * makes the win rate a number nobody can trust.
+ */
+export const OPPORTUNITY_STAGES: ProjectStage[] = [
+  'lead', 'site_visit', 'quoting', 'quote_sent', 'lost', 'on_hold',
+];
+
+export const JOB_STAGES: ProjectStage[] = ['in_progress', 'complete', 'on_hold'];
+
+/**
+ * The stages this record may MOVE to, plus wherever it already is.
+ *
+ * The current stage is always included even when it is not a legal
+ * destination -- otherwise a record sitting at `won` renders a dropdown whose
+ * displayed value is not among its options, and the browser silently shows
+ * the first one instead, so the control lies about the current state before
+ * anybody touches it.
+ */
+export function stagesOpenTo(
+  hasAcceptedQuote: boolean,
+  current: ProjectStage,
+): ProjectStage[] {
+  const allowed = hasAcceptedQuote ? JOB_STAGES : OPPORTUNITY_STAGES;
+  return allowed.includes(current) ? allowed : [current, ...allowed];
+}
+
+/**
  * Opportunity or job -- the same row, named for where it is in its life.
  *
  * Derived from whether an accepted quote exists, NOT from the stage. Stage
