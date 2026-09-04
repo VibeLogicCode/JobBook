@@ -47,6 +47,13 @@ npm test                      # unit, database, and integration
 npm run typecheck
 ```
 
+**One test run at a time.** The database suites truncate shared tables, so two
+concurrent runs against the same `quote_test` deadlock: one holds an
+`AccessExclusiveLock` for the truncate while the other holds a row lock through
+the audit trigger. The failures look like logic bugs, land in whichever file
+lost the race, and vanish on a re-run. `fileParallelism` is already off inside
+a run; this is about not starting a second one.
+
 The test suite connects to `TEST_DATABASE_URL`, not `DATABASE_URL`. Database
 suites truncate tables, so a client that only knew `DATABASE_URL` would empty
 the development database on the first run. Create it once:

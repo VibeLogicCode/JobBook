@@ -202,8 +202,9 @@ export async function setProjectStage(
 
     await db
       .update(projects)
-      // The reason is only cleared by moving out of `lost`, never by a move
-      // into another stage that happens to post an empty field.
+      // The reason is written only on a move INTO lost. A move back out
+      // leaves the recorded reason alone -- it is what happened -- and the
+      // screen shows it only while the job is actually lost.
       .set({ stage, ...(stage === 'lost' ? { lostReason } : {}) })
       .where(eq(projects.id, id));
   } catch (error) {

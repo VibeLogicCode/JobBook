@@ -16,6 +16,8 @@ import {
 
 export const dynamic = 'force-dynamic';
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export default async function CustomerPage({
   params,
   searchParams,
@@ -25,6 +27,10 @@ export default async function CustomerPage({
 }) {
   const { id } = await params;
   const { edit } = await searchParams;
+
+  // A malformed id is a wrong URL, not a server fault. Postgres rejects a
+  // non-uuid outright, so without this the answer to a typo is a 500.
+  if (!UUID.test(id)) notFound();
 
   const [customer] = await db.select().from(customers).where(eq(customers.id, id));
   if (!customer) notFound();

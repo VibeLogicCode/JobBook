@@ -17,6 +17,8 @@ import {
 
 export const dynamic = 'force-dynamic';
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export default async function ProjectPage({
   params,
   searchParams,
@@ -26,6 +28,10 @@ export default async function ProjectPage({
 }) {
   const { id } = await params;
   const { edit } = await searchParams;
+
+  // A malformed id is a wrong URL, not a server fault. Postgres rejects a
+  // non-uuid outright, so without this the answer to a typo is a 500.
+  if (!UUID.test(id)) notFound();
 
   const [job] = await db
     .select({
@@ -138,7 +144,7 @@ export default async function ProjectPage({
         </p>
       </section>
 
-      {project.lostReason ? (
+      {project.stage === 'lost' && project.lostReason ? (
         <p className="rounded-[6px] border border-line bg-surface-2 px-4 py-3 t-small">
           <span className="text-muted">Lost because: </span>
           {project.lostReason}

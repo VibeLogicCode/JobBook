@@ -6,20 +6,17 @@
  */
 export function Panel({
   title,
-  action,
   children,
   className = '',
 }: {
   title: string;
-  action?: React.ReactNode;
   children: React.ReactNode;
   className?: string;
 }) {
   return (
     <section className={`rounded-[6px] border border-line bg-surface ${className}`.trim()}>
-      <header className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-line px-4 py-2">
+      <header className="border-b border-line px-4 py-2">
         <h2 className="t-heading">{title}</h2>
-        {action}
       </header>
       <div className="px-4 py-3">{children}</div>
     </section>

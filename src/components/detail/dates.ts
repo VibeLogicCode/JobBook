@@ -10,6 +10,9 @@
  * one only decides what a chip says, so it never needs a round trip.
  */
 export function tenantIsoToday(timeZone: string): string {
+  // The parts are read back by type, so this locale only picks the numbering
+  // system, never the order or the separators. The tenant's own locale governs
+  // anything a person actually reads.
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone,
     year: 'numeric',
