@@ -218,16 +218,23 @@ export function Worksheet({
                     Accepted
                   </button>
                 ) : null}
-                <button
-                  type="button"
-                  disabled={pending}
-                  className="min-h-11 rounded-[4px] border border-line-strong px-3 hover:bg-surface-2"
-                  onClick={() =>
-                    run(() => setQuoteStatus({ quoteId: quote.id, status: 'declined' }))
-                  }
-                >
-                  Declined
-                </button>
+                {/* Declining an estimate also lives in the acceptance band
+                    below, next to converting, because won and lost are one
+                    decision and splitting them put the two answers at
+                    opposite ends of a long document. A change order has no
+                    such band, so it keeps its control here. */}
+                {quote.kind === 'change_order' ? (
+                  <button
+                    type="button"
+                    disabled={pending}
+                    className="min-h-11 rounded-[4px] border border-line-strong px-3 hover:bg-surface-2"
+                    onClick={() =>
+                      run(() => setQuoteStatus({ quoteId: quote.id, status: 'declined' }))
+                    }
+                  >
+                    Declined
+                  </button>
+                ) : null}
               </>
             ) : null}
           </div>

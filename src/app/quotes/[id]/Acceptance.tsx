@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { acceptQuote } from '@/app/quotes/[id]/actions';
+import { acceptQuote, setQuoteStatus } from '@/app/quotes/[id]/actions';
 import type { AcceptanceSibling } from '@/app/quotes/[id]/siblings';
 import { Pill } from '@/components/ui/Pill';
 import { Sheet } from '@/components/worksheet/Sheet';
@@ -37,6 +37,9 @@ export function Acceptance({
   siblings: AcceptanceSibling[];
 }) {
   const [open, setOpen] = useState(false);
+  const router = useRouter();
+  const [declining, startDeclining] = useTransition();
+  const [declineError, setDeclineError] = useState<string | null>(null);
 
   /**
    * Offered on a draft as well as on a sent quote.
@@ -55,19 +58,50 @@ export function Acceptance({
 
   return (
     <section className="no-print border-t border-line-strong bg-surface-2 px-4 py-3 sm:px-6">
+      {/* Won and lost are ONE decision, so both answers live here, together,
+          under the lines the decision is about. They were split before -- the
+          decline button in the page header, the convert control down here --
+          which put the two halves of one question at opposite ends of a long
+          scrolling document. */}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <p className="t-small text-muted">
-          When the customer says yes, convert this quote into the job — pick the lines they
-          agreed to and the opportunity becomes work.
+          Did the customer say yes? Converting asks which lines they agreed to, and the
+          opportunity becomes a job.
         </p>
-        <button
-          type="button"
-          className="ml-auto min-h-11 rounded-[4px] bg-accent px-3 text-accent-fg hover:bg-accent-hover"
-          onClick={() => setOpen(true)}
-        >
-          Convert to a job
-        </button>
+        <div className="ml-auto flex flex-wrap gap-2">
+          <button
+            type="button"
+            disabled={declining}
+            className="min-h-11 rounded-[4px] border border-line-strong bg-surface px-3 hover:bg-surface-2 disabled:opacity-60"
+            onClick={() => {
+              // No confirmation step: declining is reversible from here, by
+              // revising the quote, which is what happens when a customer who
+              // said no comes back. Winning is the irreversible one, and that
+              // is the one that states its consequences first.
+              startDeclining(async () => {
+                const result = await setQuoteStatus({ quoteId: quote.id, status: 'declined' });
+                if (result.ok) router.refresh();
+                else setDeclineError(result.error);
+              });
+            }}
+          >
+            {declining ? 'Saving…' : 'They declined'}
+          </button>
+          <button
+            type="button"
+            className="min-h-11 rounded-[4px] bg-accent px-3 text-accent-fg hover:bg-accent-hover"
+            onClick={() => setOpen(true)}
+          >
+            Convert to a job
+          </button>
+        </div>
       </div>
+
+      {declineError ? (
+        <p role="alert" className="mt-2 t-small text-negative">
+          {declineError}
+        </p>
+      ) : null}
 
       {open ? (
         <AcceptanceSheet
