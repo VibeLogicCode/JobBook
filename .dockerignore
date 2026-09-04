@@ -1,0 +1,29 @@
+# .git must never enter the image. The whole point of shipping an image rather
+# than source is that the recipient does not get the repository -- and a COPY .
+# with .git present hands them every commit, branch and message in it.
+.git
+.github
+
+node_modules
+.next
+out
+dist
+
+# Secrets and local state
+.env
+.env.*
+!.env.example
+*.pem
+*.pfx
+*.key
+
+# Never bake a backup or an uploaded file into an image
+backups/
+data/
+dev-db/
+
+docs/
+tests/
+coverage/
+*.md
+!README.md

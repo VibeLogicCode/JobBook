@@ -1,0 +1,83 @@
+import Link from 'next/link';
+import { and, desc, eq } from 'drizzle-orm';
+import { db } from '@/db/client';
+import { customers, projects, quotes } from '@/db/schema';
+import { Pill, statusTone } from '@/components/ui/Pill';
+import { formatCents } from '@/lib/money/format';
+
+export const dynamic = 'force-dynamic';
+
+export default async function QuotesPage() {
+  const rows = await db
+    .select({
+      id: quotes.id,
+      quoteNumber: quotes.quoteNumber,
+      version: quotes.version,
+      status: quotes.status,
+      kind: quotes.kind,
+      quoteDate: quotes.quoteDate,
+      validUntil: quotes.validUntil,
+      totalCents: quotes.totalCents,
+      marginBp: quotes.marginBp,
+      projectName: projects.name,
+      customerName: customers.name,
+    })
+    .from(quotes)
+    .innerJoin(projects, eq(quotes.projectId, projects.id))
+    .innerJoin(customers, eq(projects.customerId, customers.id))
+    // Voided quotes are hidden by default, never deleted.
+    .where(and(eq(quotes.recordStatus, 'active')))
+    .orderBy(desc(quotes.createdAt));
+
+  const today = new Date().toISOString().slice(0, 10);
+
+  return (
+    <div className="px-4 py-4 sm:px-6">
+      <h1 className="t-title mb-4">Quotes</h1>
+
+      {rows.length === 0 ? (
+        <p className="rounded-[6px] border border-line bg-surface p-6 text-muted">
+          No quotes yet. Run <span className="num">npm run db:seed</span> to load demo data, or
+          start one from a customer.
+        </p>
+      ) : (
+        <div className="overflow-x-auto rounded-[6px] border border-line bg-surface">
+          <table className="data-table data-table--stack" style={{ minWidth: '44rem' }}>
+            <thead>
+              <tr>
+                <th scope="col">Project</th>
+                <th scope="col">Number</th>
+                <th scope="col">Customer</th>
+                <th scope="col">Status</th>
+                <th scope="col" className="cell-num">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <tr key={row.id}>
+                  <td data-label="Project">
+                    <Link href={`/quotes/${row.id}`} className="text-accent-text hover:underline">
+                      {row.projectName}
+                    </Link>
+                  </td>
+                  <td data-label="Number" className="num t-small text-muted">
+                    {row.quoteNumber} v{row.version}
+                  </td>
+                  <td data-label="Customer">{row.customerName}</td>
+                  <td data-label="Status">
+                    <Pill tone={statusTone(row.status, row.validUntil < today)}>
+                      {row.validUntil < today && row.status === 'sent' ? 'Expired' : row.status}
+                    </Pill>
+                  </td>
+                  <td data-label="Total" className="cell-num">
+                    {formatCents(row.totalCents)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
