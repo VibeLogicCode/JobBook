@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { X } from 'lucide-react';
+import { SAVED_EVENT } from '@/components/ui/saved-event';
 import { Button, type ButtonVariant } from '@/components/ui/Button';
 
 /**
@@ -351,6 +352,31 @@ export function SheetButton({
    */
   useEffect(() => {
     if (open) baseline.current = fieldSnapshot(bodyRef.current);
+  }, [open]);
+
+  /**
+   * A save closes the sheet, because the thing it was open for is done.
+   *
+   * It used to stay open with a success notice inside it, so the answer to
+   * "did that work?" was a paragraph rather than the row behind it visibly
+   * changing -- and the row IS the answer, because the action revalidates the
+   * page underneath. The owner asked exactly that question, which is the
+   * clearest evidence the notice was not answering it.
+   *
+   * A DOM event rather than a prop, because this shell's children are
+   * server-rendered: it holds no state of theirs and cannot be handed a result
+   * it never receives. A REFUSAL does not fire this, so a rejected save leaves
+   * the sheet open with the reason and the typing still in it -- which is the
+   * one case where staying open is right.
+   *
+   * No discard prompt on this path. There is nothing left to discard.
+   */
+  useEffect(() => {
+    const body = bodyRef.current;
+    if (!open || !body) return;
+    const close = () => setOpen(false);
+    body.addEventListener(SAVED_EVENT, close);
+    return () => body.removeEventListener(SAVED_EVENT, close);
   }, [open]);
 
   function requestClose() {

@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { SaveBanner } from '@/components/ui/SaveBanner';
 import { usePathname } from 'next/navigation';
 import {
   BellRing, ClipboardList, FileText, HardHat, Home, LayoutTemplate, Moon, Receipt, Ruler, Settings,
@@ -152,6 +153,10 @@ export function AppShell({
             The margin is on a spacer sibling, which cannot be swallowed the
             same way, and it clears the bar plus the home-indicator inset. */}
         <main className="mx-auto min-w-0 w-full max-w-[100rem] flex-1">
+          {/* Mounted once, listening at the document, so a save made anywhere
+              -- including inside a sheet that is closing as it fires -- has
+              somewhere to be said. */}
+          <SaveBanner />
           {children}
           <div
             aria-hidden

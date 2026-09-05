@@ -5,6 +5,7 @@ import { useFormStatus } from 'react-dom';
 import type { ActionResult, FormAction } from '@/app/settings/result';
 import { Button } from '@/components/ui/Button';
 import { Notice } from '@/components/ui/Notice';
+import { SAVED_EVENT } from '@/components/ui/saved-event';
 import { restoreInto } from '@/lib/forms/restore-values';
 
 /**
@@ -82,6 +83,25 @@ export function ActionForm({
       }
     }
     if (state?.ok && resetOnSuccess) form.reset();
+
+    /**
+     * Tell whatever is around us that the write landed.
+     *
+     * A sheet opened from a row has no way to know: its children are
+     * server-rendered, so it holds no state of theirs and cannot read a result
+     * it never receives. That is why a save used to leave the sheet sitting
+     * open with a success notice inside it, which reads as "did that work?"
+     * -- and the owner asked exactly that.
+     *
+     * A bubbling DOM event crosses the server/client boundary the way a prop
+     * cannot. Nothing is required to listen; a form on a page with no sheet
+     * around it fires into empty air, which is the correct amount of coupling.
+     */
+    if (state?.ok) {
+      form.dispatchEvent(
+        new CustomEvent(SAVED_EVENT, { bubbles: true, detail: { message: state.message } }),
+      );
+    }
 
     // A refusal is not a reason to lose the typing. Runs after React's own
     // reset, which is what makes this a restore rather than a race.
