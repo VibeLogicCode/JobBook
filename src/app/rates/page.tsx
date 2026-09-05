@@ -35,7 +35,16 @@ export default async function RatesPage() {
   const mayVoid = state.actor ? can(state.actor.role, 'record:void') : false;
 
   const rows = await db
-    .select({ item: rateItems, costCode: costCodes.name })
+    .select({
+      item: rateItems,
+      costCode: costCodes.name,
+      // A cost code can be retired or voided on /settings/cost-codes. Neither
+      // blanks it out here: the row is never deleted and the join still
+      // resolves, so what the cell owes the reader is the standing of the code
+      // rather than a name that looks as current as any other.
+      costCodeActive: costCodes.isActive,
+      costCodeStatus: costCodes.recordStatus,
+    })
     .from(rateItems)
     .leftJoin(costCodes, eq(rateItems.costCodeId, costCodes.id))
     // Voided rows stay in the list rather than being filtered away. Their code
@@ -44,16 +53,55 @@ export default async function RatesPage() {
     // he cannot see.
     .orderBy(asc(rateItems.sortOrder), asc(rateItems.code));
 
-  const codes = await db
-    .select({ id: costCodes.id, code: costCodes.code, name: costCodes.name })
+  const allCodes = await db
+    .select({
+      id: costCodes.id,
+      code: costCodes.code,
+      name: costCodes.name,
+      isActive: costCodes.isActive,
+      recordStatus: costCodes.recordStatus,
+    })
     .from(costCodes)
-    .where(eq(costCodes.recordStatus, 'active'))
     .orderBy(asc(costCodes.code));
 
-  const costCodeOptions = codes.map((row) => ({
-    value: row.id,
-    label: `${row.code} — ${row.name}`,
-  }));
+  // What the importer may match against. Not the same set as the picker
+  // below, and deliberately: `importRateItems` re-runs the same plan on the
+  // server over the codes whose `record_status` is active, so a preview drawn
+  // from a narrower set would promise an outcome the commit would not honour.
+  const codes = allCodes.filter((row) => row.recordStatus === 'active');
+
+  // What a NEW rate item may be given. Retired means "do not offer this on new
+  // work", so a retired code is absent here even though it is still a code.
+  const costCodeOptions = allCodes
+    .filter((row) => row.recordStatus === 'active' && row.isActive)
+    .map((row) => ({ value: row.id, label: `${row.code} — ${row.name}` }));
+
+  /**
+   * The picker for one existing item, which is the same list plus whatever the
+   * item is already coded to.
+   *
+   * The addition is not a courtesy. A `<select>` whose `defaultValue` matches
+   * no option silently shows the first one instead, so an item coded to a
+   * since-retired division would be re-coded to whatever sorts first the next
+   * time anybody saved its price -- a change nobody asked for, on the column
+   * job costing groups by.
+   */
+  function optionsFor(currentId: string | null) {
+    if (currentId === null) return costCodeOptions;
+    const current = allCodes.find((row) => row.id === currentId);
+    if (!current || costCodeOptions.some((option) => option.value === currentId)) {
+      return costCodeOptions;
+    }
+    return [
+      ...costCodeOptions,
+      {
+        value: current.id,
+        label: `${current.code} — ${current.name} (${
+          current.recordStatus === 'active' ? 'retired' : 'void'
+        })`,
+      },
+    ];
+  }
 
   return (
     <div className="px-4 py-4 sm:px-6">
@@ -95,14 +143,27 @@ export default async function RatesPage() {
                 </tr>
               ) : null}
 
-              {rows.map(({ item, costCode }) => {
+              {rows.map(({ item, costCode, costCodeActive, costCodeStatus }) => {
                 const margin = marginBasisPoints(item.sellRateTenThou, item.costRateTenThou);
                 const isVoid = item.recordStatus === 'void';
+                const costCodeNote =
+                  costCode === null
+                    ? null
+                    : costCodeStatus !== 'active'
+                      ? 'void'
+                      : costCodeActive === false
+                        ? 'retired'
+                        : null;
                 return (
                   <tr key={item.id}>
                     <td data-label="Description">{item.description}</td>
                     <td data-label="Code" className="num t-small text-muted">{item.code}</td>
-                    <td data-label="Cost code" className="t-small text-muted">{costCode ?? '—'}</td>
+                    <td data-label="Cost code" className="t-small text-muted">
+                      {costCode ?? '—'}
+                      {costCodeNote ? (
+                        <span className="text-subtle"> ({costCodeNote})</span>
+                      ) : null}
+                    </td>
                     <td data-label="Unit" className="t-small text-muted">
                       {item.unitLabel || (item.calcMode === 'percent' ? '%' : '—')}
                     </td>
@@ -215,9 +276,14 @@ export default async function RatesPage() {
                                   name="costCodeId"
                                   label="Cost code"
                                   defaultValue={item.costCodeId}
-                                  options={costCodeOptions}
+                                  options={optionsFor(item.costCodeId)}
                                   blankLabel="Not costed"
                                   disabled={!allowed || isVoid}
+                                  hint={
+                                    costCodeNote
+                                      ? `This item is coded to a ${costCodeNote} cost code. It keeps reading it until you choose another.`
+                                      : undefined
+                                  }
                                 />
                                 <TextField
                                   idPrefix={`edit-${item.id}`}
