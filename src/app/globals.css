@@ -525,6 +525,66 @@
   .reveals-field:has(select[data-reveals] option:checked:not([data-reveal])) .revealed-field {
     display: none;
   }
+
+  /* ---- The cross-job calendar ----
+     ONE <ol> of day cells at every width, which is ruling R5 again: the data
+     table stacks rather than branching to a card list, and a calendar that
+     rendered a grid on a monitor and a list on a phone would be the same two
+     render paths drifting apart.
+
+     A month on a phone is a stacked list of the days that hold work; the same
+     markup on a monitor is a seven-column grid with the empty days still drawn
+     in their places, because a month with a gap in it is what a gap looks
+     like. */
+  .calendar-grid {
+    display: grid;
+    gap: 8px;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* The column names belong to the seven-column layout. Over a stacked list
+     they name nothing, so they are drawn only where the columns exist. */
+  .calendar-weekdays {
+    display: none;
+  }
+
+  @media (max-width: 639px) {
+    /* HIDDEN, not omitted. Thirty-one cells down a 390px screen is thirty-one
+       scrolls to reach the four days that hold work -- and a component that
+       decided to skip them is the second render path R5 forbids, so the cell
+       stays in the DOM and only its box goes. */
+    .calendar-grid > [data-empty='true'] {
+      display: none;
+    }
+  }
+
+  @media (min-width: 640px) {
+    .calendar-grid[data-columns='7'] {
+      grid-template-columns: repeat(7, minmax(0, 1fr));
+    }
+
+    /* Monday is column 1, so the first row of a month starts on the weekday the
+       month really starts on rather than flush against the left edge. The
+       property is written inline per cell and read ONLY here: in the single
+       stacked column above, an explicit column start would invent six columns
+       that are not there. */
+    .calendar-grid[data-columns='7'] > li {
+      grid-column-start: var(--calendar-column);
+      min-height: 7rem;
+    }
+
+    .calendar-weekdays[data-columns='7'] {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    /* The column heading already says the weekday. Inside the cell it is there
+       for the stacked list, which has no column to read it off. */
+    .calendar-grid[data-columns='7'] .calendar-cell-weekday {
+      display: none;
+    }
+  }
 }
 
 /* Present mode: hides cost, margin, internal notes and rate codes, because he

@@ -4,8 +4,8 @@ import Link from 'next/link';
 import { SaveBanner } from '@/components/ui/SaveBanner';
 import { usePathname } from 'next/navigation';
 import {
-  BellRing, ClipboardList, FileText, HardHat, Home, LayoutTemplate, Moon, Receipt, Ruler, Settings,
-  Sun, Users,
+  BellRing, CalendarDays, ClipboardList, FileText, HardHat, Home, LayoutTemplate, Moon, Receipt,
+  Ruler, Settings, Sun, Users,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
@@ -20,6 +20,10 @@ const DESTINATIONS = [
   { href: '/reminders', label: 'Reminders', icon: BellRing },
   { href: '/quotes', label: 'Quotes', icon: FileText },
   { href: '/projects', label: 'Pipeline', icon: ClipboardList },
+  // Directly after the pipeline, because it is the same book of work read by
+  // the day instead of by the job -- and because that position puts it on the
+  // bottom bar. See `BOTTOM_BAR`.
+  { href: '/calendar', label: 'Calendar', icon: CalendarDays },
   { href: '/customers', label: 'People', icon: Users },
   { href: '/rates', label: 'Rates', icon: Ruler },
   // Appended after the fifth, so it reaches the rail without displacing
@@ -45,6 +49,17 @@ const DESTINATIONS = [
  * opposite -- it is the screen for a phone in a truck at 7am, which is exactly
  * what a bottom tab bar is for. Templates and Setup were already off it for
  * the same reason.
+ *
+ * THE CALENDAR TOOK THE FIFTH SEAT AND PEOPLE GAVE IT UP. Same test, same
+ * answer. The bar is the five screens somebody opens standing outside with one
+ * hand free, and "who is on site today, and is anybody promised to two places
+ * at once" is the first question of that morning -- it is the only screen in
+ * the product that can answer it, because the two halves of a double-booking
+ * live on two different jobs. A customer record is the other thing entirely:
+ * an address, an email, a billing contact, opened at a desk while writing a
+ * quote or chasing a bill. It is also not lost -- it is on the rail, and every
+ * job card and quote already links to the customer it belongs to, so the
+ * commonest way anybody reaches a customer on a phone was never this tab.
  *
  * Kept as `slice(0, 5)` rather than a second hand-written list: two lists is
  * how a destination ends up on one and not the other.
