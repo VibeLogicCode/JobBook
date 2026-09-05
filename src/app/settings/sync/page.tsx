@@ -9,10 +9,11 @@ import {
 import { runEnvironmentChecks } from '@/app/setup/environment';
 import { ActionForm } from '@/components/settings/ActionForm';
 import { CheckboxField, FieldGrid, TextField } from '@/components/settings/Fields';
-import { Notice } from '@/components/settings/Notice';
+import { Notice } from '@/components/ui/Notice';
 import { Section } from '@/components/settings/Section';
 import { EnvironmentReport, StatusPill } from '@/components/setup/EnvironmentReport';
 import { Pill, type Tone } from '@/components/ui/Pill';
+import { TableWrap } from '@/components/ui/Table';
 import { entityTypeEnum } from '@/db/enums';
 import {
   DEFAULT_INTERVAL_MINUTES,
@@ -347,45 +348,43 @@ export default async function SyncSettingsPage() {
           stopped.
         </p>
 
-        <div className="overflow-x-auto rounded-[6px] border border-line">
-          <table className="data-table data-table--stack" style={{ minWidth: '46rem' }}>
-            <caption className="sr-only">
-              The five environment variables the mirror reads, and whether each is set
-            </caption>
-            <thead>
-              <tr>
-                <th scope="col">Variable</th>
-                <th scope="col">Set</th>
-                <th scope="col">What it is for</th>
+        <TableWrap minWidth="46rem">
+          <caption className="sr-only">
+            The five environment variables the mirror reads, and whether each is set
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">Variable</th>
+              <th scope="col">Set</th>
+              <th scope="col">What it is for</th>
+            </tr>
+          </thead>
+          <tbody>
+            {SYNC_ENVIRONMENT_VARIABLES.map((variable) => (
+              <tr key={variable}>
+                <td data-label="Variable" className="num t-small">
+                  {variable}
+                </td>
+                <td data-label="Set">
+                  <StatusPill
+                    status={
+                      variable === 'SHAREPOINT_SYNC_ENABLED'
+                        ? environment.flagOn
+                          ? 'pass'
+                          : 'off'
+                        : environment.present[variable]
+                          ? 'pass'
+                          : 'fail'
+                    }
+                  />
+                </td>
+                <td data-label="What it is for" className="t-small text-muted">
+                  {VARIABLE_PURPOSE[variable]}
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {SYNC_ENVIRONMENT_VARIABLES.map((variable) => (
-                <tr key={variable}>
-                  <td data-label="Variable" className="num t-small">
-                    {variable}
-                  </td>
-                  <td data-label="Set">
-                    <StatusPill
-                      status={
-                        variable === 'SHAREPOINT_SYNC_ENABLED'
-                          ? environment.flagOn
-                            ? 'pass'
-                            : 'off'
-                          : environment.present[variable]
-                            ? 'pass'
-                            : 'fail'
-                      }
-                    />
-                  </td>
-                  <td data-label="What it is for" className="t-small text-muted">
-                    {VARIABLE_PURPOSE[variable]}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+            ))}
+          </tbody>
+        </TableWrap>
       </Section>
 
       <Section
@@ -481,42 +480,40 @@ export default async function SyncSettingsPage() {
           find them.
         </p>
 
-        <div className="overflow-x-auto rounded-[6px] border border-line">
-          <table className="data-table data-table--stack" style={{ minWidth: '40rem' }}>
-            <caption className="sr-only">
-              Which document library each kind of attachment is mirrored to
-            </caption>
-            <thead>
-              <tr>
-                <th scope="col">Attached to</th>
-                <th scope="col">Library</th>
-              </tr>
-            </thead>
-            <tbody>
-              {entityTypeEnum.enumValues.map((kind) => {
-                const library = LIBRARY_FOR_ATTACHMENT[kind];
-                return (
-                  <tr key={kind}>
-                    <td data-label="Attached to">
-                      {ATTACHMENT_LABEL[kind] ?? kind}
-                      <span className="block num t-micro text-subtle">{kind}</span>
-                    </td>
-                    <td data-label="Library" className="t-small">
-                      {library ? (
-                        config.libraries[library]
-                      ) : (
-                        <span className="flex flex-wrap items-center gap-2">
-                          <Pill tone="neutral">Local disk only</Pill>
-                          <span className="text-subtle">No library is named for this kind.</span>
-                        </span>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <TableWrap minWidth="40rem">
+          <caption className="sr-only">
+            Which document library each kind of attachment is mirrored to
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">Attached to</th>
+              <th scope="col">Library</th>
+            </tr>
+          </thead>
+          <tbody>
+            {entityTypeEnum.enumValues.map((kind) => {
+              const library = LIBRARY_FOR_ATTACHMENT[kind];
+              return (
+                <tr key={kind}>
+                  <td data-label="Attached to">
+                    {ATTACHMENT_LABEL[kind] ?? kind}
+                    <span className="block num t-micro text-subtle">{kind}</span>
+                  </td>
+                  <td data-label="Library" className="t-small">
+                    {library ? (
+                      config.libraries[library]
+                    ) : (
+                      <span className="flex flex-wrap items-center gap-2">
+                        <Pill tone="neutral">Local disk only</Pill>
+                        <span className="text-subtle">No library is named for this kind.</span>
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </TableWrap>
       </Section>
 
       <Section
@@ -603,77 +600,75 @@ export default async function SyncSettingsPage() {
           </span>
         </div>
 
-        <div className="overflow-x-auto rounded-[6px] border border-line">
-          <table className="data-table data-table--stack" style={{ minWidth: '72rem' }}>
-            <caption className="sr-only">
-              Every mirrored list, its health verdict, its cursor position and its last error
-            </caption>
-            <thead>
-              <tr>
-                <th scope="col">List</th>
-                <th scope="col">Verdict</th>
-                <th scope="col">Last success</th>
-                <th scope="col">Last run</th>
-                <th scope="col" className="cell-num">
-                  Rows
-                </th>
-                <th scope="col" className="cell-num">
-                  Failures
-                </th>
-                <th scope="col">Cursor</th>
-                <th scope="col">Last error</th>
+        <TableWrap minWidth="72rem">
+          <caption className="sr-only">
+            Every mirrored list, its health verdict, its cursor position and its last error
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">List</th>
+              <th scope="col">Verdict</th>
+              <th scope="col">Last success</th>
+              <th scope="col">Last run</th>
+              <th scope="col" className="cell-num">
+                Rows
+              </th>
+              <th scope="col" className="cell-num">
+                Failures
+              </th>
+              <th scope="col">Cursor</th>
+              <th scope="col">Last error</th>
+            </tr>
+          </thead>
+          <tbody>
+            {[...report.rows, ...report.orphans].map((row) => (
+              <tr key={row.listName}>
+                <td data-label="List">
+                  {row.listName}
+                  {row.table === null ? (
+                    <span className="ml-2">
+                      <Pill tone="warning">Unmapped</Pill>
+                    </span>
+                  ) : null}
+                </td>
+                <td data-label="Verdict">
+                  <span className="flex flex-wrap items-center gap-1">
+                    <Pill tone={HEALTH_TONE[row.health]}>{HEALTH_LABEL[row.health]}</Pill>
+                    {row.escalated ? <Pill tone="negative">Escalated</Pill> : null}
+                  </span>
+                </td>
+                <td data-label="Last success" className="t-small">
+                  {describeAge(row.sinceSuccessMs)}
+                  <span className="block num t-micro text-subtle">
+                    {stamp(row.lastSuccessAt)}
+                  </span>
+                </td>
+                <td data-label="Last run" className="num t-small text-muted">
+                  {stamp(row.lastRunAt)}
+                </td>
+                <td data-label="Rows" className="cell-num">
+                  {row.rowsSynced}
+                </td>
+                <td data-label="Failures" className="cell-num">
+                  {row.consecutiveFailures}
+                </td>
+                <td data-label="Cursor" className="num t-micro text-subtle">
+                  {row.cursorUpdatedAt ? (
+                    <>
+                      {stamp(row.cursorUpdatedAt)}
+                      <span className="block">{row.cursorId ?? 'no row id'}</span>
+                    </>
+                  ) : (
+                    'not started'
+                  )}
+                </td>
+                <td data-label="Last error" className="t-small text-muted">
+                  {row.lastError ?? <span className="text-subtle">—</span>}
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {[...report.rows, ...report.orphans].map((row) => (
-                <tr key={row.listName}>
-                  <td data-label="List">
-                    {row.listName}
-                    {row.table === null ? (
-                      <span className="ml-2">
-                        <Pill tone="warning">Unmapped</Pill>
-                      </span>
-                    ) : null}
-                  </td>
-                  <td data-label="Verdict">
-                    <span className="flex flex-wrap items-center gap-1">
-                      <Pill tone={HEALTH_TONE[row.health]}>{HEALTH_LABEL[row.health]}</Pill>
-                      {row.escalated ? <Pill tone="negative">Escalated</Pill> : null}
-                    </span>
-                  </td>
-                  <td data-label="Last success" className="t-small">
-                    {describeAge(row.sinceSuccessMs)}
-                    <span className="block num t-micro text-subtle">
-                      {stamp(row.lastSuccessAt)}
-                    </span>
-                  </td>
-                  <td data-label="Last run" className="num t-small text-muted">
-                    {stamp(row.lastRunAt)}
-                  </td>
-                  <td data-label="Rows" className="cell-num">
-                    {row.rowsSynced}
-                  </td>
-                  <td data-label="Failures" className="cell-num">
-                    {row.consecutiveFailures}
-                  </td>
-                  <td data-label="Cursor" className="num t-micro text-subtle">
-                    {row.cursorUpdatedAt ? (
-                      <>
-                        {stamp(row.cursorUpdatedAt)}
-                        <span className="block">{row.cursorId ?? 'no row id'}</span>
-                      </>
-                    ) : (
-                      'not started'
-                    )}
-                  </td>
-                  <td data-label="Last error" className="t-small text-muted">
-                    {row.lastError ?? <span className="text-subtle">—</span>}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+            ))}
+          </tbody>
+        </TableWrap>
 
         <p className="mt-4 max-w-prose t-small text-subtle">
           {NOT_MIRRORED_TABLES.join(', ')} are deliberately absent. The first three are machine

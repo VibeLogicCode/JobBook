@@ -2,9 +2,10 @@ import { saveLocale } from '@/app/settings/actions';
 import { loadSettings, readOnlyNote } from '@/app/settings/load';
 import { ActionForm } from '@/components/settings/ActionForm';
 import { FieldGrid, type Option, ReadOnlyField, SelectField, TextField } from '@/components/settings/Fields';
-import { Notice } from '@/components/settings/Notice';
+import { Notice } from '@/components/ui/Notice';
 import { Section } from '@/components/settings/Section';
 import { formatCents } from '@/lib/money/format';
+import { TableWrap } from '@/components/ui/Table';
 
 export const dynamic = 'force-dynamic';
 
@@ -170,37 +171,35 @@ export default async function LocaleSettingsPage() {
             </li>
           </ul>
 
-          <div className="overflow-x-auto rounded-[6px] border border-line">
-            <table className="data-table data-table--stack" style={{ minWidth: '32rem' }}>
-              <thead>
-                <tr>
-                  <th scope="col">Clock</th>
-                  <th scope="col">Calendar date now</th>
-                  <th scope="col">Full local time</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td data-label="Clock">Your timezone ({timezone})</td>
-                  <td data-label="Calendar date now" className="cell-num">
-                    {tenantDate}
-                  </td>
-                  <td data-label="Full local time" className="t-small text-muted">
-                    {clockIn(timezone, locale, now)}
-                  </td>
-                </tr>
-                <tr>
-                  <td data-label="Clock">The container (UTC)</td>
-                  <td data-label="Calendar date now" className="cell-num">
-                    {utcDate}
-                  </td>
-                  <td data-label="Full local time" className="t-small text-muted">
-                    {clockIn('UTC', locale, now)}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+          <TableWrap minWidth="32rem">
+            <thead>
+              <tr>
+                <th scope="col">Clock</th>
+                <th scope="col">Calendar date now</th>
+                <th scope="col">Full local time</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td data-label="Clock">Your timezone ({timezone})</td>
+                <td data-label="Calendar date now" className="cell-num">
+                  {tenantDate}
+                </td>
+                <td data-label="Full local time" className="t-small text-muted">
+                  {clockIn(timezone, locale, now)}
+                </td>
+              </tr>
+              <tr>
+                <td data-label="Clock">The container (UTC)</td>
+                <td data-label="Calendar date now" className="cell-num">
+                  {utcDate}
+                </td>
+                <td data-label="Full local time" className="t-small text-muted">
+                  {clockIn('UTC', locale, now)}
+                </td>
+              </tr>
+            </tbody>
+          </TableWrap>
 
           {tenantDate !== utcDate ? (
             <Notice tone="info" title="The two dates differ right now">

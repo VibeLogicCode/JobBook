@@ -8,7 +8,7 @@
  * well: a required title, a ruled header, a padded body. It has no room for an
  * action beside the title, no way to drop the padding for a child that must
  * bleed to the radius, and no way to omit the title -- so every screen that
- * needed one of those hand-rolled `<section className="rounded-[6px] border
+ * needed one of those hand-rolled `<section className="rounded-panel border
  * ...">` instead. This is that container, with the three slots. `Panel`'s
  * markup is exactly `Card` + `CardHeader` + `CardBody`, so the adoption pass
  * can reduce it to a wrapper; until then Panel stays the shorter call on a
@@ -31,7 +31,7 @@ export function Card({
   // clipping turns the card into a scrollport, and the data table's sticky
   // `thead` and the sticky `.sum-bar` both stop sticking inside one. A child
   // that needs its corners clipped carries its own radius.
-  return <Tag className={`rounded-[6px] border border-line bg-surface ${className}`.trim()}>{children}</Tag>;
+  return <Tag className={`rounded-panel border border-line bg-surface ${className}`.trim()}>{children}</Tag>;
 }
 
 export function CardHeader({

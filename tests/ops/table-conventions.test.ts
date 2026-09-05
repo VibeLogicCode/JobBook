@@ -34,14 +34,7 @@ const HAND_ROLLED: Record<string, string> = {
 
   // Structurally identical to the screens that were converted, and next in
   // line. Left alone here only because they were not in this pass.
-  [path.join('src', 'app', 'settings', 'locale', 'page.tsx')]: 'not yet converted',
-  [path.join('src', 'app', 'settings', 'sync', 'page.tsx')]: 'not yet converted',
-  [path.join('src', 'app', 'settings', 'tax-rates', 'page.tsx')]: 'not yet converted',
-  [path.join('src', 'app', 'settings', 'users', 'page.tsx')]: 'not yet converted',
-  [path.join('src', 'app', 'setup', 'access', 'page.tsx')]: 'not yet converted',
-  [path.join('src', 'app', 'setup', 'done', 'page.tsx')]: 'not yet converted',
   [path.join('src', 'app', 'templates', '[id]', 'WorkedExample.tsx')]: 'not yet converted',
-  [path.join('src', 'components', 'setup', 'EnvironmentReport.tsx')]: 'not yet converted',
 };
 
 /* -------------------------------------------------------------------------
@@ -180,8 +173,13 @@ describe('table conventions', () => {
 
   it('read the markup rather than passing on an empty search', async () => {
     const found = await sweep(ROOT);
-    expect(found.tables).toBeGreaterThan(15);
-    expect(found.wrappers).toBeGreaterThan(8);
+    // The two counts moved past each other in the adoption pass, which is the
+    // whole point of it: the wrapper is now written once and called eighteen
+    // times, and what is left writing a `<table>` by hand is the print
+    // document, the two screens that put `aria-busy` on the grid, and the one
+    // screen still on the list above.
+    expect(found.tables).toBeGreaterThan(5);
+    expect(found.wrappers).toBeGreaterThan(15);
     expect(found.amountCells).toBeGreaterThan(10);
   });
 

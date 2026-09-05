@@ -68,7 +68,7 @@ export function AppShell({
                 <Link
                   href={href}
                   aria-current={active ? 'page' : undefined}
-                  className={`flex min-h-11 items-center gap-3 rounded-[4px] px-3 ${
+                  className={`flex min-h-11 items-center gap-3 rounded-control px-3 ${
                     active
                       ? 'bg-accent-soft text-accent-soft-fg'
                       : 'text-muted hover:bg-surface-2 hover:text-ink'
@@ -162,7 +162,7 @@ function ThemeToggle() {
     <button
       type="button"
       aria-label={dark ? 'Switch to light theme' : 'Switch to dark theme'}
-      className="flex min-h-11 min-w-11 items-center justify-center rounded-[4px] text-muted hover:bg-surface-2 hover:text-ink"
+      className="flex min-h-11 min-w-11 items-center justify-center rounded-control text-muted hover:bg-surface-2 hover:text-ink"
       onClick={() => {
         const next = !dark;
         document.documentElement.classList.toggle('dark', next);
@@ -198,7 +198,7 @@ function PresentToggle() {
     <button
       type="button"
       aria-pressed={present}
-      className={`flex min-h-11 items-center gap-2 rounded-[4px] px-3 t-small ${
+      className={`flex min-h-11 items-center gap-2 rounded-control px-3 t-small ${
         present ? 'bg-accent text-accent-fg' : 'text-muted hover:bg-surface-2 hover:text-ink'
       }`}
       onClick={() => {

@@ -132,7 +132,7 @@ export function WorkedExample({
         a quote built from this template would contain at that scope — nothing here is saved.
       </p>
 
-      <div className="overflow-x-auto rounded-[6px] border border-line">
+      <div className="overflow-x-auto rounded-panel border border-line">
         <table className="data-table data-table--stack" style={{ minWidth: '52rem' }}>
           <thead>
             <tr>

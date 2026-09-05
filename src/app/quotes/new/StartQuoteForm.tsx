@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useActionState, useState } from 'react';
+import { Button, buttonClass } from '@/components/ui/Button';
 import { Field, FieldGroup, FormError, SelectField } from '@/components/detail/Fields';
 import type { FormAction } from '@/components/detail/form-state';
 import { CUSTOMER_TYPES, PROJECT_TYPES, PROJECT_STAGES } from '@/components/detail/labels';
@@ -228,17 +229,10 @@ export function StartQuoteForm({
       </FieldGroup>
 
       <div className="flex flex-wrap gap-2">
-        <button
-          type="submit"
-          disabled={pending}
-          className="min-h-12 rounded-[4px] bg-accent px-4 text-accent-fg hover:bg-accent-hover disabled:opacity-60"
-        >
-          {pending ? 'Creating…' : 'Create quote'}
-        </button>
-        <Link
-          href="/quotes"
-          className="flex min-h-12 items-center rounded-[4px] border border-line-strong px-4 hover:bg-surface-2"
-        >
+        <Button type="submit" size="lg" pending={pending} pendingLabel="Creating…">
+          Create quote
+        </Button>
+        <Link href="/quotes" className={buttonClass('secondary', { size: 'lg' })}>
           Cancel
         </Link>
       </div>

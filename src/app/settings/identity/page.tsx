@@ -3,7 +3,7 @@ import { LogoField } from '@/app/settings/identity/logo/LogoField';
 import { loadSettings, readOnlyNote } from '@/app/settings/load';
 import { ActionForm } from '@/components/settings/ActionForm';
 import { FieldGrid, ReadOnlyField, TextField } from '@/components/settings/Fields';
-import { Notice } from '@/components/settings/Notice';
+import { Notice } from '@/components/ui/Notice';
 import { Section } from '@/components/settings/Section';
 
 export const dynamic = 'force-dynamic';
@@ -102,7 +102,7 @@ export default async function IdentitySettingsPage() {
                   <span className="flex items-center gap-2">
                     <span
                       aria-hidden
-                      className="inline-block size-4 rounded-[4px] border border-line-strong"
+                      className="inline-block size-4 rounded-control border border-line-strong"
                       style={{ background: org.brandColor }}
                     />
                     <span className="num">{org.brandColor}</span>

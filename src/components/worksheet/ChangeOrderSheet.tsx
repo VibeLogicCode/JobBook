@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Trash2 } from 'lucide-react';
 import { Measurement, Sheet } from '@/components/worksheet/Sheet';
+import { Button } from '@/components/ui/Button';
 import type { WireChangeReason, WireQuote, WireRateItem } from '@/components/worksheet/types';
 import { formatRate } from '@/lib/money/format';
 
@@ -102,10 +103,12 @@ export function ChangeOrderSheet({
       onClose={onClose}
       footer={
         <>
-          <button
-            type="button"
-            disabled={pending || !ready}
-            className="min-h-12 flex-1 rounded-[4px] bg-accent px-3 text-accent-fg hover:bg-accent-hover disabled:opacity-60"
+          <Button
+            size="lg"
+            className="flex-1"
+            disabled={!ready}
+            pending={pending}
+            pendingLabel="Raising…"
             onClick={() => {
               if (reason === '') return;
               onRaise({
@@ -122,14 +125,10 @@ export function ChangeOrderSheet({
             }}
           >
             Raise the change order
-          </button>
-          <button
-            type="button"
-            className="min-h-12 rounded-[4px] border border-line-strong px-3 hover:bg-surface-2"
-            onClick={onClose}
-          >
+          </Button>
+          <Button variant="secondary" size="lg" onClick={onClose}>
             Cancel
-          </button>
+          </Button>
         </>
       }
     >
@@ -219,7 +218,7 @@ export function ChangeOrderSheet({
                       <button
                         type="button"
                         aria-label={`Take ${item.description} off this change order`}
-                        className="flex min-h-12 min-w-12 items-center justify-center rounded-[4px] text-muted hover:bg-negative-soft hover:text-negative-soft-fg"
+                        className="flex min-h-12 min-w-12 items-center justify-center rounded-control text-muted hover:bg-negative-soft hover:text-negative-soft-fg"
                         onClick={() =>
                           setPicks((rows) => rows.filter((row) => row.key !== pick.key))
                         }

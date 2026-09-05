@@ -124,3 +124,66 @@ export const counterpartyTypeEnum = pgEnum('counterparty_type', ['customer', 've
  * accrual of zero cents would then be unreadable either way.
  */
 export const holdbackEntryKindEnum = pgEnum('holdback_entry_kind', ['accrual', 'release']);
+
+/**
+ * Activity and reminders (spec 2, Phase 2 plan).
+ *
+ * These five mirror the unions in lib/reminders/types.ts member for member,
+ * which the evaluator declares for itself because it is pure and has to be
+ * testable without a database. `tests/unit/reminder-rules.test.ts` asserts the
+ * pairing, so a member added on one side and forgotten on the other fails
+ * there rather than at 3am in the scheduler.
+ */
+
+/**
+ * What an activity or a reminder hangs off.
+ *
+ * Deliberately NOT the existing `entity_type`, which carries `organization`,
+ * `receipt`, `vendor_invoice` and `purchase_order` as well. Nothing hangs a
+ * timeline off a receipt, and reusing that enum would let the database hold a
+ * reminder whose entity type the code has no branch for. Three members, and
+ * the type union says the same three.
+ *
+ * The pair is a polymorphic reference and therefore not a foreign key -- see
+ * the Phase 2 plan for why three nullable columns and a CHECK was the worse
+ * trade.
+ */
+export const timelineEntityTypeEnum = pgEnum('timeline_entity_type', [
+  'customer', 'project', 'quote',
+]);
+
+/**
+ * What happened. Direction is part of the kind rather than a separate column
+ * because "who called whom" is the whole content of a call record: a timeline
+ * that says only `call` cannot tell the owner whether he chased the customer
+ * or the customer chased him.
+ */
+export const activityKindEnum = pgEnum('activity_kind', [
+  'call_in', 'call_out', 'email_in', 'email_out', 'sms',
+  'site_visit', 'meeting', 'note',
+]);
+
+export const reminderKindEnum = pgEnum('reminder_kind', [
+  'callback', 'follow_up', 'quote_expiring', 'site_visit', 'compliance', 'custom',
+]);
+
+/**
+ * 'overdue' is deliberately absent, for the reason `quote_status` has no
+ * 'expired' and `invoice_status` no 'overdue': it derives from the due date
+ * against today, and a stored value is wrong the moment the clock passes it
+ * with nobody there to notice.
+ *
+ * 'dismissed' is a decision about the reminder -- "I am not doing this" --
+ * and is not `record_status = 'void'`, which says the row should never have
+ * existed. Two different events, and they must not share a column.
+ */
+export const reminderStatusEnum = pgEnum('reminder_status', ['open', 'done', 'dismissed']);
+
+export const reminderRecurrenceEnum = pgEnum('reminder_recurrence', [
+  'none', 'daily', 'weekly', 'biweekly', 'monthly',
+]);
+
+export const reminderTriggerEnum = pgEnum('reminder_trigger', [
+  'quote_sent', 'quote_expiring', 'stage_entered', 'no_activity',
+  'site_visit_scheduled', 'project_won',
+]);

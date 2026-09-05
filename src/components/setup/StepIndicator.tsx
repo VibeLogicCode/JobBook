@@ -59,7 +59,7 @@ export function StepIndicator({
 
           // 44px minimum on every row, at every width: this is a form somebody
           // works through on a tablet on a kitchen table as often as at a desk.
-          const shell = `flex min-h-11 items-center gap-2 whitespace-nowrap rounded-[4px] px-3 t-small ${
+          const shell = `flex min-h-11 items-center gap-2 whitespace-nowrap rounded-control px-3 t-small ${
             isCurrent ? 'bg-accent-soft font-semibold text-accent-soft-fg' : 'text-muted'
           }`;
 

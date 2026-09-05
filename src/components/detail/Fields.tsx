@@ -128,7 +128,7 @@ export function FormError({ error }: { error: string | null }) {
   return (
     <p
       role="alert"
-      className="rounded-[6px] border border-negative bg-negative-soft px-3 py-2 t-small text-negative-soft-fg"
+      className="rounded-panel border border-negative bg-negative-soft px-3 py-2 t-small text-negative-soft-fg"
     >
       {error}
     </p>

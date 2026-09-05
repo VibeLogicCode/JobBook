@@ -10,7 +10,7 @@ import {
   TextAreaField,
   TextField,
 } from '@/components/settings/Fields';
-import { Notice } from '@/components/settings/Notice';
+import { Notice } from '@/components/ui/Notice';
 import { StepPanel } from '@/components/setup/StepPanel';
 
 export const dynamic = 'force-dynamic';

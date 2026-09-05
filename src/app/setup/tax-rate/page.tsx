@@ -7,7 +7,7 @@ import { requireOpenSetup } from '@/app/setup/guard';
 import { TAX_RATE_ID_KEY } from '@/app/setup/state';
 import { ActionForm } from '@/components/settings/ActionForm';
 import { CheckboxField, FieldGrid, TextField } from '@/components/settings/Fields';
-import { Notice } from '@/components/settings/Notice';
+import { Notice } from '@/components/ui/Notice';
 import { StepPanel } from '@/components/setup/StepPanel';
 import { tenantToday } from '@/lib/quote/dates';
 

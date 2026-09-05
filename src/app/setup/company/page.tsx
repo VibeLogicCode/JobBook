@@ -2,7 +2,7 @@ import { saveCompanyStep } from '@/app/setup/actions';
 import { requireOpenSetup } from '@/app/setup/guard';
 import { ActionForm } from '@/components/settings/ActionForm';
 import { FieldGrid, TextField } from '@/components/settings/Fields';
-import { Notice } from '@/components/settings/Notice';
+import { Notice } from '@/components/ui/Notice';
 import { StepPanel } from '@/components/setup/StepPanel';
 
 export const dynamic = 'force-dynamic';

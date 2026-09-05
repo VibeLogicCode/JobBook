@@ -110,6 +110,44 @@ never heard of is a bar telling the owner something untrue.
 <ProgressBar pct={pct} tone={pct > 100 ? 'negative' : 'accent'} label="Invoiced against contract value" />
 ```
 
+## FilterBar, NoMatches
+
+Search, filter and the count, above a list. A plain `GET` form, so the state of
+the screen IS the URL: the back button works, a filtered view is a link
+somebody can be sent, and the filtering happens in SQL rather than over an
+array that stops being the whole list the first time one needs a page.
+
+`reveal` is the one control that shows what the screen hides by default --
+closed quotes, lost and complete work. Its `hiddenCount` is not decoration: a
+list that quietly drops records is a list the owner reads as having lost them,
+so the count line says how many are behind the control before he has a reason
+to press it. Every select carries a real word on its empty option ("Any
+status"), never a blank.
+
+Not for a filter that has to change something other than the URL, and not for
+a control that filters a table already on screen without a round trip -- both
+want state, and this has none. Pair it with `NoMatches`, which is the empty
+result: a blank page reads as a broken query, so it says what was searched and
+offers to clear it.
+
+```tsx
+<FilterBar
+  basePath="/quotes"
+  q={q}
+  searchLabel="Search quotes"
+  selects={[{ name: 'status', label: 'Status', value: status, anyLabel: 'Any status', options }]}
+  reveal={{ name: 'closed', on: showClosed, showLabel: 'Show closed quotes',
+            hideLabel: 'Hide closed quotes', hiddenCount, hiddenNoun: 'closed' }}
+  shown={rows.length}
+  noun={{ singular: 'quote', plural: 'quotes' }}
+/>
+```
+
+The SQL half lives in `src/lib/list/search.ts`: `normalizeSearch` trims what
+was typed, and `searchCondition` escapes `%` and `_` before binding the
+pattern, so a search for "50%" narrows the list rather than matching every row
+in the table.
+
 ## CollapsibleGroup
 
 A named group that folds away and keeps showing its total while folded --

@@ -11,6 +11,8 @@ import {
   stepIndex,
 } from '@/app/setup/steps';
 import { StepIndicator } from '@/components/setup/StepIndicator';
+import { buttonClass } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 
 /**
  * One step of the wizard: the indicator beside it, the reason it exists above
@@ -50,7 +52,7 @@ export function StepPanel({
       </div>
 
       <div className="min-w-0 flex-1">
-        <section className="rounded-[6px] border border-line bg-surface p-4 sm:p-5">
+        <Card className="p-4 sm:p-5">
           <p className="t-micro text-subtle">
             STEP {index + 1} OF {SETUP_STEPS.length}
           </p>
@@ -58,13 +60,13 @@ export function StepPanel({
           <p className="mt-1 mb-4 max-w-prose t-small text-muted">{step.why}</p>
 
           {children}
-        </section>
+        </Card>
 
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
           {previous ? (
             <Link
               href={setupHref(previous)}
-              className="flex min-h-12 items-center gap-2 rounded-[4px] border border-line-strong px-4 t-small hover:bg-surface-2"
+              className={buttonClass('secondary', { size: 'lg', className: 't-small' })}
             >
               <ArrowLeft size={16} aria-hidden />
               {stepAt(previous).title}
@@ -77,7 +79,7 @@ export function StepPanel({
             isComplete ? (
               <Link
                 href={setupHref(next)}
-                className="flex min-h-12 items-center gap-2 rounded-[4px] bg-accent px-4 font-semibold text-accent-fg hover:bg-accent-hover"
+                className={buttonClass('primary', { size: 'lg', className: 't-small' })}
               >
                 {stepAt(next).title}
                 <ArrowRight size={16} aria-hidden />

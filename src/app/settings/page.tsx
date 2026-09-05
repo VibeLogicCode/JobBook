@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { loadSettings } from '@/app/settings/load';
 import { SETTINGS_SECTIONS } from '@/app/settings/nav';
-import { Notice } from '@/components/settings/Notice';
+import { Notice } from '@/components/ui/Notice';
 import { Section } from '@/components/settings/Section';
 
 export const dynamic = 'force-dynamic';
@@ -39,7 +39,7 @@ export default async function SettingsIndexPage() {
             <li key={section.href}>
               <Link
                 href={section.href}
-                className="flex min-h-11 flex-col justify-center rounded-[4px] border border-line px-3 py-2 hover:bg-surface-2"
+                className="flex min-h-11 flex-col justify-center rounded-control border border-line px-3 py-2 hover:bg-surface-2"
               >
                 <span className="font-semibold">{section.label}</span>
                 <span className="t-small text-muted">{section.summary}</span>
@@ -53,7 +53,7 @@ export default async function SettingsIndexPage() {
                 somebody looks for it. */}
             <Link
               href="/templates"
-              className="flex min-h-11 flex-col justify-center rounded-[4px] border border-line px-3 py-2 hover:bg-surface-2"
+              className="flex min-h-11 flex-col justify-center rounded-control border border-line px-3 py-2 hover:bg-surface-2"
             >
               <span className="font-semibold">Scope templates</span>
               <span className="t-small text-muted">

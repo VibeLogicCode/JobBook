@@ -6,7 +6,7 @@ import { requireOpenSetup } from '@/app/setup/guard';
 import { OWNER_USER_ID_KEY } from '@/app/setup/state';
 import { ActionForm } from '@/components/settings/ActionForm';
 import { FieldGrid, TextField } from '@/components/settings/Fields';
-import { Notice } from '@/components/settings/Notice';
+import { Notice } from '@/components/ui/Notice';
 import { StepPanel } from '@/components/setup/StepPanel';
 import {
   type EffectiveKey,
@@ -19,6 +19,7 @@ import {
   redactAuthConfig,
 } from '@/lib/deploy/auth-config';
 import { type Posture, POSTURE_KEYS, postureOfEntries, restartPlan } from '@/lib/deploy/posture';
+import { TableWrap } from '@/components/ui/Table';
 
 export const dynamic = 'force-dynamic';
 
@@ -101,7 +102,7 @@ function PostureChoice({ posture, checked }: { posture: Posture; checked: boolea
   return (
     <label
       htmlFor={`posture-${posture}`}
-      className="flex min-w-0 cursor-pointer flex-col gap-1 rounded-[6px] border border-line-strong bg-surface-2 p-3 hover:border-accent has-checked:border-accent has-checked:bg-accent-soft"
+      className="flex min-w-0 cursor-pointer flex-col gap-1 rounded-panel border border-line-strong bg-surface-2 p-3 hover:border-accent has-checked:border-accent has-checked:bg-accent-soft"
     >
       <span className="flex items-center gap-2 t-small font-semibold">
         <input
@@ -130,7 +131,7 @@ function PostureFields({
 }) {
   const copy = POSTURE_COPY[posture];
   return (
-    <fieldset className="min-w-0 rounded-[6px] border border-line p-3">
+    <fieldset className="min-w-0 rounded-panel border border-line p-3">
       <legend className="px-1 t-small font-semibold">{copy.title}</legend>
       <p className="mb-3 max-w-prose t-small text-muted">{copy.caution}</p>
       {children}
@@ -358,56 +359,54 @@ export default async function AccessStepPage() {
         ) : null}
 
         {onDisk && summary.length > 0 ? (
-          <div className="overflow-x-auto rounded-[6px] border border-line">
-            <table className="data-table data-table--stack" style={{ minWidth: '34rem' }}>
-              <caption className="sr-only">
-                What the configuration file already holds, and whether this running process is
-                using it
-              </caption>
-              <thead>
-                <tr>
-                  <th scope="col">Key</th>
-                  <th scope="col">On disk</th>
-                  <th scope="col">In this process</th>
+          <TableWrap minWidth="34rem">
+            <caption className="sr-only">
+              What the configuration file already holds, and whether this running process is
+              using it
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">Key</th>
+                <th scope="col">On disk</th>
+                <th scope="col">In this process</th>
+              </tr>
+            </thead>
+            <tbody>
+              {summary.map((entry) => (
+                <tr key={entry.key}>
+                  <td data-label="Key" className="num t-small">
+                    {entry.key}
+                  </td>
+                  <td data-label="On disk" className="t-small">
+                    {!entry.present ? (
+                      <span className="text-subtle">Not set</span>
+                    ) : entry.secret ? (
+                      // Present, and its length. Never the value. Length is
+                      // the one fact that separates the two failures an
+                      // installer actually hits: a value that never arrived,
+                      // and one the console's copy button truncated.
+                      <span className="text-muted">
+                        Set, {entry.length} characters — not shown
+                      </span>
+                    ) : (
+                      <span className="num">{entry.value}</span>
+                    )}
+                  </td>
+                  <td data-label="In this process" className="t-small text-muted">
+                    {/*
+                      A key present on disk but absent from `effects` means
+                      this process has no value for it, which is exactly what
+                      awaiting-restart says — so that is the default rather
+                      than a blank cell.
+                    */}
+                    {entry.present
+                      ? EFFECT_COPY[effectOf.get(entry.key) ?? 'awaiting-restart']
+                      : '—'}
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {summary.map((entry) => (
-                  <tr key={entry.key}>
-                    <td data-label="Key" className="num t-small">
-                      {entry.key}
-                    </td>
-                    <td data-label="On disk" className="t-small">
-                      {!entry.present ? (
-                        <span className="text-subtle">Not set</span>
-                      ) : entry.secret ? (
-                        // Present, and its length. Never the value. Length is
-                        // the one fact that separates the two failures an
-                        // installer actually hits: a value that never arrived,
-                        // and one the console's copy button truncated.
-                        <span className="text-muted">
-                          Set, {entry.length} characters — not shown
-                        </span>
-                      ) : (
-                        <span className="num">{entry.value}</span>
-                      )}
-                    </td>
-                    <td data-label="In this process" className="t-small text-muted">
-                      {/*
-                        A key present on disk but absent from `effects` means
-                        this process has no value for it, which is exactly what
-                        awaiting-restart says — so that is the default rather
-                        than a blank cell.
-                      */}
-                      {entry.present
-                        ? EFFECT_COPY[effectOf.get(entry.key) ?? 'awaiting-restart']
-                        : '—'}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+              ))}
+            </tbody>
+          </TableWrap>
         ) : null}
 
         {chosen && state !== 'empty' ? (

@@ -4,6 +4,8 @@ import { useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { acceptQuote, setQuoteStatus } from '@/app/quotes/[id]/actions';
 import type { AcceptanceSibling } from '@/app/quotes/[id]/siblings';
+import { Button } from '@/components/ui/Button';
+import { Notice } from '@/components/ui/Notice';
 import { Pill } from '@/components/ui/Pill';
 import { Sheet } from '@/components/worksheet/Sheet';
 import type { WireLine, WireQuote } from '@/components/worksheet/types';
@@ -69,10 +71,12 @@ export function Acceptance({
           opportunity becomes a job.
         </p>
         <div className="ml-auto flex flex-wrap gap-2">
-          <button
-            type="button"
-            disabled={declining}
-            className="min-h-11 rounded-[4px] border border-line-strong bg-surface px-3 hover:bg-surface-2 disabled:opacity-60"
+          {/* "Declining…", not "Saving…": the verb names what is happening,
+              and nothing about pressing this is a save. */}
+          <Button
+            variant="secondary"
+            pending={declining}
+            pendingLabel="Declining…"
             onClick={() => {
               // No confirmation step: declining is reversible from here, by
               // revising the quote, which is what happens when a customer who
@@ -85,22 +89,16 @@ export function Acceptance({
               });
             }}
           >
-            {declining ? 'Saving…' : 'They declined'}
-          </button>
-          <button
-            type="button"
-            className="min-h-11 rounded-[4px] bg-accent px-3 text-accent-fg hover:bg-accent-hover"
-            onClick={() => setOpen(true)}
-          >
-            Convert to a job
-          </button>
+            They declined
+          </Button>
+          <Button onClick={() => setOpen(true)}>Convert to a job</Button>
         </div>
       </div>
 
       {declineError ? (
-        <p role="alert" className="mt-2 t-small text-negative">
+        <Notice tone="negative" className="mt-2">
           {declineError}
-        </p>
+        </Notice>
       ) : null}
 
       {open ? (
@@ -270,33 +268,27 @@ function AcceptanceSheet({
       onClose={onClose}
       footer={
         <>
-          <button
-            type="button"
-            disabled={pending || !ready}
-            className="min-h-12 flex-1 rounded-[4px] bg-accent px-3 text-accent-fg hover:bg-accent-hover disabled:opacity-60"
+          {/* `flex-1` inside a sheet footer that is capped at `max-w-lg`, so
+              this is the narrow case the width rule allows, not a button run
+              across a desk monitor. */}
+          <Button
+            size="lg"
+            className="flex-1"
+            disabled={!ready}
+            pending={pending}
+            pendingLabel="Accepting…"
             onClick={convert}
           >
             {unchanged ? 'Accept and win the job' : 'Accept these lines and win the job'}
-          </button>
-          <button
-            type="button"
-            className="min-h-12 rounded-[4px] border border-line-strong px-3 hover:bg-surface-2"
-            onClick={onClose}
-          >
+          </Button>
+          <Button variant="secondary" size="lg" onClick={onClose}>
             Cancel
-          </button>
+          </Button>
         </>
       }
     >
       <div className="grid gap-4 pb-2">
-        {error ? (
-          <p
-            role="alert"
-            className="rounded-[4px] border border-negative bg-negative-soft px-3 py-2 t-small text-negative-soft-fg"
-          >
-            {error}
-          </p>
-        ) : null}
+        {error ? <Notice tone="negative">{error}</Notice> : null}
 
         <div className="grid gap-2">
           <h3 className="t-heading">What did they agree to?</h3>
@@ -407,9 +399,17 @@ function AcceptanceSheet({
           </label>
         ) : null}
 
-        {/* The whole consequence, in words, before the press. */}
-        <div className="rounded-[4px] border border-line bg-surface-2 px-3 py-2 t-small">
-          <p className="mb-1 t-micro uppercase text-muted">What this will do</p>
+        {/* The whole consequence, in words, before the press -- which is
+            what `Notice` calls the constraint about to bite.
+
+            `info` rather than `neutral`, and the difference is not decorative:
+            neutral renders `text-muted`, which is the tone for prose that was
+            already on the page and does not need reading. This is the most
+            important paragraph on the screen -- it is the only description of
+            what an irreversible press is about to do -- and setting it in
+            secondary grey tells the eye to skip precisely the sentence that
+            must not be skipped. */}
+        <Notice tone="info" title="What this will do">
           <ul className="grid gap-1">
             {unchanged ? (
               <li>
@@ -440,9 +440,9 @@ function AcceptanceSheet({
                 {siblings.length === 1 ? 'stays' : 'stay'} open.
               </li>
             ) : null}
-            <li className="text-muted">Nothing is deleted. Superseded versions stay readable.</li>
+            <li>Nothing is deleted. Superseded versions stay readable.</li>
           </ul>
-        </div>
+        </Notice>
       </div>
     </Sheet>
   );

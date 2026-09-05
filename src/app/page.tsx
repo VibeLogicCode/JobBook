@@ -2,6 +2,10 @@ import Link from 'next/link';
 import { and, eq } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { customers, organization, projects, quotes } from '@/db/schema';
+import { buttonClass } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
+import { MetricCard } from '@/components/ui/MetricCard';
+import { Money } from '@/components/ui/Money';
 import { Pill, statusTone } from '@/components/ui/Pill';
 import { formatCents } from '@/lib/money/format';
 
@@ -48,22 +52,24 @@ export default async function TodayPage() {
     <div className="px-4 py-4 sm:px-6">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <h1 className="t-title">Today</h1>
-        <Link
-          href="/quotes/new"
-          className="flex min-h-12 items-center rounded-[4px] bg-accent px-4 text-accent-fg hover:bg-accent-hover"
-        >
+        <Link href="/quotes/new" className={buttonClass('primary')}>
           New quote
         </Link>
       </div>
 
-      <section className="mb-6 rounded-[6px] border border-line bg-surface p-4">
-        <p className="t-small text-muted">Out with customers, awaiting a decision</p>
-        <p className="num t-display">{formatCents(outstanding)}</p>
-        <p className="t-small text-muted">
-          {awaiting.length} quote{awaiting.length === 1 ? '' : 's'}
-          {expiring.length > 0 ? ` · ${expiring.length} expiring within 7 days` : ''}
-        </p>
-      </section>
+      {/* `from` rather than a comma: the figure is the sum of the quotes that
+          are out, not a stored number, and MetricCard writes every derived
+          figure's provenance the same way. */}
+      <MetricCard
+        className="mb-6"
+        label="Out with customers"
+        from="awaiting a decision"
+        value={<Money cents={outstanding} plain />}
+        secondary={
+          `${awaiting.length} quote${awaiting.length === 1 ? '' : 's'}` +
+          (expiring.length > 0 ? ` · ${expiring.length} expiring within 7 days` : '')
+        }
+      />
 
       <QuoteList title="Awaiting a decision" rows={awaiting} today={today} />
       <QuoteList title="Drafts" rows={drafts} today={today} />
@@ -96,31 +102,35 @@ function QuoteList({
     <section className="mb-6">
       <h2 className="t-heading mb-2">{title}</h2>
       {rows.length === 0 ? (
-        <p className="rounded-[6px] border border-line bg-surface p-4 t-small text-muted">
+        <Card as="div" className="p-4 t-small text-muted">
           Nothing here. {title === 'Drafts' ? 'Start a quote and it appears here.' : 'Send a draft to fill this list.'}
-        </p>
+        </Card>
       ) : (
-        <ul className="divide-y divide-line overflow-hidden rounded-[6px] border border-line bg-surface">
-          {rows.map((row) => (
-            <li key={row.id}>
-              <Link
-                href={`/quotes/${row.id}`}
-                className="flex min-h-12 items-center justify-between gap-3 px-4 py-2 hover:bg-surface-2"
-              >
-                <span className="min-w-0">
-                  <span className="block truncate">{row.projectName}</span>
-                  <span className="t-small text-muted">
-                    {row.customerName} · <span className="num">{row.quoteNumber}</span>
+        // The list carries its own radius and clips itself, rather than the
+        // card clipping: Card deliberately does not hide its overflow.
+        <Card as="div">
+          <ul className="divide-y divide-line overflow-hidden rounded-panel">
+            {rows.map((row) => (
+              <li key={row.id}>
+                <Link
+                  href={`/quotes/${row.id}`}
+                  className="flex min-h-12 items-center justify-between gap-3 px-4 py-2 hover:bg-surface-2"
+                >
+                  <span className="min-w-0">
+                    <span className="block truncate">{row.projectName}</span>
+                    <span className="t-small text-muted">
+                      {row.customerName} · <span className="num">{row.quoteNumber}</span>
+                    </span>
                   </span>
-                </span>
-                <span className="flex shrink-0 items-center gap-3">
-                  <Pill tone={statusTone(row.status, row.validUntil < today)}>{row.status}</Pill>
-                  <span className="num">{formatCents(row.totalCents)}</span>
-                </span>
-              </Link>
-            </li>
-          ))}
-        </ul>
+                  <span className="flex shrink-0 items-center gap-3">
+                    <Pill tone={statusTone(row.status, row.validUntil < today)}>{row.status}</Pill>
+                    <span className="num">{formatCents(row.totalCents)}</span>
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </Card>
       )}
     </section>
   );

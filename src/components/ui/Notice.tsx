@@ -47,7 +47,7 @@ export function Notice({
   const resolvedRole = role ?? (tone === 'negative' ? 'alert' : tone === 'positive' ? 'status' : undefined);
 
   return (
-    <div role={resolvedRole} className={`flex items-start gap-2 rounded-[6px] border p-3 t-small ${wrap} ${className}`.trim()}>
+    <div role={resolvedRole} className={`flex items-start gap-2 rounded-panel border p-3 t-small ${wrap} ${className}`.trim()}>
       <Icon size={16} aria-hidden className="mt-0.5 shrink-0" />
       <div className="grid gap-1">
         {title ? <p className="font-semibold">{title}</p> : null}

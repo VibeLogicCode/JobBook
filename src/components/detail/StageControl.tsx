@@ -1,6 +1,7 @@
 'use client';
 
 import { useActionState, useState } from 'react';
+import { Button } from '@/components/ui/Button';
 import { Field, FormError, SelectField } from '@/components/detail/Fields';
 import type { FormAction } from '@/components/detail/form-state';
 import { PROJECT_STAGES, type ProjectStage, stagesOpenTo } from '@/components/detail/labels';
@@ -61,13 +62,15 @@ export function StageControl({
           }))}
         />
         </div>
-        <button
+        <Button
           type="submit"
-          disabled={pending || next === stage}
-          className="min-h-12 rounded-[4px] bg-accent px-4 text-accent-fg hover:bg-accent-hover disabled:opacity-60"
+          size="lg"
+          disabled={next === stage}
+          pending={pending}
+          pendingLabel="Moving…"
         >
-          {pending ? 'Moving…' : 'Change stage'}
-        </button>
+          Change stage
+        </Button>
       </div>
 
       {/* Why a bid was lost is the only thing that makes a lost opportunity

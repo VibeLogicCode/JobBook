@@ -77,7 +77,7 @@ export function TableWrap({
   bare?: boolean;
   className?: string;
 }) {
-  const frame = bare ? '' : 'rounded-[6px] border border-line bg-surface';
+  const frame = bare ? '' : 'rounded-panel border border-line bg-surface';
 
   return (
     <div className={`w-full overflow-x-auto ${frame} ${className}`.trim()}>

@@ -40,7 +40,7 @@ export function Sheet({
           event.stopPropagation();
           onClose();
         }}
-        className="flex max-h-[85dvh] w-full flex-col rounded-t-[6px] border-t border-line-strong bg-surface shadow-pop sm:max-w-lg sm:rounded-[6px] sm:border"
+        className="flex max-h-[85dvh] w-full flex-col rounded-t-[6px] border-t border-line-strong bg-surface shadow-pop sm:max-w-lg sm:rounded-panel sm:border"
       >
         <div
           aria-hidden
@@ -55,7 +55,7 @@ export function Sheet({
           <button
             type="button"
             aria-label="Close"
-            className="flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-[4px] text-muted hover:bg-surface-2 hover:text-ink"
+            className="flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-control text-muted hover:bg-surface-2 hover:text-ink"
             onClick={onClose}
           >
             <X size={18} aria-hidden />

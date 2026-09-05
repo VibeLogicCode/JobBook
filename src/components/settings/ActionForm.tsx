@@ -3,7 +3,8 @@
 import { useActionState, useEffect, useRef } from 'react';
 import { useFormStatus } from 'react-dom';
 import type { ActionResult, FormAction } from '@/app/settings/result';
-import { Notice } from '@/components/settings/Notice';
+import { Button } from '@/components/ui/Button';
+import { Notice } from '@/components/ui/Notice';
 
 /**
  * A form whose server action returns a result instead of throwing.
@@ -105,20 +106,23 @@ function Submit({
 }) {
   const { pending } = useFormStatus();
   return (
-    <button
+    // `lg`, matching the 48px `.field` these forms are built from -- a form's
+    // submit is the same size as the boxes above it. It was 44 here and 48 on
+    // every other form in the product, which was the drift rather than a
+    // decision.
+    <Button
       type="submit"
-      disabled={disabled || pending}
-      className={`min-h-11 rounded-[4px] px-4 font-semibold disabled:opacity-50 ${
-        destructive
-          ? 'border border-negative text-negative hover:bg-negative-soft'
-          : 'bg-accent text-accent-fg hover:bg-accent-hover'
-      }`}
+      size="lg"
+      variant={destructive ? 'danger' : 'primary'}
+      disabled={disabled}
+      pending={pending}
+      // A destructive action does not report "Saving". Pressing Remove and
+      // being told the app is saving describes the opposite of what is
+      // happening; a caller with a better verb passes pendingLabel.
+      pendingLabel={pendingLabel ?? (destructive ? 'Working…' : 'Saving…')}
     >
-      {/* A destructive action does not report "Saving". Pressing Remove and
-          being told the app is saving describes the opposite of what is
-          happening; a caller with a better verb passes pendingLabel. */}
-      {pending ? (pendingLabel ?? (destructive ? 'Working…' : 'Saving…')) : label}
-    </button>
+      {label}
+    </Button>
   );
 }
 
@@ -181,17 +185,18 @@ function RowSubmit({
 }) {
   const { pending } = useFormStatus();
   return (
-    <button
+    // A row control, so it stays at the 44px floor rather than taking the
+    // form submit's 48: this one sits inside a table cell beside five others.
+    <Button
       type="submit"
-      disabled={disabled || pending}
+      variant={destructive ? 'danger' : 'secondary'}
+      className="t-small"
+      disabled={disabled}
       title={title}
-      className={`min-h-11 whitespace-nowrap rounded-[4px] border px-3 t-small disabled:opacity-50 ${
-        destructive
-          ? 'border-negative text-negative hover:bg-negative-soft'
-          : 'border-line-strong hover:bg-surface-2'
-      }`}
+      pending={pending}
+      pendingLabel="…"
     >
-      {pending ? '…' : label}
-    </button>
+      {label}
+    </Button>
   );
 }

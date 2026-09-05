@@ -25,7 +25,7 @@ import {
   TextAreaField,
   TextField,
 } from '@/components/settings/Fields';
-import { Notice } from '@/components/settings/Notice';
+import { Notice } from '@/components/ui/Notice';
 import { Section } from '@/components/settings/Section';
 import { Pill } from '@/components/ui/Pill';
 import { AmountCell, TableWrap } from '@/components/ui/Table';
@@ -266,7 +266,7 @@ export default async function TemplateDetailPage({
                   <AmountCell data-label="Order">{line.sortOrder}</AmountCell>
                   <td data-label="Change">
                     <details className="min-w-0">
-                      <summary className="min-h-11 cursor-pointer list-none rounded-[4px] border border-line-strong px-3 py-2 t-small">
+                      <summary className="min-h-11 cursor-pointer list-none rounded-control border border-line-strong px-3 py-2 t-small">
                         Change…
                       </summary>
                       <div className="mt-3 flex w-full max-w-[38rem] flex-col gap-4 border-t border-line pt-3">

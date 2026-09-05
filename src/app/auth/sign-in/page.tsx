@@ -42,13 +42,13 @@ export default async function SignInPage({
       </div>
 
       {reason ? (
-        <p role="alert" className="rounded-[6px] border border-warning bg-warning-soft px-3 py-2 t-small text-warning-soft-fg">
+        <p role="alert" className="rounded-panel border border-warning bg-warning-soft px-3 py-2 t-small text-warning-soft-fg">
           {reason}
         </p>
       ) : null}
 
       {providers.length === 0 ? (
-        <p className="rounded-[6px] border border-line bg-surface p-4 t-small text-muted">
+        <p className="rounded-panel border border-line bg-surface p-4 t-small text-muted">
           No sign-in provider is configured on this installation. An operator sets one in the
           container environment; nothing about it is stored in the database.
         </p>
@@ -60,7 +60,7 @@ export default async function SignInPage({
                   server except a transient cookie. */}
               <a
                 href={`/auth/start/${provider}${query}`}
-                className="flex min-h-12 items-center justify-center rounded-[4px] border border-line-strong bg-surface px-4 hover:bg-surface-2"
+                className="flex min-h-12 items-center justify-center rounded-control border border-line-strong bg-surface px-4 hover:bg-surface-2"
               >
                 {LABELS[provider] ?? provider}
               </a>

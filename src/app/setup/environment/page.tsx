@@ -2,7 +2,7 @@ import { acknowledgeEnvironmentStep } from '@/app/setup/actions';
 import { checkSummary, runEnvironmentChecks } from '@/app/setup/environment';
 import { requireOpenSetup } from '@/app/setup/guard';
 import { ActionForm } from '@/components/settings/ActionForm';
-import { Notice } from '@/components/settings/Notice';
+import { Notice } from '@/components/ui/Notice';
 import { EnvironmentReport } from '@/components/setup/EnvironmentReport';
 import { StepPanel } from '@/components/setup/StepPanel';
 

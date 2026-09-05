@@ -11,9 +11,10 @@ import {
 } from '@/app/settings/tax-rates/actions';
 import { ActionForm, RowAction } from '@/components/settings/ActionForm';
 import { CheckboxField, FieldGrid, TextField } from '@/components/settings/Fields';
-import { Notice } from '@/components/settings/Notice';
+import { Notice } from '@/components/ui/Notice';
 import { Section } from '@/components/settings/Section';
 import { Pill } from '@/components/ui/Pill';
+import { TableWrap } from '@/components/ui/Table';
 import { tenantToday } from '@/lib/quote/dates';
 import { selectRatesInForce } from '@/lib/quote/tax';
 
@@ -113,227 +114,225 @@ export default async function TaxRatesPage() {
           </p>
         </Notice>
 
-        <div className="mt-4 overflow-x-auto rounded-[6px] border border-line">
-          <table className="data-table data-table--stack" style={{ minWidth: '64rem' }}>
-            <thead>
+        <TableWrap minWidth="64rem" className="mt-4">
+          <thead>
+            <tr>
+              <th scope="col">Label</th>
+              <th scope="col" className="cell-num">
+                Rate
+              </th>
+              <th scope="col">In force from</th>
+              <th scope="col">Until</th>
+              <th scope="col">Registration</th>
+              <th scope="col">Compound</th>
+              <th scope="col" className="cell-num">
+                Order
+              </th>
+              <th scope="col">Status</th>
+              <th scope="col">Change</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length === 0 ? (
               <tr>
-                <th scope="col">Label</th>
-                <th scope="col" className="cell-num">
-                  Rate
-                </th>
-                <th scope="col">In force from</th>
-                <th scope="col">Until</th>
-                <th scope="col">Registration</th>
-                <th scope="col">Compound</th>
-                <th scope="col" className="cell-num">
-                  Order
-                </th>
-                <th scope="col">Status</th>
-                <th scope="col">Change</th>
+                <td data-label="Label" colSpan={9}>
+                  No tax rates yet. Add the first one below. A deployment in a jurisdiction
+                  with no sales tax leaves this list empty, and quotes simply carry no tax
+                  line.
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {rows.length === 0 ? (
-                <tr>
-                  <td data-label="Label" colSpan={9}>
-                    No tax rates yet. Add the first one below. A deployment in a jurisdiction
-                    with no sales tax leaves this list empty, and quotes simply carry no tax
-                    line.
+            ) : null}
+
+            {rows.map((row) => {
+              const isCurrent = current.has(row.id);
+              const closed = row.effectiveTo !== null;
+              return (
+                <tr key={row.id}>
+                  <td data-label="Label">
+                    {row.label}
+                    {row.shortLabel ? (
+                      <span className="ml-2 t-small text-subtle">{row.shortLabel}</span>
+                    ) : null}
+                  </td>
+                  <td data-label="Rate" className="cell-num">
+                    {formatPercent(row.rateTenThou)}%
+                  </td>
+                  <td data-label="In force from" className="cell-num">
+                    {row.effectiveFrom}
+                  </td>
+                  <td data-label="Until" className="cell-num">
+                    {row.effectiveTo ?? '—'}
+                  </td>
+                  <td data-label="Registration" className="num t-small text-muted">
+                    {row.registrationNumber ?? '—'}
+                  </td>
+                  <td data-label="Compound" className="t-small text-muted">
+                    {row.isCompound ? 'On subtotal plus prior taxes' : 'On the subtotal'}
+                  </td>
+                  <td data-label="Order" className="cell-num">
+                    {row.sortOrder}
+                  </td>
+                  <td data-label="Status">
+                    <span className="flex flex-wrap items-center gap-1">
+                      {isCurrent ? <Pill tone="positive">In force today</Pill> : null}
+                      {!row.isActive ? <Pill tone="neutral">Retired</Pill> : null}
+                      {row.recordStatus === 'void' ? <Pill tone="negative">Void</Pill> : null}
+                      {closed && row.isActive && !isCurrent ? (
+                        <Pill tone="neutral">Superseded</Pill>
+                      ) : null}
+                      {!closed && !isCurrent && row.isActive ? (
+                        <Pill tone="info">Future</Pill>
+                      ) : null}
+                    </span>
+                  </td>
+                  <td data-label="Change">
+                    <details className="min-w-0">
+                      <summary className="min-h-11 cursor-pointer list-none rounded-control border border-line-strong px-3 py-2 t-small">
+                        Change…
+                      </summary>
+                      <div className="mt-3 flex w-full max-w-[38rem] flex-col gap-4 border-t border-line pt-3">
+                        <div>
+                          <h3 className="t-small font-semibold">Change the rate</h3>
+                          <p className="mb-2 max-w-prose t-small text-subtle">
+                            Closes this row on the day before the new rate starts and
+                            inserts its successor.
+                          </p>
+                          <ActionForm
+                            action={supersedeTaxRate}
+                            submitLabel="Supersede this rate"
+                            disabled={!allowed || closed || row.recordStatus === 'void'}
+                            disabledNote={
+                              closed
+                                ? 'This row is already closed. Supersede the rate that is in force instead.'
+                                : allowed
+                                  ? undefined
+                                  : OWNER_ONLY
+                            }
+                          >
+                            <input type="hidden" name="id" value={row.id} />
+                            <FieldGrid>
+                              <TextField
+                                idPrefix={`supersede-${row.id}`}
+                                name="rate"
+                                label="New rate"
+                                required
+                                numeric
+                                inputMode="decimal"
+                                suffix="%"
+                                maxLength={8}
+                                disabled={!allowed || closed}
+                              />
+                              <TextField
+                                idPrefix={`supersede-${row.id}`}
+                                name="effectiveFrom"
+                                label="Takes effect on"
+                                type="date"
+                                required
+                                disabled={!allowed || closed}
+                                hint="The first day the new rate applies. It must be after this row's start date."
+                              />
+                            </FieldGrid>
+                          </ActionForm>
+                        </div>
+
+                        <div>
+                          <h3 className="t-small font-semibold">Correct the presentation</h3>
+                          <p className="mb-2 max-w-prose t-small text-subtle">
+                            What it is called, its registration number, whether it compounds
+                            and the order it applies in. These change in place — every
+                            issued quote already carries its own copy of all four, so a
+                            correction here cannot reach a signed document.
+                          </p>
+                          <ActionForm
+                            action={editTaxRatePresentation}
+                            submitLabel="Save presentation"
+                            disabled={!allowed}
+                            disabledNote={allowed ? undefined : OWNER_ONLY}
+                          >
+                            <input type="hidden" name="id" value={row.id} />
+                            <FieldGrid>
+                              <TextField
+                                idPrefix={`edit-${row.id}`}
+                                name="label"
+                                label="Label"
+                                required
+                                maxLength={50}
+                                defaultValue={row.label}
+                                disabled={!allowed}
+                                hint="Printed on the document beside the amount."
+                              />
+                              <TextField
+                                idPrefix={`edit-${row.id}`}
+                                name="shortLabel"
+                                label="Short label"
+                                maxLength={20}
+                                defaultValue={row.shortLabel}
+                                disabled={!allowed}
+                                hint="For a narrow column, where the full label will not fit."
+                              />
+                              <TextField
+                                idPrefix={`edit-${row.id}`}
+                                name="registrationNumber"
+                                label="Registration number"
+                                maxLength={50}
+                                numeric
+                                defaultValue={row.registrationNumber}
+                                disabled={!allowed}
+                              />
+                              <TextField
+                                idPrefix={`edit-${row.id}`}
+                                name="sortOrder"
+                                label="Order"
+                                required
+                                numeric
+                                inputMode="numeric"
+                                maxLength={3}
+                                defaultValue={String(row.sortOrder)}
+                                disabled={!allowed}
+                                hint="Application order. It matters when a compound tax is in the list."
+                              />
+                              <CheckboxField
+                                idPrefix={`edit-${row.id}`}
+                                name="isCompound"
+                                label="Applies on the subtotal plus taxes already added"
+                                defaultChecked={row.isCompound}
+                                disabled={!allowed}
+                                wide
+                                hint="Compound taxes evaluate after every non-compound one, in the order above. No current Canadian jurisdiction compounds; one historically did."
+                              />
+                            </FieldGrid>
+                          </ActionForm>
+                        </div>
+
+                        <div>
+                          <h3 className="t-small font-semibold">
+                            {row.isActive ? 'Retire' : 'Bring back'}
+                          </h3>
+                          <p className="mb-2 max-w-prose t-small text-subtle">
+                            Nothing is deleted. A retired rate keeps its dates, so a quote
+                            inside its window still answers to an audit.
+                          </p>
+                          <RowAction
+                            action={setTaxRateActive}
+                            label={row.isActive ? 'Retire this rate' : 'Bring it back'}
+                            destructive={row.isActive}
+                            disabled={!allowed}
+                            fields={{ id: row.id, isActive: row.isActive ? 'false' : 'true' }}
+                            confirm={
+                              row.isActive
+                                ? 'Retire this rate? It stops applying to new quotes. The row and its dates stay.'
+                                : undefined
+                            }
+                          />
+                        </div>
+                      </div>
+                    </details>
                   </td>
                 </tr>
-              ) : null}
-
-              {rows.map((row) => {
-                const isCurrent = current.has(row.id);
-                const closed = row.effectiveTo !== null;
-                return (
-                  <tr key={row.id}>
-                    <td data-label="Label">
-                      {row.label}
-                      {row.shortLabel ? (
-                        <span className="ml-2 t-small text-subtle">{row.shortLabel}</span>
-                      ) : null}
-                    </td>
-                    <td data-label="Rate" className="cell-num">
-                      {formatPercent(row.rateTenThou)}%
-                    </td>
-                    <td data-label="In force from" className="cell-num">
-                      {row.effectiveFrom}
-                    </td>
-                    <td data-label="Until" className="cell-num">
-                      {row.effectiveTo ?? '—'}
-                    </td>
-                    <td data-label="Registration" className="num t-small text-muted">
-                      {row.registrationNumber ?? '—'}
-                    </td>
-                    <td data-label="Compound" className="t-small text-muted">
-                      {row.isCompound ? 'On subtotal plus prior taxes' : 'On the subtotal'}
-                    </td>
-                    <td data-label="Order" className="cell-num">
-                      {row.sortOrder}
-                    </td>
-                    <td data-label="Status">
-                      <span className="flex flex-wrap items-center gap-1">
-                        {isCurrent ? <Pill tone="positive">In force today</Pill> : null}
-                        {!row.isActive ? <Pill tone="neutral">Retired</Pill> : null}
-                        {row.recordStatus === 'void' ? <Pill tone="negative">Void</Pill> : null}
-                        {closed && row.isActive && !isCurrent ? (
-                          <Pill tone="neutral">Superseded</Pill>
-                        ) : null}
-                        {!closed && !isCurrent && row.isActive ? (
-                          <Pill tone="info">Future</Pill>
-                        ) : null}
-                      </span>
-                    </td>
-                    <td data-label="Change">
-                      <details className="min-w-0">
-                        <summary className="min-h-11 cursor-pointer list-none rounded-[4px] border border-line-strong px-3 py-2 t-small">
-                          Change…
-                        </summary>
-                        <div className="mt-3 flex w-full max-w-[38rem] flex-col gap-4 border-t border-line pt-3">
-                          <div>
-                            <h3 className="t-small font-semibold">Change the rate</h3>
-                            <p className="mb-2 max-w-prose t-small text-subtle">
-                              Closes this row on the day before the new rate starts and
-                              inserts its successor.
-                            </p>
-                            <ActionForm
-                              action={supersedeTaxRate}
-                              submitLabel="Supersede this rate"
-                              disabled={!allowed || closed || row.recordStatus === 'void'}
-                              disabledNote={
-                                closed
-                                  ? 'This row is already closed. Supersede the rate that is in force instead.'
-                                  : allowed
-                                    ? undefined
-                                    : OWNER_ONLY
-                              }
-                            >
-                              <input type="hidden" name="id" value={row.id} />
-                              <FieldGrid>
-                                <TextField
-                                  idPrefix={`supersede-${row.id}`}
-                                  name="rate"
-                                  label="New rate"
-                                  required
-                                  numeric
-                                  inputMode="decimal"
-                                  suffix="%"
-                                  maxLength={8}
-                                  disabled={!allowed || closed}
-                                />
-                                <TextField
-                                  idPrefix={`supersede-${row.id}`}
-                                  name="effectiveFrom"
-                                  label="Takes effect on"
-                                  type="date"
-                                  required
-                                  disabled={!allowed || closed}
-                                  hint="The first day the new rate applies. It must be after this row's start date."
-                                />
-                              </FieldGrid>
-                            </ActionForm>
-                          </div>
-
-                          <div>
-                            <h3 className="t-small font-semibold">Correct the presentation</h3>
-                            <p className="mb-2 max-w-prose t-small text-subtle">
-                              What it is called, its registration number, whether it compounds
-                              and the order it applies in. These change in place — every
-                              issued quote already carries its own copy of all four, so a
-                              correction here cannot reach a signed document.
-                            </p>
-                            <ActionForm
-                              action={editTaxRatePresentation}
-                              submitLabel="Save presentation"
-                              disabled={!allowed}
-                              disabledNote={allowed ? undefined : OWNER_ONLY}
-                            >
-                              <input type="hidden" name="id" value={row.id} />
-                              <FieldGrid>
-                                <TextField
-                                  idPrefix={`edit-${row.id}`}
-                                  name="label"
-                                  label="Label"
-                                  required
-                                  maxLength={50}
-                                  defaultValue={row.label}
-                                  disabled={!allowed}
-                                  hint="Printed on the document beside the amount."
-                                />
-                                <TextField
-                                  idPrefix={`edit-${row.id}`}
-                                  name="shortLabel"
-                                  label="Short label"
-                                  maxLength={20}
-                                  defaultValue={row.shortLabel}
-                                  disabled={!allowed}
-                                  hint="For a narrow column, where the full label will not fit."
-                                />
-                                <TextField
-                                  idPrefix={`edit-${row.id}`}
-                                  name="registrationNumber"
-                                  label="Registration number"
-                                  maxLength={50}
-                                  numeric
-                                  defaultValue={row.registrationNumber}
-                                  disabled={!allowed}
-                                />
-                                <TextField
-                                  idPrefix={`edit-${row.id}`}
-                                  name="sortOrder"
-                                  label="Order"
-                                  required
-                                  numeric
-                                  inputMode="numeric"
-                                  maxLength={3}
-                                  defaultValue={String(row.sortOrder)}
-                                  disabled={!allowed}
-                                  hint="Application order. It matters when a compound tax is in the list."
-                                />
-                                <CheckboxField
-                                  idPrefix={`edit-${row.id}`}
-                                  name="isCompound"
-                                  label="Applies on the subtotal plus taxes already added"
-                                  defaultChecked={row.isCompound}
-                                  disabled={!allowed}
-                                  wide
-                                  hint="Compound taxes evaluate after every non-compound one, in the order above. No current Canadian jurisdiction compounds; one historically did."
-                                />
-                              </FieldGrid>
-                            </ActionForm>
-                          </div>
-
-                          <div>
-                            <h3 className="t-small font-semibold">
-                              {row.isActive ? 'Retire' : 'Bring back'}
-                            </h3>
-                            <p className="mb-2 max-w-prose t-small text-subtle">
-                              Nothing is deleted. A retired rate keeps its dates, so a quote
-                              inside its window still answers to an audit.
-                            </p>
-                            <RowAction
-                              action={setTaxRateActive}
-                              label={row.isActive ? 'Retire this rate' : 'Bring it back'}
-                              destructive={row.isActive}
-                              disabled={!allowed}
-                              fields={{ id: row.id, isActive: row.isActive ? 'false' : 'true' }}
-                              confirm={
-                                row.isActive
-                                  ? 'Retire this rate? It stops applying to new quotes. The row and its dates stay.'
-                                  : undefined
-                              }
-                            />
-                          </div>
-                        </div>
-                      </details>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+              );
+            })}
+          </tbody>
+        </TableWrap>
       </Section>
 
       <Section

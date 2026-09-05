@@ -115,9 +115,13 @@ async function findOffences(root: string, dirs: string[]): Promise<string[]> {
       for (const pattern of patterns) {
         // A generic numeric shape in prose is an example, not a hardcoded
         // value. A tenant NAME in prose still ships to another company.
-        if (isProse && pattern.why !== 'a tenant-specific literal' && !pattern.why.startsWith('the tenant literal')) {
-          continue;
-        }
+        //
+        // Only the tenant-literal patterns are name-shaped, and they are the
+        // only ones built with that prefix, so the prefix is the whole test.
+        // It used to also compare against 'a tenant-specific literal', which
+        // no pattern has ever been given -- a clause that always passed and
+        // read as if it were guarding something.
+        if (isProse && !pattern.why.startsWith('the tenant literal')) continue;
         if (pattern.regex.test(text)) offences.push(`${relative} contains ${pattern.why}`);
       }
     }

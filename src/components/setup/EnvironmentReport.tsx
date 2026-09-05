@@ -1,5 +1,6 @@
 import { CircleSlash, CircleX, Check } from 'lucide-react';
 import type { CheckStatus, EnvironmentCheck } from '@/app/setup/environment';
+import { TableWrap } from '@/components/ui/Table';
 
 /**
  * The environment report.
@@ -40,7 +41,7 @@ export function StatusPill({ status }: { status: CheckStatus }) {
   const Icon = STATUS_ICON[status];
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded-[4px] border px-2 py-0.5 t-micro ${STATUS_TONE[status]}`}
+      className={`inline-flex items-center gap-1 rounded-control border px-2 py-0.5 t-micro ${STATUS_TONE[status]}`}
     >
       <Icon size={12} aria-hidden />
       {STATUS_LABEL[status]}
@@ -50,8 +51,7 @@ export function StatusPill({ status }: { status: CheckStatus }) {
 
 export function EnvironmentReport({ checks }: { checks: readonly EnvironmentCheck[] }) {
   return (
-    <div className="overflow-x-auto rounded-[6px] border border-line">
-      <table className="data-table data-table--stack" style={{ minWidth: '44rem' }}>
+    <TableWrap minWidth="44rem">
         <caption className="sr-only">
           Environment checks, each with what was found and what to do about it
         </caption>
@@ -84,7 +84,6 @@ export function EnvironmentReport({ checks }: { checks: readonly EnvironmentChec
             </tr>
           ))}
         </tbody>
-      </table>
-    </div>
+    </TableWrap>
   );
 }

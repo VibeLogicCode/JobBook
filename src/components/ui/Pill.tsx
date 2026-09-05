@@ -20,7 +20,7 @@ export function Pill({ tone = 'neutral', children }: { tone?: Tone; children: Re
       // heading: a flex item's default is to shrink, and the first thing a
       // squeezed chip does is break its own word across two lines, which is
       // the state it exists to make legible at a glance.
-      className={`inline-flex shrink-0 items-center whitespace-nowrap rounded-[4px] border px-1.5 py-0.5 t-micro uppercase ${TONES[tone]}`}
+      className={`inline-flex shrink-0 items-center whitespace-nowrap rounded-control border px-1.5 py-0.5 t-micro uppercase ${TONES[tone]}`}
     >
       {children}
     </span>

@@ -2,6 +2,8 @@
 
 import Link from 'next/link';
 import { useActionState } from 'react';
+import { Button } from '@/components/ui/Button';
+import { Notice } from '@/components/ui/Notice';
 import { FormError, TextAreaField } from '@/components/detail/Fields';
 import type { FormAction } from '@/components/detail/form-state';
 
@@ -41,9 +43,8 @@ export function VoidControl({
       <p className="t-small text-muted">{description}</p>
 
       {blocked ? (
-        <div className="rounded-[4px] border border-warning bg-warning-soft px-3 py-2 t-small text-warning-soft-fg">
-          <p>{blockerLead}</p>
-          <ul className="mt-1 grid gap-1">
+        <Notice tone="warning" title={blockerLead}>
+          <ul className="grid gap-1">
             {blockers.map((blocker) => (
               <li key={blocker.href}>
                 <Link href={blocker.href} className="underline">
@@ -52,7 +53,7 @@ export function VoidControl({
               </li>
             ))}
           </ul>
-        </div>
+        </Notice>
       ) : null}
 
       <FormError error={state && !state.ok ? state.error : null} />
@@ -68,13 +69,20 @@ export function VoidControl({
       />
 
       <div>
-        <button
+        {/* Outlined, not the soft red slab this used to be: `danger` is the
+            one destructive treatment in the product, and a filled negative
+            button beside it would read as the louder of two dangers. The verb
+            is the action's own -- a void does not report "Saving". */}
+        <Button
           type="submit"
-          disabled={pending || blocked}
-          className="min-h-11 rounded-[4px] border border-negative bg-negative-soft px-4 text-negative-soft-fg hover:border-negative-soft-fg disabled:opacity-60"
+          variant="danger"
+          size="lg"
+          disabled={blocked}
+          pending={pending}
+          pendingLabel="Voiding…"
         >
-          {pending ? 'Voiding…' : submitLabel}
-        </button>
+          {submitLabel}
+        </Button>
       </div>
     </form>
   );

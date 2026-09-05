@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useActionState, useState } from 'react';
+import { Button, buttonClass } from '@/components/ui/Button';
 import { CheckField, Field, FieldGroup, FormError, SelectField } from '@/components/detail/Fields';
 import type { FormAction } from '@/components/detail/form-state';
 import { CUSTOMER_TYPES, LEAD_SOURCES } from '@/components/detail/labels';
@@ -210,17 +211,12 @@ export function CustomerForm({
       </FieldGroup>
 
       <div className="flex flex-wrap gap-2">
-        <button
-          type="submit"
-          disabled={pending}
-          className="min-h-12 rounded-[4px] bg-accent px-4 text-accent-fg hover:bg-accent-hover disabled:opacity-60"
-        >
-          {pending ? 'Saving…' : submitLabel}
-        </button>
-        <Link
-          href={cancelHref}
-          className="flex min-h-12 items-center rounded-[4px] border border-line-strong px-4 hover:bg-surface-2"
-        >
+        <Button type="submit" size="lg" pending={pending} pendingLabel="Saving…">
+          {submitLabel}
+        </Button>
+        {/* A link, because it changes the URL. `buttonClass` rather than a
+            hand-written copy of the same six utilities. */}
+        <Link href={cancelHref} className={buttonClass('secondary', { size: 'lg' })}>
           Cancel
         </Link>
       </div>

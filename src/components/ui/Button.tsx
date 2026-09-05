@@ -18,7 +18,7 @@ const VARIANTS: Record<ButtonVariant, string> = {
 /**
  * Class builder shared by `<Button>` and any `<Link>` that has to look like
  * one. Exported so a link never re-describes the styling by hand: the six
- * places that already hand-rolled `min-h-11 rounded-[4px] bg-accent ...` had
+ * places that already hand-rolled `min-h-11 rounded-control bg-accent ...` had
  * drifted into three different paddings between them.
  */
 export function buttonClass(
@@ -30,7 +30,7 @@ export function buttonClass(
     // `no-print`: a control is an affordance, and an affordance on paper is
     // ink spent on something nobody can press. The document itself comes from
     // the /print route, never from printing a working screen.
-    'no-print inline-flex items-center justify-center gap-2 rounded-[4px] border px-4 font-semibold',
+    'no-print inline-flex items-center justify-center gap-2 rounded-control border px-4 font-semibold',
     'whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-60',
     // A button sizes to its content. The owner has twice objected to one
     // stretching the width of a desk monitor, and `inline-flex` alone does not

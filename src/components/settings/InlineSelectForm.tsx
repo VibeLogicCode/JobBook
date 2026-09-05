@@ -3,6 +3,7 @@
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
 import type { ActionResult, FormAction } from '@/app/settings/result';
+import { Button } from '@/components/ui/Button';
 import type { Option } from '@/components/settings/Fields';
 
 /**
@@ -73,12 +74,18 @@ export function InlineSelectForm({
 function Apply({ label, disabled }: { label: string; disabled?: boolean }) {
   const { pending } = useFormStatus();
   return (
-    <button
+    // `shrink-0` is still the caller's: `Button` holds its own width with
+    // `w-fit`, but a flex item's default is to shrink, and this one shares a
+    // row with a select that will take everything it is given.
+    <Button
       type="submit"
-      disabled={disabled || pending}
-      className="min-h-11 shrink-0 rounded-[4px] border border-line-strong px-3 t-small disabled:opacity-50"
+      variant="secondary"
+      className="shrink-0 t-small"
+      disabled={disabled}
+      pending={pending}
+      pendingLabel="…"
     >
-      {pending ? '…' : label}
-    </button>
+      {label}
+    </Button>
   );
 }

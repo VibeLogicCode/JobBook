@@ -245,7 +245,7 @@ export function ReadOnlyField({
   return (
     <div className={`flex min-w-0 flex-col gap-1 ${wide ? 'sm:col-span-2' : ''}`}>
       <span className="t-small font-semibold">{label}</span>
-      <span className="rounded-[4px] border border-line bg-surface-2 px-2 py-1.5 t-small text-muted">
+      <span className="rounded-control border border-line bg-surface-2 px-2 py-1.5 t-small text-muted">
         {value}
       </span>
       {hint ? <p className="t-small text-subtle">{hint}</p> : null}

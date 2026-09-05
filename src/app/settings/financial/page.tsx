@@ -11,7 +11,7 @@ import {
   TextAreaField,
   TextField,
 } from '@/components/settings/Fields';
-import { Notice } from '@/components/settings/Notice';
+import { Notice } from '@/components/ui/Notice';
 import { Section } from '@/components/settings/Section';
 import { formatBasisPoints } from '@/lib/money/format';
 import { RATE_SCALE, divRoundHalfUp } from '@/lib/money/scale';

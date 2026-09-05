@@ -39,7 +39,7 @@ export async function LogoField({
           <p className="t-small font-semibold">Current logo</p>
           {logo ? (
             <>
-              <span className="flex w-fit items-center justify-center rounded-[4px] border border-line-strong bg-surface-2 p-2">
+              <span className="flex w-fit items-center justify-center rounded-control border border-line-strong bg-surface-2 p-2">
                 {/*
                   A plain img, not next/image. The optimiser fetches the source
                   through its own loader, which would have to reach this

@@ -14,9 +14,11 @@ import {
 import { ActionForm, RowAction } from '@/components/settings/ActionForm';
 import { FieldGrid, SelectField, TextField } from '@/components/settings/Fields';
 import { InlineSelectForm } from '@/components/settings/InlineSelectForm';
-import { Notice } from '@/components/settings/Notice';
+import { Notice } from '@/components/ui/Notice';
 import { Section } from '@/components/settings/Section';
+import { buttonClass } from '@/components/ui/Button';
 import { Pill } from '@/components/ui/Pill';
+import { TableWrap } from '@/components/ui/Table';
 
 export const dynamic = 'force-dynamic';
 
@@ -135,59 +137,65 @@ export default async function UsersPage({
           </p>
           <Link
             href={showInactive ? '/settings/users' : '/settings/users?inactive=1'}
-            className="min-h-11 rounded-[4px] border border-line-strong px-3 py-2 t-small hover:bg-surface-2"
+            className={buttonClass('secondary', { className: 't-small' })}
           >
             {showInactive ? 'Hide inactive users' : 'Show inactive users'}
           </Link>
         </div>
 
-        <div className="mt-2 overflow-x-auto rounded-[6px] border border-line">
-          <table className="data-table data-table--stack" style={{ minWidth: '60rem' }}>
-            <thead>
+        <TableWrap minWidth="60rem" className="mt-2">
+          <thead>
+            <tr>
+              <th scope="col">Name</th>
+              <th scope="col">Email</th>
+              <th scope="col">Role</th>
+              <th scope="col">Sign-in</th>
+              <th scope="col">Status</th>
+              <th scope="col">Account</th>
+            </tr>
+          </thead>
+          <tbody>
+            {visible.length === 0 ? (
               <tr>
-                <th scope="col">Name</th>
-                <th scope="col">Email</th>
-                <th scope="col">Role</th>
-                <th scope="col">Sign-in</th>
-                <th scope="col">Status</th>
-                <th scope="col">Account</th>
+                <td data-label="Name" colSpan={6}>
+                  No users to show. Add the first one below.
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {visible.length === 0 ? (
-                <tr>
-                  <td data-label="Name" colSpan={6}>
-                    No users to show. Add the first one below.
+            ) : null}
+
+            {visible.map(({ user, identity }) => {
+              const isSelf = state.actor?.id === user.id;
+              const ownerRowLockedToAdmin =
+                user.role === 'owner' && state.actor?.role !== 'owner';
+              const roleLocked = !allowed || isSelf || ownerRowLockedToAdmin;
+
+              const roleTitle = !allowed
+                ? 'Your role does not manage users.'
+                : isSelf
+                  ? 'Nobody changes their own role. Another owner does it.'
+                  : ownerRowLockedToAdmin
+                    ? 'Owner rows are read-only to an admin.'
+                    : undefined;
+
+              return (
+                <tr key={user.id}>
+                  <td data-label="Name">
+                    <span className="flex flex-wrap items-center gap-2">
+                      {user.displayName}
+                      {isSelf ? <Pill tone="accent">You</Pill> : null}
+                    </span>
                   </td>
-                </tr>
-              ) : null}
-
-              {visible.map(({ user, identity }) => {
-                const isSelf = state.actor?.id === user.id;
-                const ownerRowLockedToAdmin =
-                  user.role === 'owner' && state.actor?.role !== 'owner';
-                const roleLocked = !allowed || isSelf || ownerRowLockedToAdmin;
-
-                const roleTitle = !allowed
-                  ? 'Your role does not manage users.'
-                  : isSelf
-                    ? 'Nobody changes their own role. Another owner does it.'
-                    : ownerRowLockedToAdmin
-                      ? 'Owner rows are read-only to an admin.'
-                      : undefined;
-
-                return (
-                  <tr key={user.id}>
-                    <td data-label="Name">
-                      <span className="flex flex-wrap items-center gap-2">
-                        {user.displayName}
-                        {isSelf ? <Pill tone="accent">You</Pill> : null}
-                      </span>
-                    </td>
-                    <td data-label="Email" className="t-small text-muted">
-                      {user.email}
-                    </td>
-                    <td data-label="Role">
+                  <td data-label="Email" className="t-small text-muted">
+                    {user.email}
+                  </td>
+                  <td data-label="Role">
+                    {/* One wrapper, not two loose children. Below `sm` the cell
+                        is a flex row, so the form and the summary under it were
+                        competing for the same line: the select collapsed to
+                        18px and the summary ran under the button. Wrapped, the
+                        cell holds one shrinkable item and the control gets the
+                        width. `min-w-0` is what lets it shrink at all. */}
+                    <span className="block min-w-0">
                       <InlineSelectForm
                         action={setUserRole}
                         name="role"
@@ -200,61 +208,61 @@ export default async function UsersPage({
                         disabledTitle={roleTitle}
                       />
                       <span className="block t-small text-subtle">{ROLE_SUMMARY[user.role]}</span>
-                    </td>
-                    <td data-label="Sign-in" className="t-small text-muted">
-                      {mode === 'access' ? (
-                        'Managed by Cloudflare Access'
-                      ) : mode === 'local' ? (
-                        'Not enforced in this mode'
-                      ) : (
-                        <>
-                          <span className="block">
-                            {user.loginMethod ? PROVIDER_LABELS[user.loginMethod] : 'Not set'}
-                          </span>
-                          <span className="block text-subtle">
-                            {identity
-                              ? `Linked${
-                                  identity.lastSignInAt
-                                    ? ` · last signed in ${identity.lastSignInAt
-                                        .toISOString()
-                                        .slice(0, 10)}`
-                                    : ''
-                                }`
-                              : 'Not yet signed in'}
-                          </span>
-                        </>
-                      )}
-                    </td>
-                    <td data-label="Status">
-                      {user.isActive ? (
-                        <Pill tone="positive">Active</Pill>
-                      ) : (
-                        <Pill tone="neutral">Inactive</Pill>
-                      )}
-                    </td>
-                    <td data-label="Account">
-                      <RowAction
-                        action={setUserActive}
-                        label={user.isActive ? 'Deactivate' : 'Reactivate'}
-                        destructive={user.isActive}
-                        disabled={!allowed || ownerRowLockedToAdmin}
-                        title={
-                          ownerRowLockedToAdmin ? 'Owner rows are read-only to an admin.' : undefined
-                        }
-                        fields={{ id: user.id, isActive: user.isActive ? 'false' : 'true' }}
-                        confirm={
-                          user.isActive
-                            ? `Deactivate ${user.displayName}? Every session of theirs ends immediately. The row stays, so the same address can be brought back.`
-                            : undefined
-                        }
-                      />
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                    </span>
+                  </td>
+                  <td data-label="Sign-in" className="t-small text-muted">
+                    {mode === 'access' ? (
+                      'Managed by Cloudflare Access'
+                    ) : mode === 'local' ? (
+                      'Not enforced in this mode'
+                    ) : (
+                      <>
+                        <span className="block">
+                          {user.loginMethod ? PROVIDER_LABELS[user.loginMethod] : 'Not set'}
+                        </span>
+                        <span className="block text-subtle">
+                          {identity
+                            ? `Linked${
+                                identity.lastSignInAt
+                                  ? ` · last signed in ${identity.lastSignInAt
+                                      .toISOString()
+                                      .slice(0, 10)}`
+                                  : ''
+                              }`
+                            : 'Not yet signed in'}
+                        </span>
+                      </>
+                    )}
+                  </td>
+                  <td data-label="Status">
+                    {user.isActive ? (
+                      <Pill tone="positive">Active</Pill>
+                    ) : (
+                      <Pill tone="neutral">Inactive</Pill>
+                    )}
+                  </td>
+                  <td data-label="Account">
+                    <RowAction
+                      action={setUserActive}
+                      label={user.isActive ? 'Deactivate' : 'Reactivate'}
+                      destructive={user.isActive}
+                      disabled={!allowed || ownerRowLockedToAdmin}
+                      title={
+                        ownerRowLockedToAdmin ? 'Owner rows are read-only to an admin.' : undefined
+                      }
+                      fields={{ id: user.id, isActive: user.isActive ? 'false' : 'true' }}
+                      confirm={
+                        user.isActive
+                          ? `Deactivate ${user.displayName}? Every session of theirs ends immediately. The row stays, so the same address can be brought back.`
+                          : undefined
+                      }
+                    />
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </TableWrap>
 
         <div className="mt-4">
           <Notice tone="neutral" title="Four rules this screen will not let you break">

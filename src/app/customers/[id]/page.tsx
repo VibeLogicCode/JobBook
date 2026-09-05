@@ -3,6 +3,8 @@ import { notFound } from 'next/navigation';
 import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { customers, organization, projects, quotes } from '@/db/schema';
+import { buttonClass } from '@/components/ui/Button';
+import { Notice } from '@/components/ui/Notice';
 import { Pill, statusTone } from '@/components/ui/Pill';
 import { AmountCell, TableWrap } from '@/components/ui/Table';
 import { updateCustomer, voidCustomer } from '@/app/customers/actions';
@@ -104,19 +106,19 @@ export default async function CustomerPage({
               <>
                 <Link
                   href={`/customers/${customer.id}?edit=1`}
-                  className="flex min-h-11 items-center rounded-[4px] border border-line-strong bg-surface px-3 hover:bg-surface-2"
+                  className={buttonClass('secondary')}
                 >
                   Edit
                 </Link>
                 <Link
                   href={`/projects/new?customer=${customer.id}`}
-                  className="flex min-h-11 items-center rounded-[4px] border border-line-strong bg-surface px-3 hover:bg-surface-2"
+                  className={buttonClass('secondary')}
                 >
                   New opportunity
                 </Link>
                 <Link
                   href={`/quotes/new?customer=${customer.id}`}
-                  className="flex min-h-11 items-center rounded-[4px] bg-accent px-3 text-accent-fg hover:bg-accent-hover"
+                  className={buttonClass('primary')}
                 >
                   New quote
                 </Link>
@@ -131,12 +133,11 @@ export default async function CustomerPage({
       </header>
 
       {active ? null : (
-        <p className="rounded-[6px] border border-negative bg-negative-soft px-4 py-3 t-small text-negative-soft-fg">
-          This customer was voided
-          {customer.voidedAt ? ` on ${stamp.format(customer.voidedAt)}` : ''}:{' '}
-          {customer.voidReason ?? 'no reason recorded'}. Nothing is ever deleted, so the record and
+        <Notice tone="negative" title="This customer was voided">
+          {customer.voidedAt ? `On ${stamp.format(customer.voidedAt)}: ` : ''}
+          {customer.voidReason ?? 'No reason recorded'}. Nothing is ever deleted, so the record and
           its quotes stay readable.
-        </p>
+        </Notice>
       )}
 
       {editing ? (

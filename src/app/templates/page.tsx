@@ -7,8 +7,9 @@ import { createTemplate, setTemplateActive } from '@/app/templates/actions';
 import { PROJECT_TYPE_LABELS, PROJECT_TYPE_OPTIONS } from '@/app/templates/schema';
 import { ActionForm, RowAction } from '@/components/settings/ActionForm';
 import { FieldGrid, SelectField, TextAreaField, TextField } from '@/components/settings/Fields';
-import { Notice } from '@/components/settings/Notice';
+import { Notice } from '@/components/ui/Notice';
 import { Section } from '@/components/settings/Section';
+import { buttonClass } from '@/components/ui/Button';
 import { Pill } from '@/components/ui/Pill';
 import { AmountCell, TableWrap } from '@/components/ui/Table';
 
@@ -104,7 +105,7 @@ export default async function TemplatesPage() {
                     <span className="flex flex-wrap gap-2">
                       <Link
                         href={`/templates/${template.id}`}
-                        className="min-h-11 rounded-[4px] border border-line-strong px-3 py-2 t-small hover:bg-surface-2"
+                        className={buttonClass('secondary', { className: 't-small' })}
                       >
                         Open
                       </Link>

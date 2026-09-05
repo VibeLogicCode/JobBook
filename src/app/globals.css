@@ -184,6 +184,15 @@
   --radius-control: 4px;
   --radius-panel: 6px;
 
+  /* The sticky column header's height, single-sourced because a group band
+     sticks BELOW it and has to know how tall it is. These were two unrelated
+     numbers until a band began overlapping the header it was supposed to sit
+     under; the border is excluded because `border-bottom` sits outside the
+     content box the padding and line-height describe. */
+  --table-head-pad-y: 8px;
+  --table-head-line: 14px;
+  --table-head-h: calc(var(--table-head-line) + 2 * var(--table-head-pad-y));
+
   --shadow-flat: var(--elev-flat);
   --shadow-card: var(--elev-card);
   --shadow-pop: var(--elev-pop);
@@ -278,10 +287,10 @@
     z-index: 2;
     background: var(--surface-2);
     border-bottom: 1px solid var(--line-strong);
-    padding: 8px 12px;
+    padding: var(--table-head-pad-y) 12px;
     text-align: left;
     font-size: 11px;
-    line-height: 14px;
+    line-height: var(--table-head-line);
     letter-spacing: 0.04em;
     font-weight: 600;
     color: var(--muted);
@@ -310,7 +319,7 @@
      a grid at narrow widths a sticky row stops working entirely. */
   .data-table .group-band td {
     position: sticky;
-    top: 30px;
+    top: var(--table-head-h);
     z-index: 1;
     background: var(--surface-3);
     border-top: 1px solid var(--line-strong);

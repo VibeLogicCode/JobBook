@@ -1,8 +1,17 @@
+import { Card, CardBody, CardHeader } from '@/components/ui/Card';
+
 /**
  * The one panel treatment for a detail screen: `--surface` on `--canvas` with a
  * 1px hairline and a 6px radius. Elevation here is structural, not atmospheric,
  * and panels are never nested -- card-in-card defeats the density the rest of
  * the product is built for.
+ *
+ * Now the shorter call over `Card` rather than a second copy of it, which is
+ * what `Card`'s own note anticipated: the markup below WAS `Card` +
+ * `CardHeader` + `CardBody` written out again, down to the padding. A detail
+ * screen keeps calling this, because a required title and nothing else is the
+ * whole shape it needs; anything wanting an action beside the title, an
+ * unpadded body or no title at all reaches for `Card` directly.
  */
 export function Panel({
   title,
@@ -14,12 +23,10 @@ export function Panel({
   className?: string;
 }) {
   return (
-    <section className={`rounded-[6px] border border-line bg-surface ${className}`.trim()}>
-      <header className="border-b border-line px-4 py-2">
-        <h2 className="t-heading">{title}</h2>
-      </header>
-      <div className="px-4 py-3">{children}</div>
-    </section>
+    <Card className={className}>
+      <CardHeader title={title} />
+      <CardBody>{children}</CardBody>
+    </Card>
   );
 }
 

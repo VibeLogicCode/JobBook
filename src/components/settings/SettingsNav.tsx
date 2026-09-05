@@ -32,7 +32,7 @@ export function SettingsNav({ items }: { items: NavItem[] }) {
                 href={item.href}
                 aria-current={active ? 'page' : undefined}
                 title={item.summary}
-                className={`flex min-h-11 items-center whitespace-nowrap rounded-[4px] px-3 t-small ${
+                className={`flex min-h-11 items-center whitespace-nowrap rounded-control px-3 t-small ${
                   active
                     ? 'bg-accent-soft font-semibold text-accent-soft-fg'
                     : 'text-muted hover:bg-surface-2 hover:text-ink'

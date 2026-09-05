@@ -7,9 +7,10 @@ import { finishSetup } from '@/app/setup/actions';
 import { checkSummary, runEnvironmentChecks } from '@/app/setup/environment';
 import { requireOpenSetup } from '@/app/setup/guard';
 import { ActionForm } from '@/components/settings/ActionForm';
-import { Notice } from '@/components/settings/Notice';
+import { Notice } from '@/components/ui/Notice';
 import { StepPanel } from '@/components/setup/StepPanel';
 import { formatCents } from '@/lib/money/format';
+import { TableWrap } from '@/components/ui/Table';
 
 export const dynamic = 'force-dynamic';
 
@@ -119,27 +120,25 @@ export default async function DoneStepPage() {
   return (
     <StepPanel slug="done" gate={gate}>
       <ActionForm action={finishSetup} submitLabel="Finish setup">
-        <div className="overflow-x-auto rounded-[6px] border border-line">
-          <table className="data-table data-table--stack" style={{ minWidth: '30rem' }}>
-            <caption className="sr-only">What first-run setup created</caption>
-            <thead>
-              <tr>
-                <th scope="col">Setting</th>
-                <th scope="col">Stored value</th>
+        <TableWrap minWidth="30rem">
+          <caption className="sr-only">What first-run setup created</caption>
+          <thead>
+            <tr>
+              <th scope="col">Setting</th>
+              <th scope="col">Stored value</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.label}>
+                <td data-label="Setting">{row.label}</td>
+                <td data-label="Stored value" className="t-small">
+                  {row.value}
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => (
-                <tr key={row.label}>
-                  <td data-label="Setting">{row.label}</td>
-                  <td data-label="Stored value" className="t-small">
-                    {row.value}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+            ))}
+          </tbody>
+        </TableWrap>
 
         {summary.failing > 0 ? (
           <Notice tone="warning" title={`${summary.failing} environment check${summary.failing === 1 ? '' : 's'} still failing`}>

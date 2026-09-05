@@ -32,6 +32,8 @@ import type {
   WireRelations,
   WireTax,
 } from '@/components/worksheet/types';
+import { Button, buttonClass } from '@/components/ui/Button';
+import { Notice } from '@/components/ui/Notice';
 import { Pill, statusTone } from '@/components/ui/Pill';
 import { formatCents, formatQty, formatRate } from '@/lib/money/format';
 
@@ -171,24 +173,18 @@ export function Worksheet({
 
           <div className="no-print ml-auto flex gap-2">
             {amendable ? (
-              <button
-                type="button"
-                disabled={pending}
-                className="min-h-11 rounded-[4px] bg-accent px-3 text-accent-fg hover:bg-accent-hover disabled:opacity-60"
-                onClick={() => setRaising(true)}
-              >
+              <Button disabled={pending} onClick={() => setRaising(true)}>
                 Raise a change order
-              </button>
+              </Button>
             ) : null}
             {quote.status === 'draft' ? (
-              <button
-                type="button"
+              <Button
+                variant="secondary"
                 disabled={pending}
-                className="min-h-11 rounded-[4px] border border-line-strong px-3 hover:bg-surface-2"
                 onClick={() => run(() => setQuoteStatus({ quoteId: quote.id, status: 'sent' }))}
               >
                 Mark sent
-              </button>
+              </Button>
             ) : null}
             {quote.status === 'sent' ? (
               <>
@@ -207,16 +203,14 @@ export function Worksheet({
                     accepting it neither wins the job nor puts anything else
                     out of the running. So it keeps the one-click control. */}
                 {quote.kind === 'change_order' ? (
-                  <button
-                    type="button"
+                  <Button
                     disabled={pending}
-                    className="min-h-11 rounded-[4px] bg-accent px-3 text-accent-fg hover:bg-accent-hover"
                     onClick={() =>
                       run(() => setQuoteStatus({ quoteId: quote.id, status: 'accepted' }))
                     }
                   >
                     Accepted
-                  </button>
+                  </Button>
                 ) : null}
                 {/* Declining an estimate also lives in the acceptance band
                     below, next to converting, because won and lost are one
@@ -224,16 +218,15 @@ export function Worksheet({
                     opposite ends of a long document. A change order has no
                     such band, so it keeps its control here. */}
                 {quote.kind === 'change_order' ? (
-                  <button
-                    type="button"
+                  <Button
+                    variant="secondary"
                     disabled={pending}
-                    className="min-h-11 rounded-[4px] border border-line-strong px-3 hover:bg-surface-2"
                     onClick={() =>
                       run(() => setQuoteStatus({ quoteId: quote.id, status: 'declined' }))
                     }
                   >
                     Declined
-                  </button>
+                  </Button>
                 ) : null}
               </>
             ) : null}
@@ -285,16 +278,20 @@ export function Worksheet({
 
         {/* Regeneration is a separate, explicit control. Saving a measurement
             must not quietly discard ten minutes of hand adjustment, so changing
-            a figure and rebuilding the lines are two different buttons. */}
+            a figure and rebuilding the lines are two different buttons.
+
+            The hover override on it is not decoration: this band is painted
+            `--surface-2`, which is exactly what `secondary` hovers to, so the
+            default hover would be invisible on it. */}
         {scopeEditable && relations.templateName ? (
-          <button
-            type="button"
+          <Button
+            variant="secondary"
+            className="hover:bg-surface-3"
             disabled={pending}
-            className="no-print min-h-11 rounded-[4px] border border-line-strong bg-surface px-3 hover:bg-surface-3 disabled:opacity-60"
             onClick={() => setConfirmingRegenerate(true)}
           >
             Regenerate
-          </button>
+          </Button>
         ) : null}
 
         <span className="t-small text-muted">
@@ -302,19 +299,22 @@ export function Worksheet({
         </span>
       </section>
 
+      {/* Inset rather than a full-bleed band. The tones were already
+          `Notice`'s, written out by hand and without its icon. */}
       {error ? (
-        <p role="alert" className="border-b border-negative bg-negative-soft px-4 py-2 t-small text-negative-soft-fg sm:px-6">
-          {error}
-        </p>
+        <div className="px-4 py-2 sm:px-6">
+          <Notice tone="negative">{error}</Notice>
+        </div>
       ) : null}
 
       {notice ? (
-        <p
-          role="status"
-          className="border-b border-info bg-info-soft px-4 py-2 t-small text-info-soft-fg sm:px-6"
-        >
-          {notice}
-        </p>
+        <div className="px-4 py-2 sm:px-6">
+          {/* `role` explicitly: regeneration is an EVENT in a tone that
+              usually carries prose, and Notice announces none of those. */}
+          <Notice tone="info" role="status">
+            {notice}
+          </Notice>
+        </div>
       ) : null}
 
       <div className="flex-1 overflow-x-auto px-0 sm:px-6 sm:py-4">
@@ -375,13 +375,9 @@ export function Worksheet({
 
       {editable ? (
         <div className="no-print px-4 pb-4 sm:px-6">
-          <button
-            type="button"
-            className="flex min-h-11 items-center gap-2 rounded-[4px] border border-line-strong bg-surface px-3 hover:bg-surface-2"
-            onClick={() => setPicking(true)}
-          >
+          <Button variant="secondary" onClick={() => setPicking(true)}>
             <Plus size={16} aria-hidden /> Add a line
-          </button>
+          </Button>
         </div>
       ) : null}
 
@@ -492,10 +488,18 @@ function ScopeLine({
   return (
     <button
       type="button"
-      className="flex min-h-11 min-w-0 flex-1 items-center rounded-[4px] px-1 text-left t-small text-muted hover:bg-surface-3"
+      className="flex min-h-11 min-w-0 flex-1 items-center rounded-control px-1 text-left t-small text-muted hover:bg-surface-3"
       onClick={onOpen}
     >
-      <span className="truncate">
+      {/* `relative` is load-bearing, not tidiness. `sr-only` is
+          `position:absolute`, and an absolutely positioned box escapes the
+          `overflow:hidden` of any ancestor that is not itself positioned --
+          so on a draft quote at 390px the hidden hint was laid out at the END
+          of the untruncated summary and dragged the PAGE 109px wide, sideways
+          scroll and all, while the span it sits in was correctly truncating.
+          Positioning this span makes it the hint's containing block, so the
+          clip that was already there finally applies to it. */}
+      <span className="relative truncate">
         {summary}
         <span className="sr-only"> — change the measurements</span>
       </span>
@@ -662,7 +666,7 @@ function LineRow({
             type="button"
             aria-label={`Remove ${line.description}`}
             disabled={pending}
-            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-[4px] text-muted hover:bg-negative-soft hover:text-negative-soft-fg disabled:opacity-60"
+            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-control text-muted hover:bg-negative-soft hover:text-negative-soft-fg disabled:opacity-60"
             onClick={(event) => {
               event.stopPropagation();
               onCommit(() => voidLine({ quoteId, lineId: line.id }));
@@ -787,10 +791,7 @@ function SumBar({ quote, taxes }: { quote: WireQuote; taxes: WireTax[] }) {
           <span className="present-hide">
             <MarginGauge marginBp={quote.marginBp} targetBp={quote.targetMarginBp} />
           </span>
-          <a
-            href={`/api/quotes/${quote.id}/pdf`}
-            className="no-print flex min-h-11 items-center rounded-[4px] bg-accent px-3 text-accent-fg hover:bg-accent-hover"
-          >
+          <a href={`/api/quotes/${quote.id}/pdf`} className={buttonClass('primary')}>
             PDF
           </a>
         </div>
@@ -842,7 +843,7 @@ function LineSheet({
       <div
         role="dialog"
         aria-label={`Edit ${line.description}`}
-        className="w-full rounded-t-[6px] border-t border-line-strong bg-surface p-4 shadow-pop sm:max-w-md sm:rounded-[6px] sm:border"
+        className="w-full rounded-t-[6px] border-t border-line-strong bg-surface p-4 shadow-pop sm:max-w-md sm:rounded-panel sm:border"
       >
         <div className="mb-3 flex items-start justify-between gap-3">
           <div>
@@ -852,7 +853,7 @@ function LineSheet({
           <button
             type="button"
             aria-label="Close"
-            className="flex min-h-11 min-w-11 items-center justify-center rounded-[4px] text-muted hover:bg-surface-2"
+            className="flex min-h-11 min-w-11 items-center justify-center rounded-control text-muted hover:bg-surface-2"
             onClick={onClose}
           >
             <X size={18} aria-hidden />
@@ -892,10 +893,11 @@ function LineSheet({
         </div>
 
         <div className="mt-4 flex gap-2">
-          <button
-            type="button"
-            disabled={pending}
-            className="min-h-12 flex-1 rounded-[4px] bg-accent px-3 text-accent-fg disabled:opacity-60"
+          <Button
+            size="lg"
+            className="flex-1"
+            pending={pending}
+            pendingLabel="Saving…"
             onClick={() => {
               onCommit(() =>
                 editLine({
@@ -909,14 +911,10 @@ function LineSheet({
             }}
           >
             Save
-          </button>
-          <button
-            type="button"
-            className="min-h-12 rounded-[4px] border border-line-strong px-3"
-            onClick={onClose}
-          >
+          </Button>
+          <Button variant="secondary" size="lg" onClick={onClose}>
             Cancel
-          </button>
+          </Button>
         </div>
       </div>
     </div>
@@ -950,7 +948,7 @@ function RatePicker({
       <div
         role="dialog"
         aria-label="Add a line"
-        className="flex max-h-[80dvh] w-full flex-col rounded-t-[6px] border-t border-line-strong bg-surface p-4 shadow-pop sm:max-w-lg sm:rounded-[6px] sm:border"
+        className="flex max-h-[80dvh] w-full flex-col rounded-t-[6px] border-t border-line-strong bg-surface p-4 shadow-pop sm:max-w-lg sm:rounded-panel sm:border"
       >
         <div className="mb-3 flex items-center gap-2">
           <input
@@ -964,7 +962,7 @@ function RatePicker({
           <button
             type="button"
             aria-label="Close"
-            className="flex min-h-11 min-w-11 items-center justify-center rounded-[4px] text-muted hover:bg-surface-2"
+            className="flex min-h-11 min-w-11 items-center justify-center rounded-control text-muted hover:bg-surface-2"
             onClick={onClose}
           >
             <X size={18} aria-hidden />

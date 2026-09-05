@@ -37,7 +37,7 @@ export function MetricCard({
   className?: string;
 }) {
   return (
-    <section className={`rounded-[6px] border border-line bg-surface p-4 ${className}`.trim()}>
+    <section className={`rounded-panel border border-line bg-surface p-4 ${className}`.trim()}>
       <p className="t-small text-muted">
         {label}
         {from ? <> — {from}</> : null}

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { saveScopeInputs } from '@/app/quotes/[id]/actions';
 import { Measurement, Sheet } from '@/components/worksheet/Sheet';
+import { Button } from '@/components/ui/Button';
 import type { WireQuote } from '@/components/worksheet/types';
 import { formatQty } from '@/lib/money/format';
 
@@ -41,10 +42,11 @@ export function ScopeSheet({
       onClose={onClose}
       footer={
         <>
-          <button
-            type="button"
-            disabled={pending}
-            className="min-h-12 flex-1 rounded-[4px] bg-accent px-3 text-accent-fg hover:bg-accent-hover disabled:opacity-60"
+          <Button
+            size="lg"
+            className="flex-1"
+            pending={pending}
+            pendingLabel="Saving…"
             onClick={() => {
               onCommit(() =>
                 saveScopeInputs({
@@ -59,14 +61,10 @@ export function ScopeSheet({
             }}
           >
             Save measurements
-          </button>
-          <button
-            type="button"
-            className="min-h-12 rounded-[4px] border border-line-strong px-3 hover:bg-surface-2"
-            onClick={onClose}
-          >
+          </Button>
+          <Button variant="secondary" size="lg" onClick={onClose}>
             Cancel
-          </button>
+          </Button>
         </>
       }
     >
@@ -116,24 +114,21 @@ export function RegenerateDialog({
       onClose={onClose}
       footer={
         <>
-          <button
-            type="button"
-            disabled={pending}
-            className="min-h-12 flex-1 rounded-[4px] bg-accent px-3 text-accent-fg hover:bg-accent-hover disabled:opacity-60"
+          <Button
+            size="lg"
+            className="flex-1"
+            pending={pending}
+            pendingLabel="Regenerating…"
             onClick={() => {
               onConfirm();
               onClose();
             }}
           >
             Regenerate
-          </button>
-          <button
-            type="button"
-            className="min-h-12 rounded-[4px] border border-line-strong px-3 hover:bg-surface-2"
-            onClick={onClose}
-          >
+          </Button>
+          <Button variant="secondary" size="lg" onClick={onClose}>
             Cancel
-          </button>
+          </Button>
         </>
       }
     >
