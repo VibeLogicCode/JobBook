@@ -16,7 +16,6 @@ import { can } from '@/lib/auth/permissions';
 import { normalizeSearch } from '@/lib/list/search';
 import { tenantToday } from '@/lib/quote/dates';
 import {
-  PERIODS,
   PERIOD_LABELS,
   buildDays,
   daysOfRange,
@@ -24,7 +23,6 @@ import {
   rangeOf,
   readAnchor,
   readPeriod,
-  stepAnchor,
   summarize,
   type CalendarTask,
   type EntryFilter,
@@ -33,6 +31,7 @@ import {
 import { findPredecessorCycle, type ScheduleTask } from '@/lib/schedule/push';
 import { nameOf, readRoster } from '@/lib/schedule/roster';
 import { CalendarGrid } from '@/components/schedule/CalendarGrid';
+import { PeriodNav } from '@/components/schedule/PeriodNav';
 import { TaskEditor } from '@/components/schedule/TaskEditor';
 import { TaskSheet } from '@/components/schedule/TaskSheet';
 import type { Option } from '@/components/settings/Fields';
@@ -326,26 +325,6 @@ export default async function CalendarPage({
 
   const closeHref = linkTo(period, anchor);
 
-  const monthLabel = new Intl.DateTimeFormat(locale, {
-    month: 'long',
-    year: 'numeric',
-    timeZone: 'UTC',
-  });
-  const rangeLabel =
-    period === 'day'
-      ? day(range.start)
-      : period === 'week'
-        ? `${day(range.start)} – ${day(range.end)}`
-        : monthLabel.format(new Date(`${range.start}T00:00:00Z`));
-
-  // `relative` because of the `sr-only` labels inside: `.sr-only` is
-  // `position: absolute`, and without a positioned ancestor the browser hands
-  // it the page as its containing block -- which is how an offscreen span ends
-  // up widening the document and giving a phone a horizontal scrollbar. Same
-  // trap `PageParentLink` and the rail's collapsed labels record.
-  const stepClass =
-    'relative inline-flex min-h-11 min-w-11 items-center justify-center rounded-control border border-line-strong px-3 t-small text-ink hover:bg-surface-2';
-
   const filtered = q !== '' || job !== '' || who !== '';
   const describe = [
     job ? `Job: ${jobOptions.find((option) => option.value === job)?.label ?? job}` : '',
@@ -427,56 +406,23 @@ export default async function CalendarPage({
         // and land the reader back on this week. A GET form posts its own
         // controls and nothing else.
         carry={{ period: periodParam(period), on: anchor === today ? '' : anchor }}
-        trailing={
-          <span
-            role="group"
-            aria-label="How much of the calendar is on screen"
-            className="inline-flex overflow-hidden rounded-control border border-line-strong"
-          >
-            {PERIODS.map((entry, index) => (
-              <Link
-                key={entry}
-                href={linkTo(entry, anchor)}
-                aria-current={entry === period ? 'page' : undefined}
-                className={`inline-flex min-h-8 items-center px-2.5 ${
-                  index > 0 ? 'border-l border-line-strong' : ''
-                } ${
-                  entry === period
-                    ? 'bg-accent-soft font-semibold text-accent-soft-fg'
-                    : 'text-muted hover:bg-surface-2 hover:text-ink'
-                }`}
-              >
-                {PERIOD_LABELS[entry]}
-              </Link>
-            ))}
-          </span>
-        }
         shown={summary.shown}
         noun={{ singular: 'day of work', plural: 'days of work' }}
       />
 
-      {/* Where in the calendar we are, and the two steps either side of it.
-          Links, not buttons: each is a navigation, so the back button works and
-          a week can be sent to somebody. */}
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        <Link href={linkTo(period, stepAnchor(period, anchor, -1))} className={stepClass}>
-          <span aria-hidden>‹</span>
-          <span className="sr-only">Previous {PERIOD_LABELS[period].toLowerCase()}</span>
-        </Link>
-        <Link href={linkTo(period, stepAnchor(period, anchor, 1))} className={stepClass}>
-          <span aria-hidden>›</span>
-          <span className="sr-only">Next {PERIOD_LABELS[period].toLowerCase()}</span>
-        </Link>
-        <Link href={linkTo(period, today)} className={stepClass}>
-          Today
-        </Link>
-        <h2 className="min-w-0 t-heading">{rangeLabel}</h2>
-        {summary.unassigned > 0 ? (
-          <span className="t-small text-muted">
-            {summary.unassigned} with nobody booked
-          </span>
-        ) : null}
-      </div>
+      <PeriodNav
+        basePath="/calendar"
+        carry={{ q, job, who }}
+        period={period}
+        anchor={anchor}
+        today={today}
+        locale={locale}
+        extra={
+          summary.unassigned > 0 ? (
+            <span className="t-small text-muted">{summary.unassigned} with nobody booked</span>
+          ) : null
+        }
+      />
 
       {/* Said above the grid rather than instead of it. Below `sm` every cell
           is hidden by then, so this line is what remains; at a monitor the

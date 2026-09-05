@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, ne } from 'drizzle-orm';
+import { and, asc, eq, gte, inArray, isNull, lte, ne } from 'drizzle-orm';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { db } from '@/db/client';
@@ -16,7 +16,22 @@ import { can } from '@/lib/auth/permissions';
 import { formatCents } from '@/lib/money/format';
 import { addDays, tenantToday } from '@/lib/quote/dates';
 import { latestDate } from '@/lib/schedule/calendar';
+import {
+  PERIOD_LABELS,
+  buildDays,
+  daysOfRange,
+  periodParam,
+  rangeOf,
+  readAnchor,
+  readPeriod,
+  summarize,
+  type CalendarDay,
+  type CalendarSummary,
+  type CalendarTask,
+  type EntryFilter,
+} from '@/lib/schedule/agenda';
 import { findPredecessorCycle, type ScheduleTask } from '@/lib/schedule/push';
+import { nameOf, readRoster } from '@/lib/schedule/roster';
 import {
   assignToTask,
   createTask,
@@ -62,12 +77,18 @@ import {
   TextField,
   type Option,
 } from '@/components/settings/Fields';
+import { CalendarGrid } from '@/components/schedule/CalendarGrid';
+import { PeriodNav } from '@/components/schedule/PeriodNav';
 import { TaskEditor, TaskFields } from '@/components/schedule/TaskEditor';
+import { TaskSheet } from '@/components/schedule/TaskSheet';
+import { readScheduleView, scheduleHref, SCHEDULE_VIEWS, viewParam } from '@/components/schedule/view';
 import { Card } from '@/components/ui/Card';
+import { filterHref } from '@/components/ui/FilterBar';
 import { MetricCard } from '@/components/ui/MetricCard';
 import { Notice } from '@/components/ui/Notice';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Pill } from '@/components/ui/Pill';
+import { SegmentedLinks } from '@/components/ui/SegmentedLinks';
 import { SheetButton } from '@/components/ui/Sheet';
 import { TableWrap } from '@/components/ui/Table';
 
@@ -76,6 +97,17 @@ export const dynamic = 'force-dynamic';
 const REFUSAL = 'Your role can read this schedule but not change it.';
 
 type TaskRow = typeof scheduleTasks.$inferSelect;
+
+/** A search parameter as one value. A repeated parameter is the first one. */
+function one(raw: string | string[] | undefined): string {
+  return (Array.isArray(raw) ? raw[0] : raw) ?? '';
+}
+
+/** "Excavation, Site survey and Kitchen rough-in" — the clash warning's list of tasks. */
+function andList(items: readonly string[]): string {
+  if (items.length <= 1) return items[0] ?? '';
+  return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
+}
 
 /**
  * The order the work happens in, for one job.
@@ -94,6 +126,20 @@ type TaskRow = typeof scheduleTasks.$inferSelect;
  * work, and every question asked of it -- what is late, when does this finish
  * -- is asked about that job. The URL says so, and the job's own screen links
  * here.
+ *
+ * **`?view=calendar` is the same question asked a different way, never a
+ * different answer.** The owner asked for a way to switch this table to the
+ * calendar the way `/projects` switches between board and list -- see
+ * `components/schedule/view.ts`. The list default is untouched by any of it:
+ * this table, its columns and its rows render exactly as they did before a
+ * reader who never presses the toggle would see. The calendar reads every
+ * live task in the period ACROSS EVERY JOB, exactly the way `/calendar` does
+ * and for the same reason -- a double-booking's other half is on another
+ * job's screen, and `buildDays` only counts a clash it was handed. This
+ * screen then narrows to its OWN job with an `EntryFilter`, after the clash
+ * arithmetic has already run, so a sub double-booked between this job and
+ * another is still named in the warning even though the other job's line is
+ * never drawn.
  */
 export default async function SchedulePage({
   params,
@@ -104,7 +150,8 @@ export default async function SchedulePage({
 }) {
   const { id: projectId } = await params;
   const query = await searchParams;
-  const showVoided = (Array.isArray(query.voided) ? query.voided[0] : query.voided) === '1';
+  const showVoided = one(query.voided) === '1';
+  const view = readScheduleView(one(query.view));
 
   const [project] = await db
     .select({
@@ -133,6 +180,13 @@ export default async function SchedulePage({
   // explain that to a crew.
   const today = await db.transaction((tx) => tenantToday(tx));
   const weekEnd = addDays(today, 6);
+
+  // Read regardless of which view is on screen -- cheap, pure, and it keeps
+  // the calendar's own defaults (this week, today) ready the moment the
+  // toggle is pressed rather than only after a page it was never on.
+  const period = readPeriod(one(query.period) || undefined);
+  const anchor = readAnchor(one(query.on) || undefined, today);
+  const range = rangeOf(period, anchor);
 
   const state = await resolveActor();
   // A voided job's schedule stays readable -- it is the record of what was
@@ -463,6 +517,118 @@ export default async function SchedulePage({
 
   const shownCount = rows.length;
 
+  /* -----------------------------------------------------------------------
+     The calendar view: every live task in the period, across every job.
+     Skipped entirely on the list default, which is the common path and must
+     stay exactly as fast as it already is.
+     ----------------------------------------------------------------------- */
+
+  let calendarDays: CalendarDay[] = [];
+  let calendarSummary: CalendarSummary = {
+    shown: 0,
+    unassigned: 0,
+    clashes: 0,
+    firstClashDay: null,
+    worst: null,
+  };
+  let openTask: TaskRow | null = null;
+  let openOnIt: string[] = [];
+
+  if (view === 'calendar') {
+    const openTaskId = one(query.task);
+    // Scoped to `all` -- this job's own tasks -- rather than read by id from
+    // the whole table. Only an entry this job's own calendar drew is ever
+    // tappable (see `keep` below), so a task on another job never reaches
+    // this URL through the UI; reading it from `all` refuses one that did
+    // by hand, the same way a stale or hand-edited id refuses quietly rather
+    // than 500ing.
+    openTask = all.find((row) => row.id === openTaskId) ?? null;
+    openOnIt = openTask ? liveFor(openTask.id).map((row) => assigneeName(row)) : [];
+
+    const calendarRows = await db
+      .select({
+        taskId: scheduleTasks.id,
+        taskName: scheduleTasks.name,
+        plannedStart: scheduleTasks.plannedStart,
+        plannedEnd: scheduleTasks.plannedEnd,
+        isMilestone: scheduleTasks.isMilestone,
+        trade: scheduleTasks.trade,
+        projectId: projects.id,
+        projectNumber: projects.projectNumber,
+        projectName: projects.name,
+        vendorId: assignments.vendorId,
+        userId: assignments.userId,
+      })
+      .from(scheduleTasks)
+      .innerJoin(projects, eq(projects.id, scheduleTasks.projectId))
+      .leftJoin(
+        assignments,
+        and(
+          eq(assignments.scheduleTaskId, scheduleTasks.id),
+          // A removed assignment is not a booking, and neither is a voided one.
+          isNull(assignments.removedAt),
+          ne(assignments.recordStatus, 'void'),
+        ),
+      )
+      .where(
+        and(
+          // Every live job, not just this one -- see the docblock above this
+          // component and `EntryFilter` in `agenda.ts`. Narrowing here would
+          // make a clash with another job disappear along with that job's row.
+          ne(scheduleTasks.recordStatus, 'void'),
+          ne(projects.recordStatus, 'void'),
+          // Both ends inclusive, matching `plannedStart`/`plannedEnd` and
+          // `spansOverlap`: a one-day milestone still overlaps the week it sits in.
+          lte(scheduleTasks.plannedStart, range.end),
+          gte(scheduleTasks.plannedEnd, range.start),
+        ),
+      )
+      .orderBy(asc(scheduleTasks.plannedStart), asc(projects.projectNumber), asc(scheduleTasks.name));
+
+    // The one helper that knows a vendor from a user, same as `/calendar`.
+    // This job's own `assigneeName` above cannot be reused here: it only
+    // resolves names for assignments already read for THIS job, and a
+    // cross-job clash needs to name somebody booked on a task this screen
+    // never queried for its own rows.
+    const calendarRoster = await readRoster(db, state.actor?.id ?? null);
+
+    const byCalendarTask = new Map<string, CalendarTask>();
+    for (const row of calendarRows) {
+      let task = byCalendarTask.get(row.taskId);
+      if (!task) {
+        task = {
+          id: row.taskId,
+          name: row.taskName,
+          span: { start: row.plannedStart, end: row.plannedEnd },
+          isMilestone: row.isMilestone,
+          trade: row.trade,
+          projectId: row.projectId,
+          projectNumber: row.projectNumber,
+          projectName: row.projectName,
+          assignees: [],
+        };
+        byCalendarTask.set(row.taskId, task);
+      }
+      const assignee: Assignee | null =
+        row.vendorId !== null
+          ? { kind: 'vendor', id: row.vendorId }
+          : row.userId !== null
+            ? { kind: 'user', id: row.userId }
+            : null;
+      if (assignee) task.assignees.push({ assignee, name: nameOf(calendarRoster, assignee) });
+    }
+
+    /**
+     * This job's own narrowing, applied to `buildDays`'s output rather than
+     * to the query above -- exactly what makes a double-booking with another
+     * job still get counted and still get named even though its line is
+     * never drawn on this job's calendar.
+     */
+    const keep: EntryFilter = (entry) => entry.projectId === project.id;
+    calendarDays = buildDays(daysOfRange(range), [...byCalendarTask.values()], keep);
+    calendarSummary = summarize(calendarDays);
+  }
+
   return (
     <div className="px-4 py-4 sm:px-6">
       <PageHeader
@@ -579,7 +745,104 @@ export default async function SchedulePage({
         </div>
       ) : null}
 
-      {rows.length === 0 ? (
+      {/* ABOVE the table, not below it, which is where this line used to sit
+          when it only reported voided tasks. A schedule is as long as the job
+          is, so a control at the foot of it is a control found by scrolling
+          past everything it changes -- and the owner asked for this toggle
+          while looking at the top of the screen. The pipeline's count line
+          precedes its content for the same reason.
+
+          Always rendered now, so the toggle has a home. Its voided link stays
+          conditional: a reveal with nothing behind it answers a question
+          nobody asked. */}
+      <p className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 t-small text-subtle">
+        {voided.length > 0 ? (
+          <Link
+            href={filterHref(`/projects/${project.id}/schedule`, {
+              view: viewParam(view),
+              voided: showVoided ? '' : '1',
+            })}
+            className="underline"
+          >
+            {showVoided
+              ? `Hide the ${voided.length} voided ${voided.length === 1 ? 'task' : 'tasks'}`
+              : `Show ${voided.length} voided ${voided.length === 1 ? 'task' : 'tasks'}`}
+          </Link>
+        ) : null}
+        <span>
+          {shownCount} {shownCount === 1 ? 'task' : 'tasks'} on screen
+        </span>
+        <SegmentedLinks
+          ariaLabel="How the schedule is drawn"
+          options={SCHEDULE_VIEWS.map((entry) => ({
+            href: scheduleHref(
+              `/projects/${project.id}/schedule`,
+              { voided: showVoided ? '1' : '' },
+              entry.view,
+            ),
+            label: entry.label,
+            active: entry.view === view,
+          }))}
+        />
+      </p>
+
+      {view === 'calendar' ? (
+        <>
+          {/* Survives every filter -- there are none on this screen besides
+              the job itself -- for the same reason `/calendar`'s does:
+              `summarize` counts a clash from a hidden line too. */}
+          {calendarSummary.worst ? (
+            <Notice
+              tone="warning"
+              role="status"
+              className="mb-3"
+              title={`${calendarSummary.clashes} double-booking${calendarSummary.clashes === 1 ? '' : 's'}`}
+            >
+              <p>
+                {calendarSummary.worst.who} is on {andList(calendarSummary.worst.taskNames)} on{' '}
+                {day(calendarSummary.worst.date)}.
+              </p>
+            </Notice>
+          ) : null}
+
+          <PeriodNav
+            basePath={`/projects/${project.id}/schedule`}
+            carry={{ view: viewParam(view) }}
+            period={period}
+            anchor={anchor}
+            today={today}
+            locale={locale}
+            extra={
+              calendarSummary.unassigned > 0 ? (
+                <span className="t-small text-muted">
+                  {calendarSummary.unassigned} with nobody booked
+                </span>
+              ) : null
+            }
+          />
+
+          {calendarSummary.shown === 0 ? (
+            <Card as="div" className="mb-3 p-6 text-muted">
+              Nothing is scheduled in this {PERIOD_LABELS[period].toLowerCase()}.
+            </Card>
+          ) : null}
+
+          <CalendarGrid
+            days={calendarDays}
+            columns={period === 'day' ? 1 : 7}
+            locale={locale}
+            today={today}
+            taskHref={(taskId) =>
+              filterHref(`/projects/${project.id}/schedule`, {
+                view: viewParam(view),
+                period: periodParam(period),
+                on: anchor === today ? '' : anchor,
+                task: taskId,
+              })
+            }
+          />
+        </>
+      ) : rows.length === 0 ? (
         <Card as="div" className="p-6 text-muted">
           {voided.length > 0 && !showVoided
             ? 'Every task on this schedule has been voided. Nothing has been lost — the control below brings them back into view.'
@@ -748,19 +1011,39 @@ export default async function SchedulePage({
         </TableWrap>
       )}
 
-      {voided.length > 0 ? (
-        <p className="mt-3 t-small text-subtle">
-          {/* A count, not a silence. A list that quietly drops rows is a list
-              the owner reads as having lost them. */}
-          <Link href={`/projects/${project.id}/schedule${showVoided ? '' : '?voided=1'}`} className="underline">
-            {showVoided
-              ? `Hide the ${voided.length} voided ${voided.length === 1 ? 'task' : 'tasks'}`
-              : `Show ${voided.length} voided ${voided.length === 1 ? 'task' : 'tasks'}`}
-          </Link>
-          {' · '}
-          {shownCount} {shownCount === 1 ? 'task' : 'tasks'} on screen
-        </p>
+      {openTask ? (
+        <TaskSheet
+          closeHref={filterHref(`/projects/${project.id}/schedule`, {
+            view: viewParam(view),
+            period: periodParam(period),
+            on: anchor === today ? '' : anchor,
+          })}
+          label={`Change ${openTask.name}`}
+          title={openTask.name}
+          subtitle={
+            openTask.isMilestone
+              ? day(openTask.plannedStart)
+              : `${day(openTask.plannedStart)} – ${day(openTask.plannedEnd)}`
+          }
+          discardPrompt="Throw away the changes to this task? Nothing has been saved yet."
+        >
+          <TaskEditor
+            task={openTask}
+            costCodeOptions={costCodeOptions(openTask)}
+            predecessorOptions={predecessorOptions(openTask)}
+            locale={locale}
+            allowed={allowed}
+            mayVoid={mayVoid}
+            refusal={REFUSAL}
+            above={
+              <p className="t-small text-muted">
+                {openOnIt.length === 0 ? 'Nobody booked' : openOnIt.join(', ')}
+              </p>
+            }
+          />
+        </TaskSheet>
       ) : null}
+
     </div>
   );
 }
