@@ -148,10 +148,37 @@ export default async function ProjectPage({
                   link on a lead would be an invitation to a dead end. The
                   condition is the same accepted-quote test the noun above
                   uses, rather than a second reading of `stage`. */}
+              {/* Spend is offered on an opportunity too, not only a job. A
+                  site visit driven to on a lead that never sells is a real
+                  cost, and a screen that refuses to record it is how that
+                  cost stops being counted. The job is carried in the query
+                  string, so the form opens with it already chosen and the
+                  cost lands against this record rather than being picked
+                  from a list of twenty. */}
+              <Link
+                href={`/expenses?project=${project.id}`}
+                className={buttonClass('secondary')}
+              >
+                Expenses
+              </Link>
+              {/* Scheduling and billing both need something sold. There is no
+                  work to sequence and no contract to bill against until a
+                  quote is accepted, and both actions refuse an opportunity
+                  outright -- so the links would be invitations to a dead end.
+                  The condition is the same accepted-quote test the noun above
+                  uses, rather than a second reading of `stage`. */}
               {accepted.length > 0 ? (
-                <Link href={`/billing/${project.id}`} className={buttonClass('secondary')}>
-                  Billing
-                </Link>
+                <>
+                  <Link
+                    href={`/projects/${project.id}/schedule`}
+                    className={buttonClass('secondary')}
+                  >
+                    Schedule
+                  </Link>
+                  <Link href={`/billing/${project.id}`} className={buttonClass('secondary')}>
+                    Billing
+                  </Link>
+                </>
               ) : null}
               {/* Another quote on the same opportunity -- a second price
                   point, or a scope the customer asked to see separately. */}

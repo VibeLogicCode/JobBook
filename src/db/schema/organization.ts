@@ -63,6 +63,22 @@ export const organization = pgTable('organization', {
   paymentTermsDays: integer('payment_terms_days'),
   paymentTermsText: text('payment_terms_text'),
   insuranceStatement: text('insurance_statement'),
+  /**
+   * What a kilometre driven on a job costs, in ten-thousandths of a currency
+   * unit: $0.7200/km is 7200.
+   *
+   * Configuration and not a constant in code, because the allowance is a
+   * jurisdiction's figure and it moves most years. The default is a starting
+   * point rather than an authority -- an owner confirms it against whatever
+   * his own tax authority publishes, and the settings screen says so.
+   *
+   * Read ONCE, when a mileage row is written, and copied onto that row
+   * (`expenses.rate_per_km_ten_thou`). Nothing reads it back to display or
+   * re-cost an existing trip: this column is what the NEXT trip will cost, and
+   * a screen that read it live would restate every trip ever driven the first
+   * January the figure changed.
+   */
+  mileageRatePerKmTenThou: rate('mileage_rate_per_km_ten_thou').notNull().default(sql`7200`),
   /** Drives the worksheet margin gauge bands. */
   targetMarginBp: integer('target_margin_bp'),
 
