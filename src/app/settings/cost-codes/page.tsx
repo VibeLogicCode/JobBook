@@ -19,6 +19,7 @@ import { FieldGrid, SelectField, TextField } from '@/components/settings/Fields'
 import { Section } from '@/components/settings/Section';
 import { Notice } from '@/components/ui/Notice';
 import { Pill } from '@/components/ui/Pill';
+import { SheetButton } from '@/components/ui/Sheet';
 import { AmountCell, TableWrap } from '@/components/ui/Table';
 
 export const dynamic = 'force-dynamic';
@@ -256,11 +257,18 @@ export default async function CostCodesPage() {
                     </span>
                   </td>
                   <td data-label="Manage">
-                    <details className="min-w-0">
-                      <summary className="min-h-11 cursor-pointer list-none rounded-control border border-line-strong px-3 py-2 t-small">
-                        Change…
-                      </summary>
-                      <div className="mt-3 flex w-full max-w-[38rem] flex-col gap-4 border-t border-line pt-3">
+                    {/* The same press-then-panel the rate list takes, and for
+                        the same reason: a disclosure here pushed every code
+                        below this one off the screen, and the list is the
+                        thing somebody is reading while they decide. */}
+                    <SheetButton
+                      trigger="Change…"
+                      label={`Change ${row.code}`}
+                      title={`Change ${row.code}`}
+                      subtitle={row.name}
+                      discardPrompt="Throw away the changes to this code? Nothing has been saved yet."
+                    >
+                      <div className="flex flex-col gap-4">
                         <div>
                           <h3 className="t-small font-semibold">Edit this code</h3>
                           <p className="mb-2 max-w-prose t-small text-subtle">
@@ -418,7 +426,7 @@ export default async function CostCodesPage() {
                           </div>
                         )}
                       </div>
-                    </details>
+                    </SheetButton>
                   </td>
                 </tr>
               );

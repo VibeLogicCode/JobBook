@@ -21,6 +21,7 @@ import {
 import { Section } from '@/components/settings/Section';
 import { Notice } from '@/components/ui/Notice';
 import { Pill } from '@/components/ui/Pill';
+import { SheetButton } from '@/components/ui/Sheet';
 import { AmountCell, TableWrap } from '@/components/ui/Table';
 import { formatBasisPoints, formatQty, formatRate } from '@/lib/money/format';
 import { marginBasisPoints } from '@/lib/money/scale';
@@ -184,11 +185,20 @@ export default async function RatesPage() {
                       </span>
                     </td>
                     <td data-label="Manage">
-                      <details className="min-w-0">
-                        <summary className="min-h-11 cursor-pointer list-none rounded-control border border-line-strong px-3 py-2 t-small">
-                          Change…
-                        </summary>
-                        <div className="mt-3 flex w-full max-w-[38rem] flex-col gap-4 border-t border-line pt-3">
+                      {/* A press, then the form over a blurred page -- not a
+                          disclosure that shoves the rest of the list down
+                          the screen the moment somebody opens it. The title
+                          names the row, because the table behind it is
+                          dimmed and the sheet is now the only thing saying
+                          which price is being changed. */}
+                      <SheetButton
+                        trigger="Change…"
+                        label={`Change ${item.code}`}
+                        title={`Change ${item.code}`}
+                        subtitle={item.description}
+                        discardPrompt="Throw away the changes to this item? Nothing has been saved yet."
+                      >
+                        <div className="flex flex-col gap-4">
                           <div>
                             <h3 className="t-small font-semibold">Edit this item</h3>
                             <p className="mb-2 max-w-prose t-small text-subtle">
@@ -393,7 +403,7 @@ export default async function RatesPage() {
                             </div>
                           )}
                         </div>
-                      </details>
+                      </SheetButton>
                     </td>
                   </tr>
                 );

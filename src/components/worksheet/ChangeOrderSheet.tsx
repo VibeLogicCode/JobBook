@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { Trash2 } from 'lucide-react';
-import { Measurement, Sheet } from '@/components/worksheet/Sheet';
+import { Measurement, Sheet } from '@/components/ui/Sheet';
 import { Button } from '@/components/ui/Button';
 import type { WireChangeReason, WireQuote, WireRateItem } from '@/components/worksheet/types';
 import { formatRate } from '@/lib/money/format';

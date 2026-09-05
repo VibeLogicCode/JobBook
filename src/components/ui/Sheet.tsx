@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useRef, type KeyboardEvent as ReactKeyboardEvent } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { X } from 'lucide-react';
+import { Button, type ButtonVariant } from '@/components/ui/Button';
 
 /**
  * The bottom sheet, and the same panel centred on a wide screen.
@@ -48,11 +49,40 @@ function trapTab(container: HTMLElement, event: ReactKeyboardEvent<HTMLDivElemen
   }
 }
 
+/**
+ * How wide the panel is allowed to get ONCE IT IS CENTRED -- from `sm` up, and
+ * never below it.
+ *
+ * Below `sm` there is no choice to make: the sheet is the full width of the
+ * phone, at the bottom edge, with the grab handle. That shape was picked over
+ * the sibling project's always-centred dialog on purpose and none of these
+ * touch it.
+ *
+ * Above `sm` there is a real choice, and one answer was wrong for half the
+ * callers. `md` is what every sheet used to be: right for the four measurement
+ * boxes it was written for, and wrong for a ten-field two-column form, which at
+ * 512px gives each column about 220px and scrolls -- a phone layout stranded in
+ * the middle of a desktop, which is exactly what the owner reported. So the
+ * width is the caller's to state, and the default is what the callers that
+ * already existed were getting.
+ */
+const WIDTHS = {
+  /** Two or three fields, or a list to pick from. The original, and the default. */
+  md: 'sm:max-w-lg',
+  /** A real form: a two-column grid whose columns want to be readable. */
+  lg: 'sm:max-w-2xl',
+  /** A table inside a sheet -- columns that cannot be narrowed without lying. */
+  xl: 'sm:max-w-4xl',
+} as const;
+
+export type SheetSize = keyof typeof WIDTHS;
+
 export function Sheet({
   label,
   title,
   subtitle,
   onClose,
+  size = 'md',
   toolbar,
   children,
   footer,
@@ -62,6 +92,8 @@ export function Sheet({
   title: React.ReactNode;
   subtitle?: React.ReactNode;
   onClose: () => void;
+  /** The centred width from `sm` up. The phone shape is not affected. */
+  size?: SheetSize;
   /**
    * Pinned under the header, outside the scrolling body: a search box that
    * scrolls away from the list it filters is worse than no search box, because
@@ -125,16 +157,32 @@ export function Sheet({
     };
   }, []);
 
-  function onKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
-    // Escape closes from anywhere inside, including from a field: a sheet that
-    // can only be dismissed by finding its close button is a trap for anyone
-    // working from the keyboard.
-    if (event.key === 'Escape') {
+  /**
+   * Escape, listened for on the DOCUMENT rather than on the panel.
+   *
+   * It used to be a case inside the panel's own `onKeyDown`, which works only
+   * while focus is still inside the panel -- and focus does not always stay
+   * there. Measured on the rate editor: submitting the form re-renders the
+   * button that was pressed, focus lands back on `<body>`, and from that
+   * moment Escape did nothing at all. A modal that stops answering Escape
+   * after its own save is the trap this behaviour exists to prevent, and
+   * nothing on screen would ever say so.
+   *
+   * `keydown` on the document, in the bubble phase, so a control that
+   * legitimately consumes Escape -- an open native select, a date picker --
+   * still gets it first.
+   */
+  useEffect(() => {
+    function onEscape(event: KeyboardEvent) {
+      if (event.key !== 'Escape' || event.defaultPrevented) return;
       event.preventDefault();
-      event.stopPropagation();
       onClose();
-      return;
     }
+    document.addEventListener('keydown', onEscape);
+    return () => document.removeEventListener('keydown', onEscape);
+  }, [onClose]);
+
+  function onKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
     if (panelRef.current) trapTab(panelRef.current, event);
   }
 
@@ -158,7 +206,12 @@ export function Sheet({
         // the sheet. Only the scrim itself does.
         onClick={(event) => event.stopPropagation()}
         onKeyDown={onKeyDown}
-        className="flex max-h-[85dvh] w-full flex-col rounded-t-panel border-t border-line-strong bg-surface shadow-pop outline-none sm:max-w-lg sm:rounded-panel sm:border"
+        // `max-h-[85dvh]` with a `flex-col` inside it is what keeps a WIDER
+        // panel from becoming a TALLER one that runs off a short laptop: the
+        // header, the toolbar and the footer are all `shrink-0` and the body
+        // between them is the only thing that grows, so the save button stays
+        // on screen at 720px of viewport and the form scrolls under it.
+        className={`flex max-h-[85dvh] w-full flex-col rounded-t-panel border-t border-line-strong bg-surface shadow-pop outline-none sm:rounded-panel sm:border ${WIDTHS[size]}`}
       >
         <div
           aria-hidden
@@ -189,6 +242,139 @@ export function Sheet({
         ) : null}
       </div>
     </div>
+  );
+}
+
+/**
+ * What every field inside `root` currently holds, as one comparable string.
+ *
+ * Read off the DOM rather than out of React state on purpose: the sheets this
+ * serves are handed SERVER-rendered forms as children -- plain `<input>` and
+ * `<select>` elements with `defaultValue`, whose current value React never
+ * sees. A `FormData` would miss the same values for the same reason, and would
+ * also miss an unchecked checkbox, which is exactly the edit somebody would be
+ * annoyed to lose.
+ *
+ * Hidden fields are skipped because they carry the row id, not the person's
+ * work, and a submit button's value is not an edit either.
+ */
+function fieldSnapshot(root: HTMLElement | null): string {
+  if (!root) return '';
+  const parts: string[] = [];
+  for (const element of root.querySelectorAll<
+    HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
+  >('input, select, textarea')) {
+    if (element instanceof HTMLInputElement) {
+      if (element.type === 'hidden' || element.type === 'submit' || element.type === 'button') {
+        continue;
+      }
+      if (element.type === 'checkbox' || element.type === 'radio') {
+        parts.push(`${element.name}=${element.checked}`);
+        continue;
+      }
+    }
+    parts.push(`${element.name}=${element.value}`);
+  }
+  // One field per line. A newline inside a textarea can forge a boundary, but
+  // the worst a collision does here is fail to notice an edit that swapped
+  // text between two fields -- and it costs nothing to read in a debugger,
+  // which a control character would not.
+  return parts.join('\n');
+}
+
+/**
+ * A button that opens its children in a `Sheet`.
+ *
+ * The shape the owner asked for on the rate list and the cost codes: a press,
+ * then the form over a blurred page -- rather than a `<details>` that shoves
+ * the table it belongs to halfway down the screen the moment it opens.
+ *
+ * It exists so a SERVER component can have one. The page renders the form as
+ * children and never becomes a client component itself; only the open/shut of
+ * the sheet lives in the browser, which is all that ever needed to.
+ *
+ * WHAT BELONGS IN ONE, and what does not. A form -- a focused task with a
+ * consequence, read and filled in before it is agreed to -- belongs here. A
+ * confirm that belongs to ONE ROW, where the answer turns on being able to
+ * keep looking at that row, does NOT: it stays anchored where it is, which is
+ * why "Retire this item" is still a `RowAction` with a plain browser confirm
+ * rather than a second sheet nested inside this one.
+ *
+ * `discardPrompt` is not optional in spirit. Escape and a backdrop click both
+ * dismiss a `Sheet`, and a modal that throws away a half-typed entry on a
+ * mis-aimed click is worse than the disclosure it replaced. Passing it makes
+ * the dismissal ask first, and only when something inside actually changed.
+ */
+export function SheetButton({
+  trigger,
+  label,
+  title,
+  subtitle,
+  size = 'lg',
+  variant = 'secondary',
+  discardPrompt,
+  children,
+}: {
+  /** What the button says. */
+  trigger: React.ReactNode;
+  /** The dialog's accessible name. Name the ROW, so which one is never in doubt. */
+  label: string;
+  title: React.ReactNode;
+  subtitle?: React.ReactNode;
+  /**
+   * `lg` by default, unlike `Sheet` itself: what opens from a button on a row
+   * is a form, and a form is the thing the narrow default was wrong for.
+   */
+  size?: SheetSize;
+  variant?: ButtonVariant;
+  /**
+   * Asked before Escape, the backdrop or Close throw away an edit. Omitted
+   * only where the sheet holds nothing anybody types.
+   */
+  discardPrompt?: string;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const bodyRef = useRef<HTMLDivElement | null>(null);
+  /** What the fields held when the sheet opened, or when it was last submitted. */
+  const baseline = useRef('');
+
+  /**
+   * Taken after the children have mounted, which is what this effect being in
+   * the PARENT buys: `Sheet` and everything inside it has committed by the
+   * time it runs, so the reading is of real fields rather than of nothing.
+   */
+  useEffect(() => {
+    if (open) baseline.current = fieldSnapshot(bodyRef.current);
+  }, [open]);
+
+  function requestClose() {
+    const dirty = fieldSnapshot(bodyRef.current) !== baseline.current;
+    if (discardPrompt && dirty && !window.confirm(discardPrompt)) return;
+    setOpen(false);
+  }
+
+  return (
+    <>
+      <Button type="button" variant={variant} className="t-small" onClick={() => setOpen(true)}>
+        {trigger}
+      </Button>
+
+      {open ? (
+        <Sheet label={label} title={title} subtitle={subtitle} size={size} onClose={requestClose}>
+          {/* A submit is a save, so what was typed stops being unsaved work and
+              the guard above has to stop asking about it. Caught on the way up
+              from whichever form inside fired it, because this shell holds no
+              form of its own and the children are server-rendered. A submit
+              the server then REFUSES leaves the values on screen and the
+              guard quiet about them -- the error says so, in the sheet, and
+              the row itself is unchanged either way. */}
+          <div ref={bodyRef} onSubmit={() => { baseline.current = fieldSnapshot(bodyRef.current); }}>
+            {children}
+          </div>
+        </Sheet>
+      ) : null}
+    </>
   );
 }
 

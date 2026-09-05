@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { saveScopeInputs } from '@/app/quotes/[id]/actions';
-import { Measurement, Sheet } from '@/components/worksheet/Sheet';
+import { Measurement, Sheet } from '@/components/ui/Sheet';
 import { Button } from '@/components/ui/Button';
 import type { WireQuote } from '@/components/worksheet/types';
 import { formatQty } from '@/lib/money/format';

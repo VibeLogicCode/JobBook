@@ -7,7 +7,7 @@ import type { AcceptanceSibling } from '@/app/quotes/[id]/siblings';
 import { Button } from '@/components/ui/Button';
 import { Notice } from '@/components/ui/Notice';
 import { Pill } from '@/components/ui/Pill';
-import { Sheet } from '@/components/worksheet/Sheet';
+import { Sheet } from '@/components/ui/Sheet';
 import type { WireLine, WireQuote } from '@/components/worksheet/types';
 import { formatCents } from '@/lib/money/format';
 import { computeQuote } from '@/lib/quote/totals';

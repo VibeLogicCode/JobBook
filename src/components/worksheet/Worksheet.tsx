@@ -24,7 +24,7 @@ import {
 } from '@/components/worksheet/keyboard';
 import { MarginGauge } from '@/components/worksheet/MarginGauge';
 import { RegenerateDialog, ScopeSheet } from '@/components/worksheet/ScopeSheet';
-import { Sheet } from '@/components/worksheet/Sheet';
+import { Sheet } from '@/components/ui/Sheet';
 import type {
   WireLine,
   WireQuote,
