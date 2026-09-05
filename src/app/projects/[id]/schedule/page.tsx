@@ -22,14 +22,11 @@ import {
   createTask,
   removeAssignment,
   updateAssignment,
-  updateTask,
-  voidTask,
 } from '@/app/projects/[id]/schedule/actions';
 import {
   ASSIGNMENT_RESPONSES,
   RESPONSE_LABELS,
   STATUS_LABELS,
-  TASK_STATUSES,
   assigneeValue,
   centsToInput,
   clashPillLabel,
@@ -53,7 +50,6 @@ import {
   toClash,
   type Engagement,
 } from '@/app/projects/[id]/schedule/clashes';
-import { MoveDates } from '@/app/projects/[id]/schedule/MoveDates';
 import {
   WhoSheet,
   type AssignmentView,
@@ -62,11 +58,11 @@ import { ActionForm } from '@/components/settings/ActionForm';
 import {
   CheckboxField,
   FieldGrid,
-  SelectField,
   TextAreaField,
   TextField,
   type Option,
 } from '@/components/settings/Fields';
+import { TaskEditor, TaskFields } from '@/components/schedule/TaskEditor';
 import { Card } from '@/components/ui/Card';
 import { MetricCard } from '@/components/ui/MetricCard';
 import { Notice } from '@/components/ui/Notice';
@@ -465,52 +461,6 @@ export default async function SchedulePage({
       }));
   }
 
-  /** The fields shared by adding a task and editing one. */
-  function sharedFields(row: TaskRow | undefined, prefix: string, disabled: boolean) {
-    return (
-      <>
-        <TextField
-          idPrefix={prefix}
-          name="name"
-          label="Task"
-          required
-          maxLength={200}
-          defaultValue={row?.name}
-          disabled={disabled}
-          hint="What you would call it on the phone — excavation, rough-in, drywall."
-        />
-        <TextField
-          idPrefix={prefix}
-          name="trade"
-          label="Trade"
-          maxLength={120}
-          defaultValue={row?.trade}
-          disabled={disabled}
-          hint="Which trade this needs. Naming the actual subcontractor comes with assignments; this is the half that says who to go looking for."
-        />
-        <SelectField
-          idPrefix={prefix}
-          name="costCodeId"
-          label="Cost code"
-          defaultValue={row?.costCodeId ?? ''}
-          options={costCodeOptions(row)}
-          blankLabel="None — code the spend when it arrives"
-          disabled={disabled}
-        />
-        <SelectField
-          idPrefix={prefix}
-          name="predecessorTaskId"
-          label="Waits on"
-          defaultValue={row?.predecessorTaskId ?? ''}
-          options={predecessorOptions(row)}
-          blankLabel="Nothing — this date stands on its own"
-          disabled={disabled}
-          hint="A task that waits on another moves when that one moves. A task that waits on nothing NEVER moves on its own — not because it sits between two tasks that did, and not because anything looked like it was in the way."
-        />
-      </>
-    );
-  }
-
   const shownCount = rows.length;
 
   return (
@@ -546,7 +496,12 @@ export default async function SchedulePage({
             >
               <input type="hidden" name="projectId" value={project.id} />
               <FieldGrid>
-                {sharedFields(undefined, 'new-task', !allowed)}
+                <TaskFields
+                  idPrefix="new-task"
+                  disabled={!allowed}
+                  costCodeOptions={costCodeOptions()}
+                  predecessorOptions={predecessorOptions()}
+                />
                 <TextField
                   idPrefix="new-task"
                   name="plannedStart"
@@ -774,143 +729,15 @@ export default async function SchedulePage({
                       size="xl"
                       discardPrompt="Throw away the changes to this task? Nothing has been saved yet."
                     >
-                      <div className="flex flex-col gap-4">
-                        <div>
-                          <h3 className="t-small font-semibold">Move the dates</h3>
-                          <p className="mb-2 max-w-prose t-small text-subtle">
-                            Everything waiting behind this task moves with it, by the same number
-                            of days. A task that waits on nothing stays where it is, even if it
-                            sits in the middle. You will be shown exactly which tasks move before
-                            anything is written.
-                          </p>
-                          {/* Deliberately NOT keyed on the row's dates. The
-                              revalidation that follows a successful move would
-                              change that key, remount the form, and take the
-                              confirmation message with it -- so the owner would
-                              press "Move them" and be told nothing. The boxes
-                              are already right without it: they hold what was
-                              submitted, and the sheet mounts fresh from the
-                              row every time it is opened. */}
-                          <MoveDates
-                            taskId={row.id}
-                            taskName={row.name}
-                            plannedStart={row.plannedStart}
-                            plannedEnd={row.plannedEnd}
-                            isMilestone={row.isMilestone}
-                            locale={locale}
-                            disabled={!allowed || isVoid}
-                            disabledNote={
-                              isVoid
-                                ? 'This task is void. Its dates are a record rather than a plan.'
-                                : allowed
-                                  ? undefined
-                                  : REFUSAL
-                            }
-                          />
-                        </div>
-
-                        <div>
-                          <h3 className="t-small font-semibold">Everything else</h3>
-                          <p className="mb-2 max-w-prose t-small text-subtle">
-                            What it is called, what it waits on, and what actually happened. The
-                            planned dates are not here on purpose — they move above, where the
-                            consequence is shown first.
-                          </p>
-                          <ActionForm
-                            action={updateTask}
-                            submitLabel="Save this task"
-                            disabled={!allowed || isVoid}
-                            disabledNote={
-                              isVoid
-                                ? 'This task is void. A void row is kept as a record and is not edited.'
-                                : allowed
-                                  ? undefined
-                                  : REFUSAL
-                            }
-                          >
-                            <input type="hidden" name="id" value={row.id} />
-                            <FieldGrid>
-                              {sharedFields(row, `edit-${row.id}`, !allowed || isVoid)}
-                              <SelectField
-                                idPrefix={`edit-${row.id}`}
-                                name="status"
-                                label="Status"
-                                defaultValue={row.status}
-                                options={TASK_STATUSES.map((status) => ({
-                                  value: status,
-                                  label: STATUS_LABELS[status],
-                                }))}
-                                disabled={!allowed || isVoid}
-                              />
-                              <TextField
-                                idPrefix={`edit-${row.id}`}
-                                name="actualStart"
-                                label="Actually started"
-                                type="date"
-                                defaultValue={row.actualStart ?? ''}
-                                disabled={!allowed || isVoid}
-                                hint="A fact, never computed. Recording one also takes this task out of the auto-push: once work has begun, moving its plan would erase the difference between what was planned and what happened, which is the measurement that makes the next quote better."
-                              />
-                              <TextField
-                                idPrefix={`edit-${row.id}`}
-                                name="actualEnd"
-                                label="Actually finished"
-                                type="date"
-                                defaultValue={row.actualEnd ?? ''}
-                                disabled={!allowed || isVoid}
-                              />
-                            </FieldGrid>
-                            <TextAreaField
-                              idPrefix={`edit-${row.id}`}
-                              name="notes"
-                              label="Notes"
-                              rows={2}
-                              defaultValue={row.notes}
-                              disabled={!allowed || isVoid}
-                            />
-                          </ActionForm>
-                        </div>
-
-                        {isVoid ? (
-                          <div>
-                            <h3 className="t-small font-semibold">Voided</h3>
-                            <p className="max-w-prose t-small text-subtle">
-                              {row.voidReason ?? 'No reason was recorded.'}
-                            </p>
-                          </div>
-                        ) : (
-                          <div>
-                            <h3 className="t-small font-semibold">Void it</h3>
-                            <p className="mb-2 max-w-prose t-small text-subtle">
-                              For a task that should never have been on the schedule. It is not how
-                              you record work you decided against — that is a status and a note.
-                              Voiding is refused while anything still waits on this task, because a
-                              task waiting on a voided row is a dependency no screen would show.
-                            </p>
-                            <ActionForm
-                              action={voidTask}
-                              submitLabel="Void this task"
-                              destructive
-                              disabled={!mayVoid}
-                              disabledNote={
-                                mayVoid ? undefined : 'Your role does not permit voiding a record.'
-                              }
-                            >
-                              <input type="hidden" name="id" value={row.id} />
-                              <TextField
-                                idPrefix={`void-${row.id}`}
-                                name="reason"
-                                label="Reason"
-                                required
-                                maxLength={300}
-                                disabled={!mayVoid}
-                                wide
-                                hint="Recorded on the row. A void with no reason teaches nobody anything a year later."
-                              />
-                            </ActionForm>
-                          </div>
-                        )}
-                      </div>
+                      <TaskEditor
+                        task={row}
+                        costCodeOptions={costCodeOptions(row)}
+                        predecessorOptions={predecessorOptions(row)}
+                        locale={locale}
+                        allowed={allowed}
+                        mayVoid={mayVoid}
+                        refusal={REFUSAL}
+                      />
                     </SheetButton>
                     </span>
                   </td>
