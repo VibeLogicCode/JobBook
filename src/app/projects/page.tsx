@@ -1,17 +1,21 @@
 import Link from 'next/link';
 import { and, asc, eq, inArray, not, sql, type SQL } from 'drizzle-orm';
 import { db } from '@/db/client';
-import { customers, projects, quotes } from '@/db/schema';
+import { customers, projects, quotes, stageHistory } from '@/db/schema';
 import { buttonClass } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { FilterBar, NoMatches } from '@/components/ui/FilterBar';
 import { PageHeader } from '@/components/ui/PageHeader';
-import { Pill } from '@/components/ui/Pill';
-import { AmountCell, TableWrap } from '@/components/ui/Table';
 import {
-  JOB_STAGES, OPPORTUNITY_STAGES, PROJECT_STAGES, type ProjectStage, stageTone, workNoun,
+  JOB_STAGES, OPPORTUNITY_STAGES, PROJECT_STAGES, type ProjectStage,
 } from '@/components/detail/labels';
+import { Board } from '@/components/pipeline/Board';
+import {
+  boardStages, CLOSED_STAGES, nextReminderByProject, SHARED_STAGES, type PipelineCard,
+} from '@/components/pipeline/columns';
 import { normalizeSearch, searchCondition } from '@/lib/list/search';
+import { tenantToday } from '@/lib/quote/dates';
+import { listReminders } from '@/lib/reminders/repository';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,8 +34,6 @@ export const dynamic = 'force-dynamic';
  * a person may choose -- `won` is what accepting a quote does. It is still a
  * stage a row sits at, and therefore still a thing to filter by.
  */
-const SHARED_STAGES = OPPORTUNITY_STAGES.filter((stage) => JOB_STAGES.includes(stage));
-
 const STAGE_GROUPS = [
   {
     label: 'Opportunity',
@@ -46,9 +48,6 @@ const STAGE_GROUPS = [
   label: group.label,
   options: group.stages.map((stage) => ({ value: stage, label: PROJECT_STAGES[stage] })),
 }));
-
-/** Work that is over. A lost bid and a finished job are both history. */
-const CLOSED_STAGES: ProjectStage[] = ['lost', 'complete'];
 
 const KIND_OPTIONS = [
   { value: 'opportunity', label: 'Opportunities' },
@@ -79,6 +78,24 @@ function countNoun(kind: 'opportunity' | 'job' | ''): { singular: string; plural
   return { singular: 'opportunity or job', plural: 'opportunities and jobs' };
 }
 
+/**
+ * The pipeline: every live opportunity and job, in the stage it is sitting in.
+ *
+ * There is ONE view here and it is the board. The table this screen used to be
+ * was replaced rather than hidden behind a toggle, and the reason is worth
+ * writing down: a toggle is a second render path over the same query, and the
+ * filter bar is a plain GET form that would drop the toggle's parameter on
+ * every search -- so the choice would silently reset itself exactly when
+ * somebody was using it. The card carries everything the row carried (customer,
+ * number, contract value, start date) and two things it could not (how long the
+ * work has sat where it is, and the next thing to do about it), so nothing was
+ * lost by picking one.
+ *
+ * The known cost: `complete` accumulates forever, because nothing is ever
+ * deleted. That column is behind the reveal control, off by default, and when
+ * a decade of finished jobs makes it unreadable the answer is paging, not a
+ * second screen that has to be kept in step with this one.
+ */
 export default async function ProjectsPage({
   searchParams,
 }: {
@@ -92,7 +109,7 @@ export default async function ProjectsPage({
   // Opportunity or job is decided by whether a quote has been accepted, never
   // by the stage -- `on_hold` is a stalled opportunity before anything is won
   // and a paused job afterwards. Same rule as `workNoun`, which is what the
-  // row itself prints, so the filter and the label cannot disagree.
+  // card itself prints, so the filter and the label cannot disagree.
   const hasAcceptedQuote = sql<boolean>`exists (
     select 1 from ${quotes} q
     where q.project_id = ${projects.id}
@@ -133,7 +150,6 @@ export default async function ProjectsPage({
       projectNumber: projects.projectNumber,
       name: projects.name,
       stage: projects.stage,
-      projectType: projects.projectType,
       scheduledStart: projects.scheduledStart,
       actualStart: projects.actualStart,
       customerName: customers.name,
@@ -148,6 +164,26 @@ export default async function ProjectsPage({
         select count(*) from ${quotes} q
         where q.project_id = ${projects.id}
           and q.status = 'accepted' and q.record_status = 'active'
+      )`,
+      /**
+       * How long this row has been in the stage it is in, from the transition
+       * rows and never from a column.
+       *
+       * The LATEST entry into the current stage, not the first: a project that
+       * went `lead -> quoting -> lead` has been at `lead` since the second
+       * move, and measuring from the first would report a fortnight of
+       * standing still that never happened.
+       *
+       * Whole elapsed days, floored -- the same arithmetic the stage timeline
+       * on the detail screen does, so the two screens report the same number
+       * about the same row.
+       */
+      daysInStage: sql<number | null>`(
+        select floor(extract(epoch from (now() - max(sh.changed_at))) / 86400)::int
+        from ${stageHistory} sh
+        where sh.project_id = ${projects.id}
+          and sh.to_stage = ${projects.stage}
+          and sh.record_status = 'active'
       )`,
     })
     .from(projects)
@@ -169,6 +205,40 @@ export default async function ProjectsPage({
         )[0]?.n ?? 0,
       );
 
+  const cards: PipelineCard[] = rows.map((row) => ({
+    id: row.id,
+    projectNumber: row.projectNumber,
+    name: row.name,
+    customerName: row.customerName,
+    stage: row.stage,
+    isJob: Number(row.acceptedQuotes) > 0,
+    contractValueCents: Number(row.contractValueCents),
+    daysInStage: row.daysInStage === null ? null : Number(row.daysInStage),
+    // Actual start beats scheduled: once a job has really begun, the date it
+    // was meant to begin is history the detail screen keeps for slippage.
+    startsOn: row.actualStart ?? row.scheduledStart ?? null,
+  }));
+
+  // The next thing to do about each card. Two small queries and only when
+  // there is something to attach them to: an empty board asks the reminder
+  // engine nothing.
+  const projectIds = cards.map((card) => card.id);
+  const [today, openReminders, quoteOwners] = await Promise.all([
+    db.transaction((tx) => tenantToday(tx)),
+    projectIds.length > 0 ? listReminders({ status: 'open' }) : Promise.resolve([]),
+    projectIds.length > 0
+      ? db
+          .select({ id: quotes.id, projectId: quotes.projectId })
+          .from(quotes)
+          .where(and(inArray(quotes.projectId, projectIds), eq(quotes.recordStatus, 'active')))
+      : Promise.resolve([]),
+  ]);
+
+  const reminderOf = nextReminderByProject(
+    openReminders,
+    new Map(quoteOwners.map((row) => [row.id, row.projectId])),
+  );
+
   const filtered = q !== '' || stage !== '' || kind !== '';
   const describe = [
     kind ? `Showing: ${KIND_OPTIONS.find((entry) => entry.value === kind)?.label}` : '',
@@ -180,6 +250,9 @@ export default async function ProjectsPage({
       <PageHeader
         className="mb-4"
         title="Pipeline"
+        // Said out loud because the board shows no figure on most of its left
+        // half, and a reader who does not know why reads it as broken.
+        description="Value is contract value, derived from accepted quotes — work that has not been won carries none."
         actions={
           <Link href="/projects/new" className={buttonClass('primary')}>
             New opportunity
@@ -246,43 +319,15 @@ export default async function ProjectsPage({
           </Card>
         )
       ) : (
-        <TableWrap minWidth="46rem">
-          <thead>
-            <tr>
-              <th scope="col">Work</th>
-              <th scope="col">Number</th>
-              <th scope="col">Customer</th>
-              <th scope="col">Stage</th>
-              <th scope="col">Starts</th>
-              <th scope="col" className="cell-num">Contract</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row) => (
-              <tr key={row.id}>
-                <td data-label="Work">
-                  <Link href={`/projects/${row.id}`} className="text-accent-text hover:underline">
-                    {row.name}
-                  </Link>
-                  <span className="block t-small text-subtle">
-                    {workNoun(Number(row.acceptedQuotes) > 0)}
-                  </span>
-                </td>
-                <td data-label="Number" className="num t-small text-muted">
-                  {row.projectNumber}
-                </td>
-                <td data-label="Customer">{row.customerName}</td>
-                <td data-label="Stage">
-                  <Pill tone={stageTone(row.stage)}>{PROJECT_STAGES[row.stage]}</Pill>
-                </td>
-                <td data-label="Starts" className="num t-small">
-                  {row.actualStart ?? row.scheduledStart ?? '—'}
-                </td>
-                <AmountCell data-label="Contract" cents={Number(row.contractValueCents)} />
-              </tr>
-            ))}
-          </tbody>
-        </TableWrap>
+        <Board
+          cards={cards}
+          stages={boardStages({ stage, kind, showClosed }, cards.map((card) => card.stage))}
+          reminderOf={reminderOf}
+          today={today}
+          basePath="/projects"
+          filters={{ q, kind, closed: params.closed === '1' ? '1' : '' }}
+          stageFiltered={stage !== ''}
+        />
       )}
     </div>
   );
