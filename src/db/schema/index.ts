@@ -9,3 +9,4 @@ export * from '@/db/schema/quotes';
 export * from '@/db/schema/system';
 export * from '@/db/schema/auth';
 export * from '@/db/schema/invoices';
+export * from '@/db/schema/reminders';

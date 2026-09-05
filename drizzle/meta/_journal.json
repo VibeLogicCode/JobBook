@@ -64,6 +64,13 @@
       "when": 1788550210146,
       "tag": "0008_customer_invoicing",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1788565857650,
+      "tag": "0009_activity_and_reminders",
+      "breakpoints": true
     }
   ]
 }

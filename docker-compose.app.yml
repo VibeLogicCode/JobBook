@@ -141,6 +141,44 @@ services:
     # is visible in one `docker compose ps`.
     restart: on-failure
 
+  # The reminder schedule, in its own container.
+  #
+  # Same image and the same shape as `backup` above, for the same two reasons:
+  # a slow evaluation cannot slow the web server, and a failing evaluation
+  # cannot take the quoting system down with it. It carries the same code as
+  # the app, so it can never be querying a schema a version behind.
+  #
+  # It waits for the APP rather than for the database, which the backup service
+  # does not. The app is what applies migrations at boot, and an evaluation
+  # against a database that does not yet have `reminders` in it would fail
+  # every hour on a fresh deployment until somebody read the log.
+  reminders:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      app:
+        condition: service_healthy
+    entrypoint: ['/usr/local/bin/reminder-loop.sh']
+    # The image's healthcheck pings the web server's /api/health, and this
+    # container runs no web server -- it would report unhealthy forever, a
+    # permanent false alarm sitting next to the real signal.
+    healthcheck:
+      disable: true
+    environment:
+      DATABASE_URL: postgres://quote:${POSTGRES_PASSWORD:-quote_dev_only}@db:5432/quote
+      # Hourly. Lower it to watch the thing work on a new deployment; there is
+      # no cost to running it more often, because an evaluation that finds
+      # nothing new inserts nothing -- the unique partial index
+      # `reminders_one_open_per_rule` is what makes that true rather than a
+      # convention somebody has to keep.
+      REMINDER_INTERVAL_MINUTES: ${REMINDER_INTERVAL_MINUTES:-60}
+    # unless-stopped, not on-failure: unlike the backup container there is
+    # nothing to configure here and therefore no permanent fatal condition to
+    # restart into. A failed evaluation is logged and the next hour tries
+    # again, so the container should outlive a bad hour.
+    restart: unless-stopped
+
   # HTTPS. Opt in with: docker compose --profile https up -d
   #
   # A real domain gets a public certificate automatically. A LAN address gets

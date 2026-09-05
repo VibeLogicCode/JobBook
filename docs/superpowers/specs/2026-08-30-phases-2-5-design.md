@@ -51,6 +51,14 @@ Recorded in Phase 3's `vendors`, but named here because two are statutory. `cost
 
 ## Phase 2 — Pipeline, activity, and reminders
 
+> **Execution plan:** `../plans/2026-09-04-phase2-pipeline-and-reminders.md`.
+> Three decisions taken there change what this section describes: the reminder
+> engine is built **before** the pipeline board, outbound email in §2.4 is
+> **deferred** in favour of a log-an-email action, and idempotency is enforced
+> by a unique partial index rather than an application check. Where the two
+> documents disagree, the plan is the later thought.
+
+
 **Purpose.** The owner's process starts with a phone call or an email and ends at a completed job. Today that lives in his head and his text messages. This phase makes the pipeline visible and stops follow-ups being forgotten.
 
 ### 2.1 Data model
