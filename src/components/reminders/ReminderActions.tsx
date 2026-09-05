@@ -35,7 +35,25 @@ function errorOf(state: FormResult | null): string | null {
   return state && !state.ok ? state.error : null;
 }
 
-export function ReminderActions({ id, dueOn }: { id: string; dueOn: string }) {
+/**
+ * `compact` is the Today panel: Done and nothing else.
+ *
+ * That screen answers one question -- what has to happen before the day is out
+ * -- and the answer to a row on it is almost always "I dealt with it". Snooze,
+ * reschedule and dismiss are decisions about the SHAPE of the list, which is
+ * what the reminders screen is for. Carrying all four onto a panel of three
+ * rows cost 276px a row on a phone and pushed the figures underneath off the
+ * screen entirely.
+ */
+export function ReminderActions({
+  id,
+  dueOn,
+  compact = false,
+}: {
+  id: string;
+  dueOn: string;
+  compact?: boolean;
+}) {
   const [doneState, done, doneRunning] = useActionState(completeReminderAction, null);
   const [snoozeState, snooze, snoozeRunning] = useActionState(snoozeReminderAction, null);
   const [moveState, move, moveRunning] = useActionState(rescheduleReminderAction, null);
@@ -54,6 +72,8 @@ export function ReminderActions({ id, dueOn }: { id: string; dueOn: string }) {
           </Button>
         </form>
 
+        {compact ? null : (
+        <>
         {/* Days rather than a date: the offset is resolved against the
             tenant's today on the server, so a device with a wrong clock
             cannot snooze something into yesterday. */}
@@ -113,6 +133,8 @@ export function ReminderActions({ id, dueOn }: { id: string; dueOn: string }) {
             </form>
           </div>
         </details>
+        </>
+        )}
       </div>
 
       {problem ? (

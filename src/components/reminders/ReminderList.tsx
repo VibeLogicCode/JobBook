@@ -38,6 +38,17 @@ export interface ReminderListProps {
   only?: readonly Urgency[];
   /** `3` when the list sits inside a card whose header is already the h2. */
   headingLevel?: 2 | 3;
+  /**
+   * The Today panel: one line per reminder and Done as the only control.
+   *
+   * The full row carries a kind, any snooze wording, the detail body and four
+   * controls. That is right on the reminders screen, which is where the list is
+   * shaped; on a panel of three rows it cost 276px each on a phone and pushed
+   * the week's figures off the bottom of the screen -- which was the owner's
+   * complaint. What survives here is what a glance needs: how late it is, what
+   * it is about, and a way to tick it off.
+   */
+  compact?: boolean;
   /** Drawn when nothing survives the grouping. Says "you are on top of it". */
   empty: React.ReactNode;
 }
@@ -47,6 +58,7 @@ export async function ReminderList({
   today,
   only,
   headingLevel = 2,
+  compact = false,
   empty,
 }: ReminderListProps) {
   const groups = groupByUrgency(rows, today, only);
@@ -86,6 +98,7 @@ export async function ReminderList({
                 urgency={urgency}
                 today={today}
                 about={refs.get(entityKey(reminder.entityType, reminder.entityId))}
+                compact={compact}
               />
             ))}
           </ul>
@@ -100,11 +113,13 @@ function ReminderItem({
   urgency,
   today,
   about,
+  compact,
 }: {
   reminder: ReminderRow;
   urgency: Urgency;
   today: string;
   about: EntityRef | undefined;
+  compact: boolean;
 }) {
   const settled = urgency === 'done' || urgency === 'dismissed';
 
@@ -113,15 +128,23 @@ function ReminderItem({
       // The left rule is redundant with the chip on purpose: the chip is what
       // says WHY, and the rule is what the eye finds while scrolling past
       // eleven rows. Neither is load-bearing alone.
-      className={`flex flex-col gap-2 px-4 py-3 ${
+      className={`flex px-4 ${
+        compact ? 'flex-row items-start gap-3 py-2' : 'flex-col gap-2 py-3'
+      } ${
         urgency === 'overdue' ? 'border-l-2 border-negative bg-negative-soft' : ''
       }`}
     >
-      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+      <div
+        className={`flex items-baseline gap-x-3 gap-y-1 ${
+          compact ? 'min-w-0 flex-1 flex-nowrap' : 'flex-wrap'
+        }`}
+      >
         <Pill tone={URGENCY_TONES[urgency]}>{urgencyChip(urgency, reminder, today)}</Pill>
-        <span className="min-w-0 flex-1 basis-64">
-          <span className={`block ${settled ? 'text-muted' : ''}`}>{reminder.title}</span>
-          <span className="t-small text-muted">
+        <span className={`min-w-0 flex-1 ${compact ? '' : 'basis-64'}`}>
+          <span className={`block ${compact ? 'truncate' : ''} ${settled ? 'text-muted' : ''}`}>
+            {reminder.title}
+          </span>
+          <span className={`t-small text-muted ${compact ? 'block truncate' : ''}`}>
             {about ? (
               <Link href={about.href} className="text-accent-text hover:underline">
                 {about.label}
@@ -135,8 +158,12 @@ function ReminderItem({
             {about?.sub ? ` · ${about.sub}` : ''}
             {' · '}
             <span className="num">{reminder.dueOn}</span>
-            {' · '}
-            {REMINDER_KINDS[reminder.kind]}
+            {compact ? null : (
+              <>
+                {' · '}
+                {REMINDER_KINDS[reminder.kind]}
+              </>
+            )}
             {/* The snooze and the due date are printed separately because they
                 are different facts: snoozing hides a row without moving its
                 deadline, so one that comes back after its due date comes back
@@ -149,7 +176,7 @@ function ReminderItem({
               </>
             ) : null}
           </span>
-          {reminder.detail ? (
+          {reminder.detail && !compact ? (
             <span className="mt-1 block whitespace-pre-wrap t-small text-muted">
               {reminder.detail}
             </span>
@@ -160,7 +187,11 @@ function ReminderItem({
       {/* A settled reminder keeps no controls: `completeReminder` and the rest
           refuse anything that is not open, and a button whose action always
           says no is worse than no button. */}
-      {settled ? null : <ReminderActions id={reminder.id} dueOn={reminder.dueOn} />}
+      {settled ? null : (
+        <div className={compact ? 'shrink-0' : ''}>
+          <ReminderActions id={reminder.id} dueOn={reminder.dueOn} compact={compact} />
+        </div>
+      )}
     </li>
   );
 }
