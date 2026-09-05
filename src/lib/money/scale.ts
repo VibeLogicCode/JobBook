@@ -35,6 +35,27 @@ export function divRoundHalfUp(numerator: bigint, denominator: bigint): bigint {
 }
 
 /**
+ * Integer division rounding ALWAYS up, for a count of whole things.
+ *
+ * Distinct from `divRoundHalfUp` above, and the difference is the point. Money
+ * rounds to the nearest cent because a half-cent belongs to whoever the rule
+ * says; a DURATION rounds up because you do not book half a framer-day. A
+ * schedule task that rounds 4.2 days down to 4 is a task that finishes late,
+ * and it finishes late silently -- the arithmetic looks right and the site is
+ * wrong.
+ *
+ * Negative operands are refused rather than defined. Nothing counts a negative
+ * number of days, and picking a convention for a case that cannot occur only
+ * hides the bug that produced it.
+ */
+export function divRoundUp(numerator: bigint, denominator: bigint): bigint {
+  if (denominator <= 0n) throw new Error('denominator must be greater than zero');
+  if (numerator < 0n) throw new Error('numerator must not be negative');
+  const quotient = numerator / denominator;
+  return numerator % denominator === 0n ? quotient : quotient + 1n;
+}
+
+/**
  * A line's total in cents.
  *
  * BigInt is required, not defensive: a maximum quantity times a maximum rate is

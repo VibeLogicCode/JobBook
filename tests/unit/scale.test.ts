@@ -2,10 +2,37 @@ import { describe, expect, it } from 'vitest';
 import {
   applyPercentCents,
   divRoundHalfUp,
+  divRoundUp,
   lineTotalCents,
   marginBasisPoints,
   markupBasisPoints,
 } from '@/lib/money/scale';
+
+describe('divRoundUp', () => {
+  it('rounds an exact multiple to itself', () => {
+    expect(divRoundUp(12n, 3n)).toBe(4n);
+  });
+
+  it('rounds any remainder up rather than down', () => {
+    expect(divRoundUp(13n, 3n)).toBe(5n);
+  });
+
+  it('is zero for a zero numerator', () => {
+    expect(divRoundUp(0n, 3n)).toBe(0n);
+  });
+
+  it('throws on a zero denominator', () => {
+    expect(() => divRoundUp(1n, 0n)).toThrow('denominator must be greater than zero');
+  });
+
+  it('throws on a negative denominator', () => {
+    expect(() => divRoundUp(1n, -3n)).toThrow('denominator must be greater than zero');
+  });
+
+  it('throws on a negative numerator', () => {
+    expect(() => divRoundUp(-1n, 3n)).toThrow('numerator must not be negative');
+  });
+});
 
 describe('divRoundHalfUp', () => {
   it('rounds a half away from zero', () => {
