@@ -130,9 +130,7 @@ export async function updateRateItem(
   if (!row) return refused('That rate item no longer exists.');
 
   revalidatePath('/rates');
-  return saved(
-    `${row.code} saved. Quotes already written keep the price they were built at — every line snapshots its rates.`,
-  );
+  return saved(`${row.code} saved.`);
 }
 
 const activeFields = z.object({ id: z.uuid(), isActive: z.stringbool() });
@@ -165,9 +163,7 @@ export async function setRateItemActive(
 
   revalidatePath('/rates');
   return saved(
-    parsed.data.isActive
-      ? `${row.code} is back on the list for new quotes.`
-      : `${row.code} is retired. It stays on every quote that already uses it.`,
+    parsed.data.isActive ? `${row.code} is back on the list.` : `${row.code} is retired.`,
   );
 }
 
@@ -210,9 +206,7 @@ export async function voidRateItem(
   if (!row) return refused('That rate item no longer exists.');
 
   revalidatePath('/rates');
-  return saved(
-    `${row.code} is void. Its code stays taken, so a corrected line needs a code of its own.`,
-  );
+  return saved(`${row.code} is void. Its code stays taken.`);
 }
 
 /* -------------------------------------------------------------------------
@@ -285,10 +279,10 @@ export async function importRateItems(
     revalidatePath('/rates');
     return saved(
       summary.created === 0
-        ? `Nothing was created. ${summary.skipped} ${summary.skipped === 1 ? 'row was' : 'rows were'} skipped — the reasons are beside each row above.`
+        ? `Nothing was created. ${summary.skipped} ${summary.skipped === 1 ? 'row' : 'rows'} skipped.`
         : `${summary.created} rate ${summary.created === 1 ? 'item' : 'items'} created${
             summary.skipped > 0 ? `, ${summary.skipped} skipped` : ''
-          }. Quotes already written are untouched.`,
+          }.`,
     );
   } catch (error) {
     if (isDuplicateCode(error)) {

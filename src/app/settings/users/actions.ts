@@ -215,9 +215,7 @@ export async function setUserRole(
   await revokeSessions(id, 'role changed');
 
   revalidatePath('/settings/users');
-  return saved(
-    `${target.displayName} is now ${role}. Their sessions were revoked, so the new role applies on their next request.`,
-  );
+  return saved(`${target.displayName} is now ${role}. Sessions revoked.`);
 }
 
 // ---------------------------------------------------------------------------
@@ -261,8 +259,6 @@ export async function setUserActive(
 
   revalidatePath('/settings/users');
   return saved(
-    isActive
-      ? `${target.displayName} can sign in again.`
-      : `${target.displayName} is deactivated and every session of theirs is ended.`,
+    isActive ? `${target.displayName} can sign in again.` : `${target.displayName} is deactivated. Sessions ended.`,
   );
 }

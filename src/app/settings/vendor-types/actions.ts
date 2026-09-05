@@ -140,10 +140,11 @@ export async function createVendorType(
 
   revalidatePath('/settings/vendor-types');
   revalidatePath('/vendors');
+  // Whether vendors on it count as subcontractors — and everything that
+  // turns on that (trade, T5018, WSIB, assignment) — is fixed here and
+  // cannot be changed later; a type set wrongly is retired and replaced.
   return saved(
-    input.isSubcontractor
-      ? `${input.name} added, and vendors on it count as subcontractors: each is asked for a trade, receives a T5018 slip, needs current WSIB clearance before payment, and appears where work is assigned. That cannot be changed later — a type set wrongly is retired and replaced.`
-      : `${input.name} added. Vendors on it are not subcontractors, so none is asked for a trade, filed on a T5018 or asked for a WSIB clearance. That cannot be changed later — a type set wrongly is retired and replaced.`,
+    `${input.name} added${input.isSubcontractor ? ' as a subcontractor type' : ''}. This cannot be changed later.`,
   );
 }
 
@@ -194,9 +195,7 @@ export async function updateVendorType(
 
   revalidatePath('/settings/vendor-types');
   revalidatePath('/vendors');
-  return saved(
-    `${name} saved. Every vendor on it reads the new name, and none of them changed standing — whether a type counts as a subcontractor is fixed when it is created.`,
-  );
+  return saved(`${name} saved.`);
 }
 
 const activeFields = z.object({ id: z.uuid(), isActive: z.stringbool() });
@@ -234,9 +233,7 @@ export async function setVendorTypeActive(
   revalidatePath('/settings/vendor-types');
   revalidatePath('/vendors');
   return saved(
-    parsed.data.isActive
-      ? `${row.name} is back on the list for new vendors.`
-      : `${row.name} is retired. It is no longer offered on new vendors, and every vendor already on it keeps it — including whether they count as a subcontractor.`,
+    parsed.data.isActive ? `${row.name} is back on the list.` : `${row.name} is retired.`,
   );
 }
 
@@ -309,5 +306,5 @@ export async function voidVendorType(
 
   revalidatePath('/settings/vendor-types');
   revalidatePath('/vendors');
-  return saved(`${name} is void. Its name stays taken, so a corrected type needs a name of its own.`);
+  return saved(`${name} is void. Its name stays taken.`);
 }

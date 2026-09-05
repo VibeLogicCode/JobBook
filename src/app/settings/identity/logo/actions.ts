@@ -122,8 +122,8 @@ export async function uploadLogo(
   // and not only the section that produced it.
   revalidatePath('/', 'layout');
 
-  const replaced = replacement.previousVoided
-    ? ' The logo it replaces is voided rather than deleted, so documents already sent still render.'
-    : '';
+  // The old logo is voided rather than deleted, so documents already sent
+  // keep rendering with it.
+  const replaced = replacement.previousVoided ? ' Documents already sent still render.' : '';
   return saved(`Logo saved: ${stored.file.fileName}.${replaced}`);
 }

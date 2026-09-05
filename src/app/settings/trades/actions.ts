@@ -113,7 +113,7 @@ export async function createTrade(
 
   revalidatePath('/settings/trades');
   revalidatePath('/vendors');
-  return saved(`${input.name} added. It is now offered wherever a subcontractor's trade is chosen.`);
+  return saved(`${input.name} added.`);
 }
 
 const withId = tradeFields.extend({ id: z.uuid('is not a trade') });
@@ -163,9 +163,7 @@ export async function updateTrade(
 
   revalidatePath('/settings/trades');
   revalidatePath('/vendors');
-  return saved(
-    `${name} saved. Every subcontractor filed under it reads the new name, because a vendor points at this row rather than copying it.`,
-  );
+  return saved(`${name} saved.`);
 }
 
 const activeFields = z.object({ id: z.uuid(), isActive: z.stringbool() });
@@ -208,12 +206,12 @@ export async function setTradeActive(
   revalidatePath('/vendors');
   return saved(
     parsed.data.isActive
-      ? `${row.name} is back on the list for new subcontractors.`
-      : `${row.name} is retired. It is no longer offered when a subcontractor is added, and ${
-          (stillOn?.n ?? 0) === 1
-            ? 'the one subcontractor already on it still shows it'
-            : `the ${stillOn?.n ?? 0} subcontractors already on it still show it`
-        }.`,
+      ? `${row.name} is back on the list.`
+      : `${row.name} is retired.${
+          (stillOn?.n ?? 0) > 0
+            ? ` ${stillOn?.n} ${stillOn?.n === 1 ? 'subcontractor' : 'subcontractors'} still ${stillOn?.n === 1 ? 'shows' : 'show'} it.`
+            : ''
+        }`,
   );
 }
 
@@ -283,5 +281,5 @@ export async function voidTrade(
 
   revalidatePath('/settings/trades');
   revalidatePath('/vendors');
-  return saved(`${name} is void. Its name stays taken, so a corrected trade needs a name of its own.`);
+  return saved(`${name} is void. Its name stays taken.`);
 }

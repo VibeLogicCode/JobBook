@@ -463,10 +463,10 @@ export async function createExpense(
 
   revalidatePath('/expenses');
   const paidTo = outcome.vendor ? ` to ${outcome.vendor}` : '';
-  const attached = receiptName ? ` The receipt ${receiptName} is attached.` : '';
-  const unattached = receiptName
-    ? ''
-    : ' No receipt is attached — an input tax credit over $30 has to be evidenced by one, so it is worth photographing before the paper fades.';
+  const attached = receiptName ? ' Receipt attached.' : '';
+  // No receipt attached: an input tax credit over $30 has to be evidenced by
+  // one, so it is worth photographing before the paper fades.
+  const unattached = receiptName ? '' : ' No receipt attached.';
   return saved(
     `${formatCents(outcome.totalCents)}${paidTo} recorded against ${outcome.project}.${attached}${unattached}`,
   );
@@ -559,9 +559,7 @@ export async function createMileage(
 
   revalidatePath('/expenses');
   return saved(
-    `${formatCents(outcome.costCents)} of mileage recorded against ${outcome.project}, at ` +
-      `${formatRatePerKm(outcome.rate)}/km. That rate is stored on the entry: changing the rate in ` +
-      'settings sets what the next trip costs and leaves this one exactly as it is.',
+    `${formatCents(outcome.costCents)} of mileage recorded against ${outcome.project}, at ${formatRatePerKm(outcome.rate)}/km.`,
   );
 }
 
@@ -700,9 +698,10 @@ export async function createExpenseBatch(
   }
 
   revalidatePath('/expenses');
+  // No receipts attached in bulk entry — a row that needs its paper attached
+  // is entered singly instead.
   return saved(
-    `${count} ${count === 1 ? 'expense' : 'expenses'} totalling ${formatCents(totalCents)} recorded against ${projectName}. ` +
-      'None of them carries a receipt photograph — attach paper to the ones that need it by entering those singly.',
+    `${count} ${count === 1 ? 'expense' : 'expenses'} totalling ${formatCents(totalCents)} recorded against ${projectName}. No receipts attached.`,
   );
 }
 
@@ -776,8 +775,5 @@ export async function voidExpense(
   if (!outcome) return refused('That expense is already void, or is not on the list.');
 
   revalidatePath('/expenses');
-  return saved(
-    `${formatCents(outcome.totalCents)} voided. It leaves the job's cost and the tax claim together, ` +
-      'and the row stays with your reason on it — nothing in this product is deleted.',
-  );
+  return saved(`${formatCents(outcome.totalCents)} voided.`);
 }

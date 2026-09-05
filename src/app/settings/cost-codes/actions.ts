@@ -143,7 +143,7 @@ export async function createCostCode(
   revalidatePath('/settings/cost-codes');
   // The rate list reads this table for its cost code picker and its importer.
   revalidatePath('/rates');
-  return saved(`${input.code} added. It is now offered wherever a cost code is chosen.`);
+  return saved(`${input.code} added.`);
 }
 
 const withId = costCodeFields.extend({ id: z.uuid('is not a cost code') });
@@ -217,9 +217,7 @@ export async function updateCostCode(
 
   revalidatePath('/settings/cost-codes');
   revalidatePath('/rates');
-  return saved(
-    `${code} saved. Everything already filed under it — rate items, quote lines, invoice lines — reads the new name, because a line points at this row rather than copying it.`,
-  );
+  return saved(`${code} saved.`);
 }
 
 const activeFields = z.object({ id: z.uuid(), isActive: z.stringbool() });
@@ -254,9 +252,7 @@ export async function setCostCodeActive(
   revalidatePath('/settings/cost-codes');
   revalidatePath('/rates');
   return saved(
-    parsed.data.isActive
-      ? `${row.code} is back on the list for new work.`
-      : `${row.code} is retired. It is no longer offered on new work, and it still names every line already filed under it.`,
+    parsed.data.isActive ? `${row.code} is back on the list.` : `${row.code} is retired.`,
   );
 }
 
@@ -350,9 +346,9 @@ export async function voidCostCode(
   revalidatePath('/settings/cost-codes');
   revalidatePath('/rates');
   return saved(
-    `${code} is void. Its code stays taken, so a corrected division needs a code of its own.${
+    `${code} is void. Its code stays taken.${
       (stillOnRates?.n ?? 0) > 0
-        ? ` ${stillOnRates?.n} rate ${stillOnRates?.n === 1 ? 'item' : 'items'} still name it, and the rate list now shows it as void — give those another code.`
+        ? ` ${stillOnRates?.n} rate ${stillOnRates?.n === 1 ? 'item' : 'items'} still ${stillOnRates?.n === 1 ? 'points' : 'point'} to it.`
         : ''
     }`,
   );

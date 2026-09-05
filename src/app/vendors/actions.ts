@@ -259,9 +259,7 @@ export async function createVendor(
 
   revalidatePath('/vendors');
   return saved(
-    isSubcontractor
-      ? `${input.name} added as a subcontractor, because that is what their type means. They will be offered wherever work is assigned, and they are on the list of people a T5018 is filed for — which is why the business number is worth chasing now rather than in February.`
-      : `${input.name} added. Their type does not perform work, so no trade is asked of them, no T5018 is filed for them and no WSIB clearance is asked of them. They will be offered wherever spend is coded.`,
+    isSubcontractor ? `${input.name} added as a subcontractor.` : `${input.name} added.`,
   );
 }
 
@@ -337,11 +335,11 @@ export async function updateVendor(
 
   revalidatePath('/vendors');
   return saved(
-    `${result.name} saved. Everything already recorded against them reads the new details, because a record points at this row rather than copying it.${
+    `${result.name} saved.${
       result.moved
         ? result.isSubcontractor
-          ? ' Their type now says they perform work, so they are on the T5018 list, their WSIB clearance is checked before they are paid, and they appear where work is assigned.'
-          : ' Their type does not say they perform work, so no T5018 is filed for them, no clearance is asked of them, and they no longer appear where work is assigned.'
+          ? ' Now a subcontractor — T5018 and WSIB clearance apply.'
+          : ' No longer a subcontractor — T5018 and WSIB clearance no longer apply.'
         : ''
     }`,
   );
@@ -381,10 +379,8 @@ export async function setVendorActive(
   revalidatePath('/vendors');
   return saved(
     parsed.data.isActive
-      ? `${row.name} is back on the list for new work.`
-      : `${row.name} is retired. They are no longer offered on new work${
-          row.isSubcontractor ? ' or on the schedule' : ''
-        }, and they still name every record already made against them.`,
+      ? `${row.name} is back on the list.`
+      : `${row.name} is retired.${row.isSubcontractor ? ' Off new work and the schedule.' : ' Off new work.'}`,
   );
 }
 
@@ -447,7 +443,5 @@ export async function voidVendor(
   if (!name) return refused('That vendor no longer exists.');
 
   revalidatePath('/vendors');
-  return saved(
-    `${name} is void. Their name stays taken, so a corrected record needs a name of its own.`,
-  );
+  return saved(`${name} is void. Their name stays taken.`);
 }

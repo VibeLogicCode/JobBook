@@ -134,7 +134,7 @@ export async function saveCompanyStep(
       { legalName, displayName },
       gate,
     );
-    return saved(`${displayName} created. Every document this deployment prints now carries that name.`);
+    return saved(`${displayName} created.`);
   });
 }
 
@@ -249,9 +249,7 @@ export async function saveLocaleStep(
 
   return persistStep('locale', async (tx, gate) => {
     await upsertOrganization(tx, parsed.data, null, gate);
-    return saved(
-      `Saved. Quote dates, validity and fiscal boundaries are now computed in ${parsed.data.timezone}.`,
-    );
+    return saved(`Locale saved. Dates now compute in ${parsed.data.timezone}.`);
   });
 }
 
@@ -535,10 +533,7 @@ export async function saveFirstUserStep(
       throw error;
     }
 
-    return saved(
-      `${displayName} created as owner. Authorization is a lookup against this account on ` +
-        'every request, in every sign-in mode.',
-    );
+    return saved(`${displayName} created as owner.`);
   });
 }
 
@@ -564,7 +559,7 @@ export async function acknowledgeEnvironmentStep(
   _formData: FormData,
 ): Promise<ActionResult> {
   return persistStep('environment', async () =>
-    saved('Noted. Every item above stays visible on the dashboard while it is failing.'),
+    saved('Noted. It stays on the dashboard while failing.'),
   );
 }
 

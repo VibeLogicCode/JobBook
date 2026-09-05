@@ -161,7 +161,7 @@ export async function createReminderRule(
 
   revalidate();
   return saved(
-    `${rest.name} added, and switched on. It is considered at the next hourly evaluation — ${offsetPhrase(toColumns(rest).offsetDays, trigger)} — and produces at most one open reminder per record until that one is dealt with.`,
+    `${rest.name} added, switched on — fires ${offsetPhrase(toColumns(rest).offsetDays, trigger)}.`,
   );
 }
 
@@ -247,9 +247,7 @@ export async function updateReminderRule(
   if (!name) return refused('That reminder rule no longer exists.');
 
   revalidate();
-  return saved(
-    `${name} saved. It applies from the next hourly evaluation onward. Reminders this rule has already produced are untouched — a reminder's wording is written once, on the day it was created, and is never re-rendered from the rule afterwards.`,
-  );
+  return saved(`${name} saved. Applies from the next hourly run.`);
 }
 
 const activeFields = z.object({ id: z.uuid(), isActive: z.stringbool() });
@@ -297,10 +295,10 @@ export async function setReminderRuleActive(
   revalidate();
   return saved(
     parsed.data.isActive
-      ? `${row.name} is on. The next hourly evaluation considers it again.`
-      : `${row.name} is off and produces nothing from the next evaluation onward.${
+      ? `${row.name} is on.`
+      : `${row.name} is off.${
           already > 0
-            ? ` The ${already} reminder${already === 1 ? '' : 's'} it has already produced ${already === 1 ? 'is' : 'are'} untouched — ${already === 1 ? 'it was' : 'they were'} true on the day ${already === 1 ? 'it' : 'they'} appeared, and switching a rule off is not a retraction. Deal with ${already === 1 ? 'it' : 'them'} on the reminders screen.`
+            ? ` Its ${already} open reminder${already === 1 ? '' : 's'} ${already === 1 ? 'stays' : 'stay'} open.`
             : ''
         }`,
   );
@@ -374,7 +372,5 @@ export async function voidReminderRule(
   if (!name) return refused('That reminder rule no longer exists.');
 
   revalidate();
-  return saved(
-    `${name} is void. The evaluator filters voided rules in SQL, so it will not fire again whatever its on/off switch says. The row stays on this list as a record — nothing in this product is deleted.`,
-  );
+  return saved(`${name} is void. It will not fire again.`);
 }

@@ -59,9 +59,7 @@ export async function createTemplate(
   await db.insert(scopeTemplates).values({ ...parsed.data, createdBy: guard.actor.id });
 
   revalidatePath('/templates');
-  return saved(
-    `${parsed.data.name} created. Open it and add lines — a template with none generates nothing.`,
-  );
+  return saved(`${parsed.data.name} created. Add lines to it.`);
 }
 
 const updateSchema = createSchema.extend({ id: z.string().uuid() });
@@ -120,9 +118,7 @@ export async function setTemplateActive(
   revalidatePath('/templates');
   revalidatePath(`/templates/${parsed.data.id}`);
   return saved(
-    parsed.data.isActive
-      ? `${rows[0]!.name} is available again.`
-      : `${rows[0]!.name} retired. Quotes already built from it are untouched.`,
+    parsed.data.isActive ? `${rows[0]!.name} is available again.` : `${rows[0]!.name} retired.`,
   );
 }
 
@@ -272,5 +268,5 @@ export async function voidTemplateLine(
   if (rows.length === 0) return refused('That template line no longer exists.');
 
   revalidatePath(`/templates/${parsed.data.scopeTemplateId}`);
-  return saved('Line removed. The row stays, voided, with a reason.');
+  return saved('Line removed.');
 }

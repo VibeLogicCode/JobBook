@@ -218,16 +218,18 @@ const ssoBranch = z
  */
 const accessSchema = z.discriminatedUnion('posture', [lanBranch, tunnelBranch, ssoBranch]);
 
-/** The restart sentence, in the voice the success notice needs. */
+/**
+ * The restart sentence, in the voice the success notice needs.
+ *
+ * Nothing written by this step is in effect until the restart it names:
+ * a process's environment is fixed when it starts, this file is read at
+ * boot, and the application deliberately has no way to restart itself.
+ */
 function restartSentence(input: PostureInput): string {
   const plan = restartPlan(input.posture);
   const containers = plan.services.map((name) => `\`${name}\``).join(' and ');
   const first = plan.operatorMustFirst.length > 0 ? ` First: ${plan.operatorMustFirst[0]}` : '';
-  return (
-    `${first} Then restart ${containers} — ${plan.command}. Nothing here is in effect until ` +
-    'you do: a process’s environment is fixed when it starts, this file is read at boot, and ' +
-    'the application deliberately has no way to restart itself.'
-  );
+  return `${first} Restart ${containers} to apply this — ${plan.command}.`;
 }
 
 /**
@@ -346,8 +348,8 @@ export async function saveAccessStep(
 
     const count = written.keys.length;
     return saved(
-      `${count} ${count === 1 ? 'value' : 'values'} written to ${written.path}, at ` +
-        `permissions 0600 and mirrored nowhere.${restartSentence(input)}`,
+      `${count} ${count === 1 ? 'value' : 'values'} written to ${written.path} at 0600, ` +
+        `mirrored nowhere.${restartSentence(input)}`,
     );
   });
 }

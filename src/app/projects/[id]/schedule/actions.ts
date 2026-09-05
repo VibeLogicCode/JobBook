@@ -40,6 +40,22 @@ import {
 import { findEngagements, toClash } from '@/app/projects/[id]/schedule/clashes';
 
 /**
+ * The two screens a schedule write is visible on.
+ *
+ * The job's own screen is the obvious one. `/calendar` is the other, and it is
+ * easy to forget precisely because it belongs to no job: it draws every job at
+ * once, so a task moved here changes a page whose address contains nothing
+ * that identifies this project. Revalidating it at the source rather than
+ * refreshing from the client means the calendar is right for anybody who has
+ * it open, not only for the person who happened to make the edit.
+ */
+function revalidateSchedule(projectId: string): void {
+  revalidatePath(`/projects/${projectId}/schedule`);
+  revalidatePath('/calendar');
+}
+
+
+/**
  * The schedule's write side.
  *
  * Four rules run through every action in this file.
@@ -287,11 +303,11 @@ export async function createTask(
 
   if (problem) return refused(problem);
 
-  revalidatePath(`/projects/${projectId}/schedule`);
+  revalidateSchedule(projectId);
   return saved(
     input.predecessorTaskId === null
-      ? `${input.name} added. It waits on nothing, so its dates never move because something else moved.`
-      : `${input.name} added, waiting on the task you chose. When that one moves, this one moves with it — and you will be shown what else goes with it before anything is written.`,
+      ? `${input.name} added.`
+      : `${input.name} added. It moves when its predecessor does.`,
   );
 }
 
@@ -423,11 +439,11 @@ export async function updateTask(
 
   if (problem) return refused(problem);
 
-  revalidatePath(`/projects/${projectId}/schedule`);
+  revalidateSchedule(projectId);
   return saved(
     input.actualStart === null
       ? `${input.name} saved.`
-      : `${input.name} saved. It has a start recorded against it now, so the auto-push will leave its planned dates alone — the gap between what was planned and what happened is the measurement, and moving the plan would erase it.`,
+      : `${input.name} saved. The auto-push will leave its dates alone.`,
   );
 }
 
@@ -585,7 +601,7 @@ export async function moveTaskDates(
     return { status: 'refused', error: failureText(error) };
   }
 
-  if (outcome.status === 'saved' && projectId) revalidatePath(`/projects/${projectId}/schedule`);
+  if (outcome.status === 'saved' && projectId) revalidateSchedule(projectId);
   return outcome;
 }
 
@@ -676,8 +692,8 @@ export async function voidTask(
 
   if (problem) return refused(problem);
 
-  revalidatePath(`/projects/${projectId}/schedule`);
-  return saved(`${name} is void. It is off the schedule and off the job's finish date, and the row stays.`);
+  revalidateSchedule(projectId);
+  return saved(`${name} is void, off the schedule and the finish date.`);
 }
 
 /* -------------------------------------------------------------------------
@@ -896,9 +912,11 @@ export async function assignToTask(
         task.projectId,
         who.name,
       );
+      // "Awaiting confirmation" is deliberately not "declined" — asked-and-no-
+      // answer has to stay distinguishable from a no.
       message = clash
         ? `${who.name} is on ${task.name}. ${clash}`
-        : `${who.name} is on ${task.name}. Nobody has said yes yet — record that when you hear back, so "asked and heard nothing" stays a different thing from "said no".`;
+        : `${who.name} is on ${task.name}. Awaiting confirmation.`;
     });
   } catch (error) {
     // The partial unique index, said in full: the row already holding this
@@ -911,7 +929,7 @@ export async function assignToTask(
 
   if (problem) return refused(problem);
 
-  revalidatePath(`/projects/${projectId}/schedule`);
+  revalidateSchedule(projectId);
   return saved(message);
 }
 
@@ -999,12 +1017,15 @@ export async function updateAssignment(
         })
         .where(eq(assignments.id, input.id));
 
+      // A no is kept on the row rather than cleared, so the schedule still
+      // shows that somebody asked; "not heard back" stays a different state
+      // from "said no" for the same reason it does in `assignToTask`.
       message =
         input.response === 'confirmed'
-          ? 'Saved, and recorded as confirmed.'
+          ? 'Saved, recorded as confirmed.'
           : input.response === 'declined'
-            ? 'Saved, and recorded as a no. The row stays, so the schedule still shows that you asked.'
-            : 'Saved. Nothing is recorded as heard back yet, which is a different thing from a no.';
+            ? 'Saved, recorded as a no.'
+            : 'Saved. No response recorded yet.';
     });
   } catch (error) {
     return refused(failureText(error));
@@ -1012,7 +1033,7 @@ export async function updateAssignment(
 
   if (problem) return refused(problem);
 
-  revalidatePath(`/projects/${projectId}/schedule`);
+  revalidateSchedule(projectId);
   return saved(message);
 }
 
@@ -1101,8 +1122,6 @@ export async function removeAssignment(
 
   if (problem) return refused(problem);
 
-  revalidatePath(`/projects/${projectId}/schedule`);
-  return saved(
-    `${who} is off this task. The row stays with the reason on it — that is what makes them free again on the day, without pretending they were never asked.`,
-  );
+  revalidateSchedule(projectId);
+  return saved(`${who} is off this task, free again on the schedule.`);
 }

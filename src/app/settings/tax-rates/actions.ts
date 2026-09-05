@@ -152,7 +152,7 @@ export async function supersedeTaxRate(
         createdBy: guard.actor.id,
       });
 
-      return `${current.label} superseded. The old row now ends on ${addDays(effectiveFrom, -1)}; the new one starts on ${effectiveFrom}.`;
+      return `${current.label} superseded, new rate from ${effectiveFrom}.`;
     });
 
     revalidatePath('/settings/tax-rates');

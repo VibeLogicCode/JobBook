@@ -116,22 +116,16 @@ export async function setMirrorEnabled(
   revalidatePath(PATH);
 
   if (!wanted) {
-    return saved(
-      'The mirror is off. Whatever is already in SharePoint stays there and stops updating — ' +
-        'nothing is torn down. If no USB backup destination is configured either, this ' +
-        "company's records now exist on one disk.",
-    );
+    // If no USB backup destination is configured either, this company's
+    // records now exist on one disk — the mirror stopping does not change
+    // that.
+    return saved('The mirror is off. SharePoint keeps what it has and stops updating.');
   }
 
   return saved(
-    'The mirror is on as far as this database is concerned' +
-      (backfilled > 0
-        ? `, and ${backfilled} list cursor${backfilled === 1 ? '' : 's'} ${
-            backfilled === 1 ? 'was' : 'were'
-          } reset so the first run pushes every row.`
-        : ', and the first run will push every row.') +
-      ' Nothing has been sent: the sync job is not built yet, and the container also has to ' +
-      'carry SHAREPOINT_SYNC_ENABLED and the credential before anything can be.',
+    backfilled > 0
+      ? `The mirror is on here. ${backfilled} list cursor${backfilled === 1 ? '' : 's'} reset; nothing syncs until the job exists.`
+      : 'The mirror is on here. Nothing syncs until the sync job exists.',
   );
 }
 
@@ -174,16 +168,12 @@ export async function saveMirrorSite(
   revalidatePath(PATH);
 
   if (parsed.data.siteUrl === null) {
-    return saved(
-      'The site address is cleared. The mirror has nowhere to write, so it is off in practice ' +
-        'whatever the switch above says.',
-    );
+    return saved('Site address cleared, so the mirror has nowhere to write.');
   }
 
-  return saved(
-    `The mirror is pointed at ${parsed.data.siteUrl}. Provisioning creates the lists there; ` +
-      'it is run by hand against the tenant, from a workstation, not by this application.',
-  );
+  // Provisioning creates the lists at this address; it is run by hand
+  // against the tenant, from a workstation, not by this application.
+  return saved(`The mirror is pointed at ${parsed.data.siteUrl}.`);
 }
 
 // ---------------------------------------------------------------------------
@@ -229,11 +219,7 @@ export async function saveMirrorLibraries(
   await writeSyncConfig({ libraries: parsed.data }, db);
   revalidatePath(PATH);
 
-  return saved(
-    'Library names saved. Re-run provisioning against the site to create or rename them — ' +
-      'the template is idempotent, so running it again is safe, and a library that was ' +
-      'renamed stays behind with its contents.',
-  );
+  return saved('Library names saved. Re-run provisioning to apply them.');
 }
 
 // ---------------------------------------------------------------------------
@@ -274,14 +260,9 @@ export async function saveMirrorSchedule(
   revalidatePath(PATH);
 
   const twiceTheInterval = (intervalMinutes * 2) / 60;
-  const note =
-    stalenessHours < twiceTheInterval
-      ? ` Note that ${stalenessHours} hours is less than twice the interval, so a single ` +
-        'missed run will report as stale.'
-      : '';
+  const note = stalenessHours < twiceTheInterval ? ' A missed run reports as stale.' : '';
 
   return saved(
-    `Every ${intervalMinutes} minutes, stale after ${stalenessHours} hours without a ` +
-      `success.${note} Nothing is scheduled yet: the sync job is not built.`,
+    `Every ${intervalMinutes} min, stale after ${stalenessHours}h.${note} Not scheduled yet.`,
   );
 }
