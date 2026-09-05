@@ -165,7 +165,13 @@ export function FilterBar({
               type="search"
               defaultValue={q}
               placeholder={searchPlaceholder}
-              className="field min-w-0 flex-1"
+              // `min-h-11` on every control in this bar, not just this one.
+              // `.field` floors at 32px above `sm`, so the search box was
+              // taking 44px only because the Search button beside it stretched
+              // the row, while the selects -- sitting in their own column with
+              // nothing to stretch them -- rendered 34px and ten pixels lower.
+              // Three controls, three heights, none of them aligned.
+              className="field min-h-11 min-w-0 flex-1"
             />
             {/* `SubmitButton`, not `Button`: this form is a plain GET that the
                 browser posts, so `useFormStatus` reports nothing for it and the
@@ -203,7 +209,7 @@ export function FilterBar({
                   id={`filter-${select.name}`}
                   name={select.name}
                   defaultValue={select.value}
-                  className="field"
+                  className="field min-h-11"
                 >
                   <option value="">{select.anyLabel}</option>
                   {select.options?.map((option) => (

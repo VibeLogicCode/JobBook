@@ -105,7 +105,14 @@ export function Board({ cards, reminderOf, today, basePath, filters, showClosed 
                 Opportunities band has none by definition rather than by a
                 rule. Whole dollars -- the cards keep the cents. */}
             {band.wonCents > 0 ? (
-              <span className="num ml-auto t-heading">{formatWholeDollars(band.wonCents)}</span>
+              /* Labelled, because an unattributed figure floating at the right
+                 edge of a heading is a number the reader has to guess at --
+                 and the guesses available here are all plausible and mostly
+                 wrong. It is the contract value of the jobs in this band. */
+              <span className="ml-auto flex items-baseline gap-2">
+                <span className="t-small text-muted">under contract</span>
+                <span className="num t-heading">{formatWholeDollars(band.wonCents)}</span>
+              </span>
             ) : null}
           </h2>
 
