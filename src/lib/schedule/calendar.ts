@@ -31,9 +31,38 @@ import { addDays } from '@/lib/quote/dates';
  */
 function epochDay(isoDate: string): number {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(isoDate);
-  if (!match) throw new Error(`expected an ISO date, received ${isoDate}`);
+  if (!match || !isCalendarDate(isoDate)) {
+    throw new Error(`expected an ISO date, received ${isoDate}`);
+  }
   const [, year, month, day] = match;
   return Date.UTC(Number(year), Number(month) - 1, Number(day)) / 86_400_000;
+}
+
+/**
+ * Is this a date that EXISTS, as opposed to one merely shaped like a date?
+ *
+ * The shape check on its own is not a validation, and the way it fails is the
+ * dangerous kind. `Date.UTC(2026, 12, 40)` does not complain -- JavaScript
+ * rolls the surplus over and hands back 2027-02-09. So `2026-13-40` matches
+ * `\d{4}-\d{2}-\d{2}`, survives every arithmetic function in this file, and
+ * renders a screen for a month fourteen months away from the one the URL
+ * names. Nothing throws and nothing looks wrong.
+ *
+ * The round trip is the test: take the date apart, put it back together, and
+ * see whether it is still the same string. A date that exists survives that
+ * unchanged; one that rolled over comes back as the day it rolled over to.
+ *
+ * Exported because the check belongs at the boundary too -- `readAnchor` reads
+ * a date out of a URL, where a hand-edited or stale query parameter is
+ * ordinary rather than exceptional, and the right answer there is to fall back
+ * to today rather than to throw a 500 at somebody who mistyped.
+ */
+export function isCalendarDate(isoDate: string): boolean {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(isoDate);
+  if (!match) return false;
+  const [, year, month, day] = match;
+  const stamp = Date.UTC(Number(year), Number(month) - 1, Number(day));
+  return new Date(stamp).toISOString().slice(0, 10) === isoDate;
 }
 
 /** A date, some days later. Negative pulls it earlier. */

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   daysBetween,
   durationDays,
+  isCalendarDate,
   lagBetween,
   latestDate,
   shiftDays,
@@ -663,5 +664,37 @@ describe('describeMove', () => {
     expect(describeMove(preview, iso)).toContain(
       'Rescheduling Excavation to 2026-03-04 – 2026-03-12',
     );
+  });
+});
+
+describe('isCalendarDate', () => {
+  it('accepts a date that exists', () => {
+    expect(isCalendarDate('2026-03-09')).toBe(true);
+    expect(isCalendarDate('2028-02-29')).toBe(true);
+  });
+
+  it('rejects anything not shaped like an ISO date', () => {
+    expect(isCalendarDate('')).toBe(false);
+    expect(isCalendarDate('tomorrow')).toBe(false);
+    expect(isCalendarDate('2026-3-9')).toBe(false);
+    expect(isCalendarDate('2026-03-09T00:00:00Z')).toBe(false);
+  });
+
+  /**
+   * The whole reason this function exists. `Date.UTC(2026, 12, 40)` does not
+   * complain -- it rolls over and returns 2027-02-09 -- so a shape check alone
+   * let these through and every arithmetic function downstream agreed.
+   */
+  it('rejects a date that is shaped right and does not exist', () => {
+    expect(isCalendarDate('2026-13-40')).toBe(false);
+    expect(isCalendarDate('2026-02-30')).toBe(false);
+    expect(isCalendarDate('2026-00-10')).toBe(false);
+    expect(isCalendarDate('2026-04-31')).toBe(false);
+    // 2026 is not a leap year, so this one is a real trap rather than a typo.
+    expect(isCalendarDate('2026-02-29')).toBe(false);
+  });
+
+  it('refuses to do arithmetic on a date that does not exist', () => {
+    expect(() => daysBetween('2026-01-01', '2026-13-40')).toThrow(/expected an ISO date/);
   });
 });
