@@ -435,3 +435,47 @@ export function nextReminderByProject(
 
   return found;
 }
+
+/** Half the pipeline as a LIST reads it: a heading, its rows, and what it is worth. */
+export interface PipelineBandRows {
+  band: Band;
+  heading: string;
+  /** In the order they arrived, which is the order the query asked for. */
+  cards: PipelineCard[];
+  count: number;
+  /** Won value across the half, in integer cents. Zero for Opportunities. */
+  wonCents: number;
+}
+
+/**
+ * The same two halves the board draws, without the stage columns.
+ *
+ * The list view exists to answer a different question from the board -- what is
+ * the whole book, row by row, in one order -- so it does not re-group by stage;
+ * within a band the rows stay in the order the query returned them, which is by
+ * project number. What it DOES keep is the band split, and it keeps it by
+ * calling `bandOf`, so a row cannot be an opportunity on one view and a job on
+ * the other. That rule is "an accepted, active quote exists" and is never the
+ * stage, in both views, because it is written once here.
+ *
+ * A band with no rows is dropped rather than drawn empty. The board keeps its
+ * empty columns above `sm` because the empty column IS the shape of the board;
+ * a table has no shape to preserve, and a heading over no rows is a section
+ * that failed to load.
+ *
+ * `wonCents` is summed through `sumCents` over integer cents and formatted at
+ * the very end, exactly as the band headings on the board are -- rounding each
+ * row and adding the results makes a total that is not the sum of the rows.
+ */
+export function groupIntoBands(cards: readonly PipelineCard[]): PipelineBandRows[] {
+  return BANDS.map((band) => {
+    const mine = cards.filter((card) => bandOf(card) === band);
+    return {
+      band,
+      heading: BAND_HEADINGS[band],
+      cards: mine,
+      count: mine.length,
+      wonCents: sumCents(mine.map((card) => card.contractValueCents)),
+    };
+  }).filter((band) => band.cards.length > 0);
+}

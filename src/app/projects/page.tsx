@@ -4,12 +4,15 @@ import { db } from '@/db/client';
 import { customers, projects, quotes, stageHistory } from '@/db/schema';
 import { buttonClass } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
-import { FilterBar, NoMatches } from '@/components/ui/FilterBar';
+import { FilterBar, filterHref, NoMatches } from '@/components/ui/FilterBar';
 import { PageHeader } from '@/components/ui/PageHeader';
 import {
   JOB_STAGES, OPPORTUNITY_STAGES, PROJECT_STAGES, type ProjectStage,
 } from '@/components/detail/labels';
 import { Board } from '@/components/pipeline/Board';
+import { PipelineList } from '@/components/pipeline/List';
+import { ViewToggle } from '@/components/pipeline/ViewToggle';
+import { readView, viewParam } from '@/components/pipeline/view';
 import {
   CLOSED_STAGES, nextReminderByProject, SHARED_STAGES, showsClosed, type PipelineCard,
 } from '@/components/pipeline/columns';
@@ -81,30 +84,43 @@ function countNoun(kind: 'opportunity' | 'job' | ''): { singular: string; plural
 /**
  * The pipeline: every live opportunity and job, in the stage it is sitting in.
  *
- * There is ONE view here and it is the board. The table this screen used to be
- * was replaced rather than hidden behind a toggle, and the reason is worth
- * writing down: a toggle is a second render path over the same query, and the
- * filter bar is a plain GET form that would drop the toggle's parameter on
- * every search -- so the choice would silently reset itself exactly when
- * somebody was using it. The card carries everything the row carried (customer,
- * number, contract value, start date) and two things it could not (how long the
- * work has sat where it is, and the next thing to do about it), so nothing was
- * lost by picking one.
+ * TWO VIEWS OF ONE QUERY, chosen by `?view=`. The board is the default and the
+ * list is the table this screen used to be, brought back with what the board
+ * taught it. What is NOT duplicated is everything above the render: one set of
+ * filters, one closed-record rule, one derived contract value, one
+ * accepted-quote test, one query, one reminder lookup. Both components take the
+ * same `PipelineCard[]`, so there is nothing here that can drift out of step --
+ * a figure can only be wrong on both views at once.
  *
- * The known cost: `complete` accumulates forever, because nothing is ever
- * deleted. That column is behind the reveal control, off by default, and when
- * a decade of finished jobs makes it unreadable the answer is paging, not a
- * second screen that has to be kept in step with this one.
+ * That was not free the first time it was considered. The table was DELETED
+ * rather than toggled, on the grounds that the filter bar is a plain GET form
+ * which posts its own controls and nothing else, so `?view=` would have been
+ * dropped on every search and the toggle would have silently reset itself at
+ * the moment somebody was using it. That was a correct reading of the bar as it
+ * stood. The bar now takes a `carry` prop -- arbitrary parameters rendered as
+ * hidden inputs and folded into the links it builds -- so the objection is
+ * answered at the cause rather than worked around here.
+ *
+ * The known cost, unchanged: `complete` accumulates forever, because nothing is
+ * ever deleted. It is behind the reveal control, off by default, and when a
+ * decade of finished jobs makes either view unreadable the answer is paging.
  */
 export default async function ProjectsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; stage?: string; kind?: string; closed?: string }>;
+  searchParams: Promise<{
+    q?: string;
+    stage?: string;
+    kind?: string;
+    closed?: string;
+    view?: string;
+  }>;
 }) {
   const params = await searchParams;
   const q = normalizeSearch(params.q);
   const stage = readStage(params.stage);
   const kind = readKind(params.kind);
+  const view = readView(params.view);
 
   // Opportunity or job is decided by whether a quote has been accepted, never
   // by the stage -- `on_hold` is a stalled opportunity before anything is won
@@ -254,6 +270,10 @@ export default async function ProjectsPage({
   );
 
   const filtered = q !== '' || stage !== '' || kind !== '';
+  // What every link out of this screen has to keep. One object, so the toggle,
+  // the reveal, Clear and the board's stage headings cannot each carry a
+  // different subset of the filters.
+  const query = { q, stage, kind, closed: closedParam };
   const describe = [
     kind ? `Showing: ${KIND_OPTIONS.find((entry) => entry.value === kind)?.label}` : '',
     stage ? `Stage: ${PROJECT_STAGES[stage]}` : '',
@@ -304,6 +324,16 @@ export default async function ProjectsPage({
           hiddenCount,
           hiddenNoun: 'closed',
         }}
+        // The view is the screen's, not the bar's -- the bar has no idea there
+        // are two of them. It carries the parameter through a search, through
+        // the reveal and through Clear, which is the whole reason this toggle
+        // can exist at all.
+        carry={{ view: viewParam(view) }}
+        // In the count line rather than above it, so the control costs no row
+        // of its own on a phone. It sits beside "Show lost and complete" and
+        // "Clear", which is where the other statements about what is on screen
+        // already live.
+        trailing={<ViewToggle basePath="/projects" filters={query} view={view} />}
         shown={rows.length}
         noun={countNoun(kind)}
       />
@@ -311,7 +341,9 @@ export default async function ProjectsPage({
       {rows.length === 0 ? (
         filtered || hiddenCount > 0 ? (
           <NoMatches
-            basePath="/projects"
+            // Clearing a filter is not a request for the other view. The
+            // parameter rides along, the same way it does through the bar.
+            basePath={filterHref('/projects', { view: viewParam(view) })}
             q={q}
             noun="opportunities or jobs"
             describe={describe}
@@ -333,13 +365,19 @@ export default async function ProjectsPage({
             and the opportunity is created with it.
           </Card>
         )
+      ) : view === 'list' ? (
+        <PipelineList cards={cards} reminderOf={reminderOf} today={today} />
       ) : (
+        // The board's stage headings deliberately carry no `view`: they are
+        // only reachable from the board, and the board is what an absent
+        // parameter means. Adding it would put `view=board` in every URL to say
+        // what the default already says.
         <Board
           cards={cards}
           reminderOf={reminderOf}
           today={today}
           basePath="/projects"
-          filters={{ q, stage, kind, closed: closedParam }}
+          filters={query}
           showClosed={showClosed}
         />
       )}

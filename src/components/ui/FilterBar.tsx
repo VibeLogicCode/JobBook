@@ -75,6 +75,43 @@ export interface FilterReveal {
   hiddenNoun: string;
 }
 
+/**
+ * Parameters the bar knows nothing about and must not lose.
+ *
+ * The bar is a plain `GET` form, and a `GET` form submits its own controls and
+ * NOTHING ELSE -- so any parameter the screen owns but the bar does not render
+ * is dropped the moment somebody presses Search. That is not theoretical: it is
+ * exactly why the pipeline's view toggle was deleted rather than built the
+ * first time round, on the grounds that the choice would silently reset itself
+ * at the moment somebody was using it.
+ *
+ * `reveal` already had a private answer to this -- one hidden input for its own
+ * name. `carry` is that answer generalised: name/value pairs rendered as hidden
+ * inputs so the form posts them back, AND folded into every link the bar builds
+ * so the reveal and Clear preserve them too. A screen states what it owns; the
+ * bar carries it without knowing what it means.
+ *
+ * Empty values are omitted from both -- a hidden input carrying `''` puts
+ * `&view=` on every search, and the default is better said by an absent
+ * parameter than by a blank one.
+ *
+ * The keys must not collide with `q`, a select's name, or the reveal's name;
+ * those are the bar's own and it sets them last.
+ */
+export type FilterCarry = Record<string, string | undefined>;
+
+/**
+ * The carried pairs the form actually posts, empties dropped.
+ *
+ * Pulled out of the markup so the round trip -- a screen carries `view=list`,
+ * the form posts it, the page reads it back -- can be asserted without a DOM.
+ * That round trip is the whole feature; a regex over the JSX would prove only
+ * that an input exists.
+ */
+export function carriedFields(carry: FilterCarry | undefined): [string, string][] {
+  return Object.entries(carry ?? {}).filter((entry): entry is [string, string] => Boolean(entry[1]));
+}
+
 /** A URL with the empty values dropped, so a shared link carries only what is set. */
 export function filterHref(basePath: string, params: Record<string, string | undefined>): string {
   const search = new URLSearchParams();
@@ -96,6 +133,8 @@ export function FilterBar({
   searchPlaceholder,
   selects = [],
   reveal,
+  carry,
+  trailing,
   shown,
   noun,
 }: {
@@ -106,15 +145,33 @@ export function FilterBar({
   searchPlaceholder?: string;
   selects?: FilterSelect[];
   reveal?: FilterReveal;
+  /** Parameters the screen owns and the bar must not drop. See `FilterCarry`. */
+  carry?: FilterCarry;
+  /**
+   * A control that belongs WITH the count rather than above it -- the pipeline's
+   * list/board toggle is the one today.
+   *
+   * It sits in the count line for the reason "Show lost and complete" and
+   * "Clear" do: a full row of its own is a row the owner scrolls past before he
+   * reaches his work, every time, on the screen he opens most.
+   */
+  trailing?: React.ReactNode;
   /** Rows the screen is about to draw. */
   shown: number;
   noun: { singular: string; plural: string };
 }) {
   const filtered = q !== '' || selects.some((select) => select.value !== '');
   const current = selectFieldValues(selects);
+  // Carried parameters are in every link the bar builds, not only in the form:
+  // the reveal is a navigation, so a view or a sort left out here would survive
+  // a search and die on "Show lost and complete".
+  const carried: FilterCarry = carry ?? {};
   const revealHref = reveal
-    ? filterHref(basePath, { q, ...current, [reveal.name]: reveal.on ? '' : '1' })
+    ? filterHref(basePath, { q, ...current, ...carried, [reveal.name]: reveal.on ? '' : '1' })
     : undefined;
+  // Clear drops the FILTERS. It does not drop what the screen carries -- a
+  // person clearing a search has said nothing about which view he wants.
+  const clearHref = filterHref(basePath, carried);
 
   /**
    * The reveal is drawn only when it would DO something.
@@ -145,6 +202,14 @@ export function FilterBar({
             than a press and a submit. Its state still has to survive a search,
             which is what this carries. */}
         {reveal?.on ? <input type="hidden" name={reveal.name} value="1" /> : null}
+
+        {/* Everything else the screen owns and the form does not render. A GET
+            form posts its controls and nothing else, so without these a search
+            silently resets the view toggle -- which is the whole reason the
+            pipeline had no toggle to reset. */}
+        {carriedFields(carried).map(([name, value]) => (
+          <input key={name} type="hidden" name={name} value={value} />
+        ))}
 
         {/* The box and the button that works it, ON ONE ROW. Stacked, they
             cost a 48px input plus a 44px button plus two gaps before any work
@@ -255,8 +320,14 @@ export function FilterBar({
           {reveal?.on ? ` · including ${reveal.hiddenNoun}` : ''}
         </span>
 
-        {revealShown || filtered ? (
-          <span className="no-print ml-auto flex shrink-0 items-center gap-x-4">
+        {revealShown || filtered || trailing ? (
+          // `flex-wrap` and shrinkable, where this used to be `shrink-0`: with
+          // a third control in it the group can exceed a 390px phone, and a
+          // group that refuses to shrink does not wrap -- it pushes the page
+          // sideways. Wrapping inside is the failure mode that costs a line
+          // rather than an axis.
+          <span className="no-print ml-auto flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1">
+            {trailing}
             {revealShown && revealHref ? (
               // `min-h-8` rather than the 44px a button gets: a text link in a
               // line of prose cannot be 44px tall without becoming the row it
@@ -271,7 +342,7 @@ export function FilterBar({
             ) : null}
             {filtered ? (
               <Link
-                href={basePath}
+                href={clearHref}
                 className="inline-flex min-h-8 items-center text-accent-text hover:underline"
               >
                 Clear
