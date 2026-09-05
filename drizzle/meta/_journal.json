@@ -92,6 +92,20 @@
       "when": 1788576556757,
       "tag": "0012_schedule_tasks",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1788579478544,
+      "tag": "0013_schedule_assignments",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1788579938210,
+      "tag": "0014_vendor_types_and_trades",
+      "breakpoints": true
     }
   ]
 }

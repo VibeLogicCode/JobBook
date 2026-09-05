@@ -169,6 +169,18 @@ export function TextAreaField({
 export interface Option {
   value: string;
   label: string;
+  /**
+   * Marks this option for the `.reveals-field` rule in globals.css, which
+   * shows a dependent field only while a marked option is chosen.
+   *
+   * A styling hook and nothing else -- it never reaches the server, and no
+   * decision is read from it. It exists because the alternative, mirroring the
+   * chosen option into React state, is wrong on the one path that matters:
+   * React resets an uncontrolled form after every action, a refusal included,
+   * and the mirror then disagrees with the control the person is looking at.
+   * `option:checked` cannot.
+   */
+  reveals?: boolean;
 }
 
 export function SelectField({
@@ -182,11 +194,18 @@ export function SelectField({
   defaultValue,
   options,
   blankLabel,
+  reveals,
 }: FieldShell & {
   defaultValue?: string | null;
   options: Option[];
   /** Present when the column is nullable: the blank option is a real value. */
   blankLabel?: string;
+  /**
+   * Marks this select as the one a `.reveals-field` ancestor watches, so a
+   * page with two selects inside the same wrapper cannot have the wrong one
+   * drive the reveal. See `Option.reveals` and globals.css.
+   */
+  reveals?: boolean;
 }) {
   const id = controlId(idPrefix, name);
   return (
@@ -197,12 +216,13 @@ export function SelectField({
         defaultValue={defaultValue ?? ''}
         disabled={disabled}
         required={required}
+        data-reveals={reveals ? '' : undefined}
         aria-describedby={hint ? `${id}-hint` : undefined}
         className={`field ${disabled ? 'opacity-60' : ''}`}
       >
         {blankLabel ? <option value="">{blankLabel}</option> : null}
         {options.map((option) => (
-          <option key={option.value} value={option.value}>
+          <option key={option.value} value={option.value} data-reveal={option.reveals ? '' : undefined}>
             {option.label}
           </option>
         ))}

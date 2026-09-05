@@ -2,6 +2,7 @@ import { sql } from 'drizzle-orm';
 import { boolean, check, index, integer, pgTable, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { auditColumns } from '@/db/columns';
 import { costCodes } from '@/db/schema/customers';
+import { trades, vendorTypes } from '@/db/schema/vendor-lists';
 
 /**
  * Who gets paid: the lumber yard, the framer, the equipment hire, the
@@ -16,7 +17,9 @@ import { costCodes } from '@/db/schema/customers';
  *
  * Everything after this table hangs off it. An expense is paid TO a vendor, a
  * schedule task is assigned TO a subcontractor, and the Phase 5 compliance
- * gate is a query against `is_subcontractor` and a WSIB expiry. The plan's
+ * gate is a query against `is_subcontractor` and a WSIB expiry -- which is
+ * derived from `vendor_types` rather than typed, so no wording change can
+ * restate it (see `db/schema/vendor-lists.ts`). The plan's
  * fourth decision is the reason it is a table at all: "Dave", "Dave M" and
  * "Dave Masonry" typed into three expense rows is a data problem no later
  * migration can unpick, because nothing in those three strings says they were
@@ -73,27 +76,55 @@ export const vendors = pgTable('vendors', {
    */
   taxRegistrationNumber: text('tax_registration_number'),
   /**
-   * NOT cosmetic, and not a category anyone should be able to guess at.
+   * What kind of counterparty this is, from a list the owner maintains.
    *
-   * True means this counterparty performs work rather than selling goods,
-   * and three things follow from it that follow from nothing else: they
-   * receive a T5018 slip, they need current WSIB clearance before they are
-   * paid, and they appear in the schedule's assignment picker. A lumber yard
-   * is none of those. False by default, because the safe error is leaving a
-   * sub off the picker -- which somebody notices the same afternoon -- rather
-   * than filing a T5018 for a building supply store.
+   * Nullable, and it is the vendors that predate the list that make it so.
+   * Their `is_subcontractor` is whatever the old checkbox left, and the form
+   * asks for a type the next time one of them is saved rather than guessing on
+   * their behalf -- a guess here is a guess about a tax filing.
+   */
+  vendorTypeId: uuid('vendor_type_id').references(() => vendorTypes.id),
+  /**
+   * DERIVED, not entered. Maintained by the `derive_vendor_subcontractor`
+   * trigger from `vendor_type_id`, and by nothing else.
+   *
+   * NOT cosmetic, and not a category anyone should be able to guess at. True
+   * means this counterparty performs work rather than selling goods, and three
+   * things follow from it that follow from nothing else: they receive a T5018
+   * slip, they need current WSIB clearance before they are paid, and they
+   * appear in the schedule's assignment picker (`assignments.vendor_id`). A
+   * lumber yard is none of those.
+   *
+   * It stayed a column on this table rather than becoming a join to
+   * `vendor_types`, and that is deliberate. Every reader downstream -- the
+   * assignment picker, the compliance gate, the T5018 run, the
+   * `vendors_subcontractor_idx` those queries use -- asks this table a
+   * question about one row, and turning that into a join would have meant
+   * re-pointing readers that are being written right now for the sake of
+   * removing a column that costs a boolean. What changed is where the value
+   * comes FROM: the checkbox is gone, and the trigger is the only writer.
+   *
+   * False by default, because the safe error is leaving a sub off the picker
+   * -- which somebody notices the same afternoon -- rather than filing a T5018
+   * for a building supply store.
    */
   isSubcontractor: boolean('is_subcontractor').notNull().default(false),
   /**
-   * Free text rather than a foreign key to `cost_codes`.
+   * WHICH trade, when this vendor's type is a subcontractor type.
    *
-   * A trade is what you call somebody when you are looking for them --
-   * "framer", "drywall" -- and a cost code is how their invoice is
-   * categorised. They correlate and are not the same: one electrician's work
-   * lands on rough-in and finish codes both. `default_cost_code_id` below is
-   * the coding half, and this is the finding half.
+   * A live foreign key rather than the free text it replaced, and rather than
+   * a foreign key to `cost_codes`. A trade is what you call somebody when you
+   * are looking for them -- "framer", "drywall" -- and a cost code is how
+   * their invoice is categorised. They correlate and are not the same: one
+   * electrician's work lands on rough-in and finish codes both.
+   * `default_cost_code_id` below is the coding half, and this is the finding
+   * half.
+   *
+   * Live rather than a snapshot for the reason `default_cost_code_id` is live:
+   * a retired trade goes on resolving here, so retiring "Roofing" does not
+   * blank the roofer.
    */
-  trade: text('trade'),
+  tradeId: uuid('trade_id').references(() => trades.id),
   /**
    * Net days. Null means nothing was agreed, which is a different fact from
    * cash on delivery -- and zero is how cash on delivery is recorded.
@@ -148,6 +179,14 @@ export const vendors = pgTable('vendors', {
    * easier to add before the table has rows than after.
    */
   index('vendors_subcontractor_idx').on(t.isSubcontractor, t.isActive),
+  /**
+   * The two questions the settings screens ask before they will retire or
+   * void a list row: how many vendors are on this type, and how many carry
+   * this trade. Counted inside the writing transaction there, so they are
+   * asked on every void.
+   */
+  index('vendors_vendor_type_idx').on(t.vendorTypeId),
+  index('vendors_trade_idx').on(t.tradeId),
   // Net minus-thirty is not a term anybody agreed to. Null is "nothing agreed"
   // and zero is cash on delivery; below zero is a typo, and this is the last
   // place it can still be refused.

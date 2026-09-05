@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { and, asc, eq, ne, sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { db } from '@/db/client';
-import { costCodes, organization, projects, scheduleTasks } from '@/db/schema';
+import { assignments, costCodes, organization, projects, scheduleTasks, users, vendors } from '@/db/schema';
 import { guard } from '@/lib/auth/guard';
 import { lagBetween } from '@/lib/schedule/calendar';
 import {
@@ -17,17 +17,27 @@ import {
 import { type ActionResult, refused, saved } from '@/app/settings/result';
 import { formValues, invalid } from '@/app/settings/validate';
 import {
+  ASSIGNMENT_LABELS,
   TASK_LABELS,
+  clashSentence,
   dayFormatter,
+  duplicateAssignmentText,
+  editAssignmentFields,
   editTaskFields,
   hasSqlState,
   heldRows,
   moveFields,
+  newAssignmentFields,
   newTaskFields,
+  overlapDays,
   previewRows,
+  removeAssignmentFields,
   voidTaskFields,
+  type Assignee,
   type MoveState,
+  type Span,
 } from '@/app/projects/[id]/schedule/schema';
+import { findEngagements, toClash } from '@/app/projects/[id]/schedule/clashes';
 
 /**
  * The schedule's write side.
@@ -668,4 +678,431 @@ export async function voidTask(
 
   revalidatePath(`/projects/${projectId}/schedule`);
   return saved(`${name} is void. It is off the schedule and off the job's finish date, and the row stays.`);
+}
+
+/* -------------------------------------------------------------------------
+   Assignments: who is doing the task
+   ------------------------------------------------------------------------- */
+
+/**
+ * `quote:write`, the same capability the rest of this screen takes, and the
+ * choice is worth stating because one column on the row is money.
+ *
+ * An `agreed_amount_cents` is not a ledger line. It is what was agreed for a
+ * task on a plan, and what is actually paid is an `expenses` row against the
+ * vendor with paper behind it -- which is the record `expense:write` exists
+ * for, and the reason a bookkeeper holds that capability and not this one.
+ * Assigning is editing the job's plan: an `owner` and an `admin` do it, and a
+ * `bookkeeper` reads the whole screen and changes none of it, because whoever
+ * prepares the year end must never be able to restate who was on site.
+ *
+ * `record:void` is not taken by any action here. Removing somebody from a task
+ * is NOT voiding -- see the note on `assignments.removed_at` -- and voiding a
+ * mis-keyed assignment has no control on this screen yet, so the capability is
+ * not asked for by something that cannot happen.
+ */
+
+/** Who an assignment is for, resolved and judged inside the writing transaction. */
+interface ResolvedAssignee {
+  /** What the screen and the refusals call them. */
+  name: string;
+  /** The sentence saying why they may not be assigned, or null. */
+  problem: string | null;
+}
+
+/**
+ * Whether this person may be put on a task, decided from the CURRENT row.
+ *
+ * Read inside the transaction and never off the form, for the reason the
+ * predecessor check is: the picker was built before the vendor was retired, and
+ * a stale tab does not read a list it never re-fetched.
+ *
+ * The subcontractor rule is here rather than in a check constraint because
+ * `is_subcontractor` lives on another table and a CHECK may not read one. It is
+ * the one rule in this file the database cannot hold, so it is stated once,
+ * where the write happens.
+ */
+async function resolveAssignee(tx: Tx, assignee: Assignee): Promise<ResolvedAssignee> {
+  if (assignee.kind === 'vendor') {
+    const [row] = await tx
+      .select({
+        name: vendors.name,
+        isSubcontractor: vendors.isSubcontractor,
+        isActive: vendors.isActive,
+        recordStatus: vendors.recordStatus,
+      })
+      .from(vendors)
+      .where(eq(vendors.id, assignee.id));
+
+    if (!row) return { name: 'That vendor', problem: 'That vendor is not on the list.' };
+    if (row.recordStatus === 'void') {
+      return {
+        name: row.name,
+        problem: `${row.name} is a voided row, which means it should never have existed. Nobody can be scheduled against it.`,
+      };
+    }
+    if (!row.isSubcontractor) {
+      return {
+        name: row.name,
+        problem: `${row.name} is a supplier rather than a subcontractor, and a supplier is not assigned to a task — a lumber yard delivers, it does not turn up and do the work. Mark them as a subcontractor on the vendor list if that is wrong.`,
+      };
+    }
+    if (!row.isActive) {
+      return {
+        name: row.name,
+        problem: `${row.name} is retired, which means "do not offer this on new work". Bring them back on the vendor list first if they are working again. Assignments already recorded against them are untouched and still read.`,
+      };
+    }
+    return { name: row.name, problem: null };
+  }
+
+  const [row] = await tx
+    .select({
+      name: users.displayName,
+      isActive: users.isActive,
+      recordStatus: users.recordStatus,
+    })
+    .from(users)
+    .where(eq(users.id, assignee.id));
+
+  if (!row) return { name: 'That person', problem: 'That person is not on the list.' };
+  if (row.recordStatus === 'void') {
+    return { name: row.name, problem: `${row.name} is a voided row and cannot be scheduled.` };
+  }
+  if (!row.isActive) {
+    return {
+      name: row.name,
+      problem: `${row.name} has been deactivated. Reactivate them under Settings if they are back.`,
+    };
+  }
+  return { name: row.name, problem: null };
+}
+
+/**
+ * The double-booking warning, computed after the row is written.
+ *
+ * AFTER, deliberately. This is not a gate -- see the long note on
+ * `clashSentence` for why refusing would be wrong -- so computing it first
+ * would only be a reason to hold the write open longer. It runs inside the same
+ * transaction so the sentence describes the schedule the row actually landed
+ * in, and it excludes this task, which the new row itself now occupies.
+ */
+async function clashText(
+  tx: Tx,
+  assignee: Assignee,
+  span: Span,
+  taskId: string,
+  projectId: string,
+  who: string,
+): Promise<string> {
+  const engagements = await findEngagements(tx, [assignee], span);
+  const clashes = engagements
+    .filter((engagement) => engagement.taskId !== taskId)
+    .map((engagement) => toClash(engagement, overlapDays(span, engagement.span)))
+    .filter((clash) => clash.days > 0);
+  return clashSentence(who, clashes, projectId);
+}
+
+/** The task an assignment hangs off, and whether it may be written against. */
+async function readTaskForAssignment(
+  tx: Tx,
+  taskId: string,
+): Promise<
+  | { ok: false; problem: string }
+  | { ok: true; projectId: string; name: string; span: Span }
+> {
+  const [task] = await tx
+    .select({
+      projectId: scheduleTasks.projectId,
+      name: scheduleTasks.name,
+      plannedStart: scheduleTasks.plannedStart,
+      plannedEnd: scheduleTasks.plannedEnd,
+      recordStatus: scheduleTasks.recordStatus,
+    })
+    .from(scheduleTasks)
+    .where(eq(scheduleTasks.id, taskId));
+
+  if (!task) return { ok: false, problem: 'That task no longer exists.' };
+  if (task.recordStatus === 'void') {
+    return {
+      ok: false,
+      problem: 'That task is void, so it is a record rather than work anybody can be put on.',
+    };
+  }
+  if (await projectIsVoid(tx, task.projectId)) {
+    return { ok: false, problem: 'That job is void, so its schedule is a record rather than a plan.' };
+  }
+  return {
+    ok: true,
+    projectId: task.projectId,
+    name: task.name,
+    span: { start: task.plannedStart, end: task.plannedEnd },
+  };
+}
+
+/**
+ * Puts a subcontractor, or somebody internal, on a task.
+ *
+ * No advisory lock: this write touches no dependency, so there is no chain to
+ * walk and nothing for `lockProject` to serialise. What it does race against is
+ * the same person being added twice from two tabs, and that is held by the
+ * partial unique index rather than by a read -- a read followed by an insert is
+ * two statements with a gap between them, and the gap is where the second
+ * insert lands.
+ */
+export async function assignToTask(
+  _previous: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  const allowed = await guard('quote:write');
+  if (!allowed.ok) return refusedResult(allowed.error);
+
+  const parsed = newAssignmentFields.safeParse(formValues(formData));
+  if (!parsed.success) return invalid(parsed.error, ASSIGNMENT_LABELS);
+  const input = parsed.data;
+
+  let problem: string | null = null;
+  let message = '';
+  let projectId = '';
+  try {
+    await db.transaction(async (tx) => {
+      const task = await readTaskForAssignment(tx, input.scheduleTaskId);
+      if (!task.ok) {
+        problem = task.problem;
+        return;
+      }
+      projectId = task.projectId;
+
+      const who = await resolveAssignee(tx, input.assignee);
+      if (who.problem) {
+        problem = who.problem;
+        return;
+      }
+
+      await tx.insert(assignments).values({
+        scheduleTaskId: input.scheduleTaskId,
+        vendorId: input.assignee.kind === 'vendor' ? input.assignee.id : null,
+        userId: input.assignee.kind === 'user' ? input.assignee.id : null,
+        agreedAmountCents: input.agreedAmount,
+        notes: input.notes,
+        createdBy: allowed.actor.id,
+      });
+
+      const clash = await clashText(
+        tx,
+        input.assignee,
+        task.span,
+        input.scheduleTaskId,
+        task.projectId,
+        who.name,
+      );
+      message = clash
+        ? `${who.name} is on ${task.name}. ${clash}`
+        : `${who.name} is on ${task.name}. Nobody has said yes yet — record that when you hear back, so "asked and heard nothing" stays a different thing from "said no".`;
+    });
+  } catch (error) {
+    // The partial unique index, said in full: the row already holding this
+    // person may have arrived from another tab since this screen was drawn.
+    if (hasSqlState(error, '23505')) {
+      return refused(duplicateAssignmentText('That person'));
+    }
+    return refused(failureText(error));
+  }
+
+  if (problem) return refused(problem);
+
+  revalidatePath(`/projects/${projectId}/schedule`);
+  return saved(message);
+}
+
+/**
+ * What was heard back, what was agreed, and what was said on the phone.
+ *
+ * WHO is not editable here, and that is deliberate rather than an omission.
+ * Swapping the person on an assignment would silently rewrite the record of who
+ * was asked and when -- the confirmation, the agreed figure and the removal
+ * reason would all survive onto somebody who never had them. Changing who is on
+ * a task is removing one assignment and adding another, which leaves both
+ * facts on the schedule where a year-later question can read them.
+ *
+ * It also means this form never re-renders the assignee picker, so the
+ * stale-select problem the cost code picker guards against -- a `defaultValue`
+ * matching no option, silently showing the first one, and the next save
+ * recoding the row to whatever sorted first -- cannot arise here at all.
+ */
+export async function updateAssignment(
+  _previous: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  const allowed = await guard('quote:write');
+  if (!allowed.ok) return refusedResult(allowed.error);
+
+  const parsed = editAssignmentFields.safeParse(formValues(formData));
+  if (!parsed.success) return invalid(parsed.error, ASSIGNMENT_LABELS);
+  const input = parsed.data;
+
+  let problem: string | null = null;
+  let message = '';
+  let projectId = '';
+  try {
+    await db.transaction(async (tx) => {
+      const [row] = await tx
+        .select({
+          scheduleTaskId: assignments.scheduleTaskId,
+          vendorId: assignments.vendorId,
+          userId: assignments.userId,
+          confirmedAt: assignments.confirmedAt,
+          declinedAt: assignments.declinedAt,
+          removedAt: assignments.removedAt,
+          recordStatus: assignments.recordStatus,
+        })
+        .from(assignments)
+        .where(eq(assignments.id, input.id));
+
+      if (!row) {
+        problem = 'That assignment no longer exists.';
+        return;
+      }
+      if (row.recordStatus === 'void') {
+        problem = 'That assignment is void. A void row is kept as a record and is not edited.';
+        return;
+      }
+      if (row.removedAt !== null) {
+        problem =
+          'That person has been taken off this task, and the row is the record of it. Add them again if they are back on.';
+        return;
+      }
+
+      const task = await readTaskForAssignment(tx, row.scheduleTaskId);
+      if (!task.ok) {
+        problem = task.problem;
+        return;
+      }
+      projectId = task.projectId;
+
+      // The three states, mapped back onto the two dates -- and an existing
+      // stamp is KEPT rather than refreshed, so saving a note against a
+      // confirmed assignment does not move the day he said yes.
+      const now = new Date();
+      const confirmedAt =
+        input.response === 'confirmed' ? (row.confirmedAt ?? now) : null;
+      const declinedAt = input.response === 'declined' ? (row.declinedAt ?? now) : null;
+
+      await tx
+        .update(assignments)
+        // No `updatedAt`: the trigger owns it.
+        .set({
+          confirmedAt,
+          declinedAt,
+          agreedAmountCents: input.agreedAmount,
+          notes: input.notes,
+        })
+        .where(eq(assignments.id, input.id));
+
+      message =
+        input.response === 'confirmed'
+          ? 'Saved, and recorded as confirmed.'
+          : input.response === 'declined'
+            ? 'Saved, and recorded as a no. The row stays, so the schedule still shows that you asked.'
+            : 'Saved. Nothing is recorded as heard back yet, which is a different thing from a no.';
+    });
+  } catch (error) {
+    return refused(failureText(error));
+  }
+
+  if (problem) return refused(problem);
+
+  revalidatePath(`/projects/${projectId}/schedule`);
+  return saved(message);
+}
+
+/**
+ * Takes somebody off a task.
+ *
+ * NOT a delete -- the application role holds no DELETE privilege at all -- and
+ * NOT a void. Void says the row should never have existed; this says the
+ * arrangement ended, which is an ordinary thing that happens to a schedule and
+ * is worth keeping. The distinction is the one the cost code list already draws
+ * between retiring and voiding, applied to a row that records an event rather
+ * than a reference.
+ *
+ * What it costs to be wrong about that is asymmetric, which is why it is worth
+ * the extra column. Voiding a declined assignment would destroy the only
+ * evidence the owner ever asked; a removal that should have been a void is a
+ * row on screen saying so, with a reason on it.
+ */
+export async function removeAssignment(
+  _previous: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  const allowed = await guard('quote:write');
+  if (!allowed.ok) return refusedResult(allowed.error);
+
+  const parsed = removeAssignmentFields.safeParse(formValues(formData));
+  if (!parsed.success) {
+    return invalid(parsed.error, ASSIGNMENT_LABELS, 'Taking somebody off needs a reason.');
+  }
+  const input = parsed.data;
+
+  let problem: string | null = null;
+  let projectId = '';
+  let who = 'They';
+  try {
+    await db.transaction(async (tx) => {
+      const [row] = await tx
+        .select({
+          scheduleTaskId: assignments.scheduleTaskId,
+          vendorName: vendors.name,
+          userName: users.displayName,
+          removedAt: assignments.removedAt,
+          recordStatus: assignments.recordStatus,
+        })
+        .from(assignments)
+        // Left joins, and both of them: exactly one is set, and the one that
+        // is set may be a retired or voided vendor -- which still resolves,
+        // because the column is a foreign key to a row that never leaves.
+        .leftJoin(vendors, eq(vendors.id, assignments.vendorId))
+        .leftJoin(users, eq(users.id, assignments.userId))
+        .where(eq(assignments.id, input.id));
+
+      if (!row) {
+        problem = 'That assignment no longer exists.';
+        return;
+      }
+      if (row.recordStatus === 'void') {
+        problem = 'That assignment is void, so there is nobody on the task to take off.';
+        return;
+      }
+      if (row.removedAt !== null) {
+        problem = 'They have already been taken off this task.';
+        return;
+      }
+      who = row.vendorName ?? row.userName ?? 'They';
+
+      const task = await readTaskForAssignment(tx, row.scheduleTaskId);
+      if (!task.ok) {
+        problem = task.problem;
+        return;
+      }
+      projectId = task.projectId;
+
+      await tx
+        .update(assignments)
+        .set({
+          removedAt: new Date(),
+          removedBy: allowed.actor.id,
+          removalReason: input.reason,
+        })
+        .where(eq(assignments.id, input.id));
+    });
+  } catch (error) {
+    return refused(failureText(error));
+  }
+
+  if (problem) return refused(problem);
+
+  revalidatePath(`/projects/${projectId}/schedule`);
+  return saved(
+    `${who} is off this task. The row stays with the reason on it — that is what makes them free again on the day, without pretending they were never asked.`,
+  );
 }

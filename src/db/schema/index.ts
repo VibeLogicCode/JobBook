@@ -13,3 +13,5 @@ export * from '@/db/schema/reminders';
 export * from '@/db/schema/vendors';
 export * from '@/db/schema/expenses';
 export * from '@/db/schema/schedule';
+export * from '@/db/schema/assignments';
+export * from '@/db/schema/vendor-lists';

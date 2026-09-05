@@ -499,6 +499,32 @@
       font-size: 16px; /* below 16px iOS Safari zooms the whole page on focus */
     }
   }
+
+  /* ---- A field that only some answers ask for ----
+     One DOM tree, reflowed by CSS -- the data table's ruling, applied to a
+     form. The vendor screen asks a subcontractor which trade it is and does
+     not ask a supplier, and the box is HIDDEN rather than removed so a trade
+     already picked survives a change of mind and the action can still refuse a
+     missing one in words.
+
+     CSS rather than a state mirror in React, and that is the whole point of
+     writing it here. The first version of this held the chosen option in
+     `useState`: React resets an uncontrolled form after EVERY action it runs,
+     a refusal included, and `ActionForm` then restores what was typed a tick
+     later -- so the mirror went stale exactly on the path that matters, and a
+     subcontractor refused for a missing trade had the trade box vanish
+     underneath the message about it. `option:checked` is recomputed by the
+     browser whenever the selection changes, however it changed: by the person,
+     by a form reset, or by a script assigning `value`. There is no moment at
+     which it can disagree with the control.
+
+     Stated as "hide when a marked option is NOT chosen" rather than "show when
+     one is", so a browser without `:has()` shows the field always. An extra
+     box the server then ignores is a much smaller failure than a required
+     answer nobody can give. */
+  .reveals-field:has(select[data-reveals] option:checked:not([data-reveal])) .revealed-field {
+    display: none;
+  }
 }
 
 /* Present mode: hides cost, margin, internal notes and rate codes, because he

@@ -13,6 +13,13 @@ import type { NavItem } from '@/components/settings/SettingsNav';
  * as the tax rates and the users already on this nav, and it is why the entry
  * sits directly under Tax rates.
  *
+ * Vendor types and trades sit immediately after it, in that order, because
+ * they are the same kind of thing -- taxonomies the working screens are built
+ * against -- and because the second is only meaningful in terms of the first:
+ * a trade is asked of a vendor only when its TYPE says the vendor performs
+ * work. Reading them the other way round is reading the answer before the
+ * question.
+ *
  * Reminder rules sit last of the lists, immediately before Users, because they
  * are the only setting in this area that WRITES rows on its own. Everything
  * above decides what a document says when somebody makes one; this decides
@@ -55,6 +62,16 @@ export const SETTINGS_SECTIONS: NavItem[] = [
     href: '/settings/cost-codes',
     label: 'Cost codes',
     summary: 'How spend is categorised. Retiring one is not voiding it, and nothing is deleted.',
+  },
+  {
+    href: '/settings/vendor-types',
+    label: 'Vendor types',
+    summary: 'What kind of counterparty a vendor is, and which kinds count as subcontractors.',
+  },
+  {
+    href: '/settings/trades',
+    label: 'Trades',
+    summary: 'What kind of subcontractor somebody is. Retiring one never blanks the sub who has it.',
   },
   {
     href: '/settings/reminder-rules',

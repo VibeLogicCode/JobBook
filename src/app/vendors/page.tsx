@@ -1,6 +1,7 @@
-import { and, asc, eq, ne } from 'drizzle-orm';
+import { and, asc, eq, ne, sql } from 'drizzle-orm';
 import { db } from '@/db/client';
-import { costCodes, organization, vendors } from '@/db/schema';
+import { costCodes, organization, trades, vendorTypes, vendors } from '@/db/schema';
+import { ensureVendorLists } from '@/db/seed/vendor-lists';
 import { resolveActor } from '@/app/settings/actor';
 import { can } from '@/lib/auth/permissions';
 import {
@@ -9,10 +10,10 @@ import {
   updateVendor,
   voidVendor,
 } from '@/app/vendors/actions';
+import { listOptionLabel } from '@/app/settings/vendor-lists';
 import { paymentTermsLabel, vendorKindLabel } from '@/app/vendors/schema';
 import { ActionForm, RowAction } from '@/components/settings/ActionForm';
 import {
-  CheckboxField,
   FieldGrid,
   SelectField,
   TextAreaField,
@@ -34,9 +35,17 @@ const REFUSAL = 'Your role can read the vendor list but not change it.';
 
 type VendorRow = typeof vendors.$inferSelect;
 
+/**
+ * The filter is still the derived flag rather than the type list, and
+ * deliberately. "Which of these am I filing a T5018 for" is the question this
+ * screen gets asked, and it has two answers however many types the owner has
+ * invented. The second option is no longer called "Suppliers": a type list
+ * makes equipment hire and professional services ordinary answers, and neither
+ * of those is a supplier.
+ */
 const KIND_OPTIONS = [
   { value: 'subcontractor', label: 'Subcontractors' },
-  { value: 'supplier', label: 'Suppliers' },
+  { value: 'supplier', label: 'Everyone else' },
 ];
 
 /**
@@ -69,6 +78,10 @@ export default async function VendorsPage({
   const kind = one('kind') === 'subcontractor' || one('kind') === 'supplier' ? one('kind') : '';
   const showRetired = one('retired') === '1';
 
+  // The form cannot be drawn without them, and a fresh installation has never
+  // opened the settings screens that would otherwise have loaded them.
+  await ensureVendorLists();
+
   const state = await resolveActor();
   const allowed = state.actor ? can(state.actor.role, 'rates:edit') : false;
   const mayVoid = state.actor ? can(state.actor.role, 'record:void') : false;
@@ -77,7 +90,12 @@ export default async function VendorsPage({
     vendors.name,
     vendors.legalName,
     vendors.contactName,
-    vendors.trade,
+    // The trade and the type live on other tables now, and both are things
+    // people search by -- "who are my framers" is the question the trade list
+    // exists for. Correlated rather than joined, so the search stays one
+    // condition a caller drops into `and(...)` and the row set keeps its shape.
+    sql`(select t.name from trades t where t.id = ${vendors.tradeId})`,
+    sql`(select vt.name from vendor_types vt where vt.id = ${vendors.vendorTypeId})`,
     vendors.city,
     vendors.phone,
     vendors.email,
@@ -107,6 +125,69 @@ export default async function VendorsPage({
   const rows = showRetired ? all : all.filter((row) => !isHidden(row));
 
   const [org] = await db.select({ province: organization.province }).from(organization);
+
+  // Every type and every trade, retired and voided included. A vendor already
+  // carrying one has to go on displaying it -- retiring "Roofing" must not
+  // blank the roofer -- and a select whose `defaultValue` matches no option
+  // silently shows the FIRST one instead, which on the next save would refile
+  // that vendor under whatever happened to sort first. For the type that would
+  // not be a cosmetic slip: it would restate whether they are owed a T5018.
+  const allTypes = await db
+    .select()
+    .from(vendorTypes)
+    .orderBy(asc(vendorTypes.sortOrder), asc(vendorTypes.name));
+  const allTrades = await db
+    .select()
+    .from(trades)
+    .orderBy(asc(trades.sortOrder), asc(trades.name));
+
+  const typeById = new Map(allTypes.map((row) => [row.id, row]));
+  const tradeById = new Map(allTrades.map((row) => [row.id, row]));
+
+  /**
+   * The types a vendor may be filed under: the ones still on the list, plus
+   * whichever one this vendor already carries, marked.
+   *
+   * A retired type is not offered to a vendor that is not already on it --
+   * retired means do not put anybody new here -- but it IS offered back to the
+   * vendor that is, because the alternative is a form that cannot be saved
+   * without moving somebody between tax standings to correct their phone
+   * number.
+   */
+  function typeOptions(row?: VendorRow): Option[] {
+    // `reveals` marks the types that perform work, and it is a STYLING hook:
+    // it is what the `.reveals-field` rule in globals.css watches to decide
+    // whether the trade box is on the screen. Nothing is decided from it. The
+    // answer that is acted on is read from `vendor_types` inside the writing
+    // transaction, and `vendors.is_subcontractor` is derived from that by
+    // trigger -- so a stale open tab costs a hidden box, never a wrong filing.
+    const options: Option[] = allTypes
+      .filter((type) => type.isActive && type.recordStatus === 'active')
+      .map((type) => ({ value: type.id, label: type.name, reveals: type.isSubcontractor }));
+
+    const current = row?.vendorTypeId ? typeById.get(row.vendorTypeId) : undefined;
+    if (current && !options.some((option) => option.value === current.id)) {
+      options.push({
+        value: current.id,
+        label: listOptionLabel(current),
+        reveals: current.isSubcontractor,
+      });
+    }
+    return options;
+  }
+
+  /** The same rule for trades, for the same reason. */
+  function tradeOptions(row?: VendorRow): Option[] {
+    const options: Option[] = allTrades
+      .filter((trade) => trade.isActive && trade.recordStatus === 'active')
+      .map((trade) => ({ value: trade.id, label: trade.name }));
+
+    const current = row?.tradeId ? tradeById.get(row.tradeId) : undefined;
+    if (current && !options.some((option) => option.value === current.id)) {
+      options.push({ value: current.id, label: listOptionLabel(current) });
+    }
+    return options;
+  }
 
   const allCodes = await db
     .select({
@@ -174,24 +255,53 @@ export default async function VendorsPage({
             disabled={disabled}
             hint="The name on the cheque, if it differs. This is the one a T5018 slip carries."
           />
-          <CheckboxField
-            idPrefix={prefix}
-            name="isSubcontractor"
-            label="This is a subcontractor"
-            defaultChecked={row?.isSubcontractor ?? false}
-            disabled={disabled}
-            wide
-            hint="Tick it for somebody who performs work, not for somewhere you buy materials. Three things follow and nothing else sets them: they receive a T5018 slip, their WSIB clearance is checked before they are paid, and they appear when work is assigned on a schedule."
-          />
-          <TextField
-            idPrefix={prefix}
-            name="trade"
-            label="Trade"
-            maxLength={120}
-            defaultValue={row?.trade}
-            disabled={disabled}
-            hint="How you would describe them when looking for one — framer, drywall, electrical. Not the same as the cost code below."
-          />
+          {/*
+            The owner's ask, in one tree: a supplier is not asked which trade
+            it is, and a subcontractor is asked what KIND of subcontractor it
+            is. Both fields are always rendered and always submitted; the trade
+            is hidden by the `.reveals-field` rule in globals.css while the
+            chosen type is not one that performs work.
+
+            `display: contents` on the wrapper, so both fields stay direct
+            children of the two-column grid above -- a real box here would make
+            the pair one grid cell and stack them under each other while every
+            other field sat in two columns.
+
+            Hidden rather than removed, so a trade already picked survives a
+            change of mind. That means a leftover can still arrive for a
+            supplier, which is why the action drops it from the TYPE row it
+            reads in the writing transaction rather than trusting the browser.
+            And hidden rather than `required`-toggled: a hidden required
+            control blocks the submit with a browser message pointing at a box
+            nobody can see, so the action refuses a missing trade in words,
+            only for the types that need one.
+          */}
+          <div className="contents reveals-field">
+            <SelectField
+              idPrefix={prefix}
+              name="vendorTypeId"
+              label="Vendor type"
+              required
+              reveals
+              defaultValue={row?.vendorTypeId ?? ''}
+              options={typeOptions(row)}
+              blankLabel="Choose one"
+              disabled={disabled}
+              hint="What kind of counterparty this is. Some types mean the vendor performs work: those receive a T5018 slip, have their WSIB clearance checked before they are paid, appear when work is assigned, and are the only ones asked which trade they are. Maintained under Settings, Vendor types."
+            />
+            <div className="revealed-field min-w-0 self-start">
+              <SelectField
+                idPrefix={prefix}
+                name="tradeId"
+                label="Trade"
+                defaultValue={row?.tradeId ?? ''}
+                options={tradeOptions(row)}
+                blankLabel="Choose one"
+                disabled={disabled}
+                hint="What kind of subcontractor this is — how you would describe them when looking for one. Not the same as the cost code below. Maintained under Settings, Trades."
+              />
+            </div>
+          </div>
           <SelectField
             idPrefix={prefix}
             name="defaultCostCodeId"
@@ -309,6 +419,9 @@ export default async function VendorsPage({
   }
 
   const subcontractors = all.filter((row) => row.isSubcontractor).length;
+  // Vendors added before the type list existed. Their standing is whatever the
+  // old tick box left, which is why the form asks rather than guessing.
+  const untyped = all.filter((row) => row.vendorTypeId === null && row.recordStatus !== 'void');
 
   return (
     <div className="px-4 py-4 sm:px-6">
@@ -344,6 +457,19 @@ export default async function VendorsPage({
         </div>
       )}
 
+      {untyped.length > 0 ? (
+        <div className="mb-3">
+          <Notice tone="info" title="Some of these predate the vendor type list">
+            {untyped.length === 1 ? 'One vendor has' : `${untyped.length} vendors have`} no type
+            yet, so {untyped.length === 1 ? 'it keeps' : 'they keep'} whatever the old
+            subcontractor tick box left. Opening{' '}
+            {untyped.length === 1 ? 'that row' : 'each of them'} and choosing a type is what
+            settles it — the product will not guess, because the guess would be a guess
+            about a tax filing.
+          </Notice>
+        </div>
+      ) : null}
+
       <FilterBar
         basePath="/vendors"
         q={q}
@@ -376,7 +502,7 @@ export default async function VendorsPage({
             basePath="/vendors"
             q={q}
             noun="vendors"
-            describe={kind ? [`Kind: ${kind === 'subcontractor' ? 'Subcontractors' : 'Suppliers'}`] : []}
+            describe={kind ? [`Kind: ${kind === 'subcontractor' ? 'Subcontractors' : 'Everyone else'}`] : []}
             hint={
               hiddenCount > 0 && !showRetired
                 ? 'Retired and voided vendors are hidden by default. The control above brings them back.'
@@ -419,6 +545,14 @@ export default async function VendorsPage({
             {rows.map((row) => {
               const isVoid = row.recordStatus === 'void';
               const code = row.defaultCostCodeId ? codeById.get(row.defaultCostCodeId) : undefined;
+              // Resolved from the full lists rather than the offered ones, so a
+              // retired or voided type or trade still reads as itself here.
+              const type = row.vendorTypeId ? typeById.get(row.vendorTypeId) : undefined;
+              const kindOf = {
+                typeName: type ? listOptionLabel(type) : null,
+                isSubcontractor: row.isSubcontractor,
+                trade: row.tradeId ? (tradeById.get(row.tradeId)?.name ?? null) : null,
+              };
 
               return (
                 <tr key={row.id}>
@@ -429,7 +563,7 @@ export default async function VendorsPage({
                     ) : null}
                   </td>
                   <td data-label="Kind" className="t-small text-muted">
-                    {vendorKindLabel(row)}
+                    {vendorKindLabel(kindOf)}
                   </td>
                   <td data-label="Contact" className="t-small text-muted">
                     {[row.contactName, row.phone, row.city].filter(Boolean).join(' · ') || '—'}
@@ -484,7 +618,7 @@ export default async function VendorsPage({
                       trigger="Change…"
                       label={`Change ${row.name}`}
                       title={`Change ${row.name}`}
-                      subtitle={vendorKindLabel(row)}
+                      subtitle={vendorKindLabel(kindOf)}
                       size="xl"
                       discardPrompt="Throw away the changes to this vendor? Nothing has been saved yet."
                     >

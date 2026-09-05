@@ -4,24 +4,40 @@ import {
   isDuplicateName,
   paymentTermsLabel,
   toColumns,
+  tradeProblem,
+  tradeToWrite,
   vendorFields,
   vendorKindLabel,
+  vendorTypeProblem,
   type CostCodeRef,
+  type TradeRef,
+  type VendorTypeRef,
 } from '@/app/vendors/schema';
 
 /**
  * The vendor directory's rules, tested where they live rather than through the
  * screen.
  *
- * Three of them are worth more than the rest. The name is normalised, because
+ * Four of them are worth more than the rest. The name is normalised, because
  * the unique index is on `lower(name)` and a doubled space would otherwise
  * walk straight past it -- which is the "Dave, Dave M, Dave Masonry" failure
  * the table exists to prevent, wearing a disguise. The two tax numbers are
- * separate fields and stay separate. And a blank optional field has to arrive
- * as NULL rather than as the empty string, because a column that holds `''`
- * reads as present to every future query that asks whether a business number
- * was collected.
+ * separate fields and stay separate. A blank optional field has to arrive as
+ * NULL rather than as the empty string, because a column that holds `''` reads
+ * as present to every future query that asks whether a business number was
+ * collected.
+ *
+ * And the fourth is the one this file exists for now: the form cannot state
+ * whether a vendor is a subcontractor. That answer decides who receives a
+ * T5018 slip, whose WSIB clearance is checked before a cheque is written, and
+ * who may be assigned to a scheduled task, so it is read from the chosen
+ * vendor type and derived in the database. A schema that silently accepted
+ * `isSubcontractor` from a form field would put all three back on something a
+ * browser can edit, which is why it is asserted here rather than assumed.
  */
+
+const A_TYPE = '11111111-1111-4111-8111-111111111111';
+const A_TRADE = '22222222-2222-4222-8222-222222222222';
 
 const FORM: Record<string, string> = {
   name: 'Sample Supply',
@@ -35,7 +51,8 @@ const FORM: Record<string, string> = {
   postalCode: '',
   businessNumber: '',
   taxRegistrationNumber: '',
-  trade: '',
+  vendorTypeId: A_TYPE,
+  tradeId: '',
   paymentTermsDays: '',
   defaultCostCodeId: '',
   notes: '',
@@ -98,19 +115,131 @@ describe('the two tax numbers', () => {
   });
 });
 
-describe('the subcontractor flag', () => {
-  it('is false when the box was not ticked, because a browser sends nothing', () => {
-    // Absent is the off state, not an error: "this is a supplier" has to be
-    // submittable, and it is submitted by the field simply not arriving. FORM
-    // carries no `isSubcontractor` key for exactly that reason.
+describe('the subcontractor flag is not a form field', () => {
+  it('is not in the form at all', () => {
+    // It used to be a checkbox here. It is now derived in the database from
+    // the chosen vendor type by the `derive_vendor_subcontractor` trigger,
+    // because three things and nothing else turn on it -- a T5018 slip, a WSIB
+    // clearance check, a place in the assignment picker -- and none of those
+    // should rest on a control a browser can edit.
     expect('isSubcontractor' in FORM).toBe(false);
-    const result = vendorFields.safeParse(FORM);
-    expect(result.success && result.data.isSubcontractor).toBe(false);
+    expect(Object.keys(vendorFields.shape)).not.toContain('isSubcontractor');
   });
 
-  it('is true when it was', () => {
+  it('is dropped rather than honoured when a hand-made POST sends one', () => {
     const result = parse({ isSubcontractor: 'true' });
-    expect(result.success && result.data.isSubcontractor).toBe(true);
+    expect(result.success).toBe(true);
+    expect(result.success && 'isSubcontractor' in result.data).toBe(false);
+    // And it cannot get in through the column map either, which is the door
+    // an insert actually goes through.
+    expect(result.success && 'isSubcontractor' in toColumns(result.data)).toBe(false);
+  });
+});
+
+describe('the vendor type', () => {
+  it('is required, including on an edit', () => {
+    // The vendors that predate the list carry none. The way that data gets
+    // fixed is that the next person to save one has to answer, rather than the
+    // product answering for him -- which would be the product guessing at a
+    // tax filing.
+    expect(issueFor(parse({ vendorTypeId: '' }), 'vendorTypeId')).toBe('is required');
+  });
+
+  it('refuses anything that is not a uuid, so a hand-made POST is not a 23503', () => {
+    expect(issueFor(parse({ vendorTypeId: 'subcontractor' }), 'vendorTypeId')).toBe(
+      'is required',
+    );
+  });
+
+  const type = (over: Partial<VendorTypeRef> = {}): VendorTypeRef => ({
+    id: A_TYPE,
+    name: 'Subcontractor',
+    isSubcontractor: true,
+    isActive: true,
+    recordStatus: 'active',
+    ...over,
+  });
+
+  it('accepts a live type', () => {
+    expect(vendorTypeProblem(type())).toBeNull();
+  });
+
+  it('accepts a RETIRED type, because retiring is about new vendors', () => {
+    // Somebody already on a winding-down type has to be savable without being
+    // moved, and moving them is exactly what would restate whether they are
+    // owed a T5018.
+    expect(vendorTypeProblem(type({ isActive: false }))).toBeNull();
+  });
+
+  it('refuses a VOID type, because a filing cannot rest on an admitted mistake', () => {
+    expect(vendorTypeProblem(type({ recordStatus: 'void' }))).toContain('is void');
+  });
+
+  it('refuses one that is not there at all', () => {
+    expect(vendorTypeProblem(undefined)).toContain('not on the list');
+  });
+});
+
+describe('the trade, which is asked only of a subcontractor', () => {
+  const trade = (over: Partial<TradeRef> = {}): TradeRef => ({
+    id: A_TRADE,
+    name: 'Framing',
+    isActive: true,
+    recordStatus: 'active',
+    ...over,
+  });
+
+  it('is required when the type performs work', () => {
+    // The owner's ask, in one assertion: a subcontractor is asked WHAT KIND of
+    // subcontractor it is.
+    expect(
+      tradeProblem({ typeIsSubcontractor: true, chosen: null, submitted: false }),
+    ).toContain('Which trade');
+  });
+
+  it('is not asked of a supplier, and a blank one is not an error', () => {
+    expect(
+      tradeProblem({ typeIsSubcontractor: false, chosen: null, submitted: false }),
+    ).toBeNull();
+  });
+
+  it('is dropped rather than refused when a supplier submits one anyway', () => {
+    // The field is hidden rather than removed, so a trade picked before the
+    // type was changed still arrives. Refusing it would put a message about a
+    // box that is not on the screen in front of somebody correcting an address.
+    expect(
+      tradeProblem({ typeIsSubcontractor: false, chosen: trade(), submitted: true }),
+    ).toBeNull();
+    expect(tradeToWrite(false, A_TRADE)).toBeNull();
+    expect(tradeToWrite(true, A_TRADE)).toBe(A_TRADE);
+  });
+
+  it('accepts a RETIRED trade, so retiring one does not blank the sub who has it', () => {
+    expect(
+      tradeProblem({ typeIsSubcontractor: true, chosen: trade({ isActive: false }), submitted: true }),
+    ).toBeNull();
+  });
+
+  it('refuses a VOID trade, because giving somebody new a mistake spreads it', () => {
+    expect(
+      tradeProblem({
+        typeIsSubcontractor: true,
+        chosen: trade({ recordStatus: 'void' }),
+        submitted: true,
+      }),
+    ).toContain('is void');
+  });
+
+  it('refuses an id that names no row', () => {
+    expect(
+      tradeProblem({ typeIsSubcontractor: true, chosen: undefined, submitted: true }),
+    ).toContain('not on the list');
+  });
+
+  it('refuses anything that is not a uuid, so a hand-made POST is not a 23503', () => {
+    expect(issueFor(parse({ tradeId: 'framing' }), 'tradeId')).toBe(
+      'is not a trade on the list',
+    );
   });
 });
 
@@ -183,15 +312,37 @@ describe('the default cost code', () => {
 });
 
 describe('what the screen calls a row', () => {
-  it('names a supplier as one, so nobody reads it as a sub', () => {
+  it("prefers the tenant's own word for the kind of counterparty", () => {
+    expect(
+      vendorKindLabel({ typeName: 'Equipment rental', isSubcontractor: false, trade: null }),
+    ).toBe('Equipment rental');
+  });
+
+  it('falls back to the derived flag for a vendor that predates the type list', () => {
+    // The flag and not the name decides which fallback is used: a type can be
+    // called anything, and reading the word would be reading a tax question
+    // out of a string somebody typed.
     expect(vendorKindLabel({ isSubcontractor: false, trade: 'Framing' })).toBe('Supplier');
+    expect(vendorKindLabel({ typeName: null, isSubcontractor: true, trade: null })).toBe(
+      'Subcontractor',
+    );
   });
 
   it('carries the trade for a subcontractor when there is one', () => {
+    expect(
+      vendorKindLabel({ typeName: 'Subcontractor', isSubcontractor: true, trade: 'Framing' }),
+    ).toBe('Subcontractor · Framing');
     expect(vendorKindLabel({ isSubcontractor: true, trade: 'Framing' })).toBe(
       'Subcontractor · Framing',
     );
-    expect(vendorKindLabel({ isSubcontractor: true, trade: null })).toBe('Subcontractor');
+  });
+
+  it('never prints a trade beside a vendor who is not a subcontractor', () => {
+    // A leftover trade on a supplier is not a fact about them, and printing it
+    // would read as one.
+    expect(
+      vendorKindLabel({ typeName: 'Material supplier', isSubcontractor: false, trade: 'Framing' }),
+    ).toBe('Material supplier');
   });
 });
 

@@ -1,7 +1,8 @@
 import { z } from 'zod';
 import type { FieldError } from '@/app/settings/result';
 import { isoDate, optionalText, requiredText } from '@/app/settings/validate';
-import { durationDays } from '@/lib/schedule/calendar';
+import { parseAmountToCents } from '@/lib/money/format';
+import { daysBetween, durationDays } from '@/lib/schedule/calendar';
 import type { HeldTask, TaskMove } from '@/lib/schedule/push';
 import type { Tone } from '@/components/ui/Pill';
 
@@ -309,4 +310,332 @@ export function hasSqlState(error: unknown, code: string): boolean {
     current = (current as { cause?: unknown }).cause;
   }
   return false;
+}
+
+/* -------------------------------------------------------------------------
+   Assignments: who is doing the task
+   ------------------------------------------------------------------------- */
+
+export const ASSIGNMENT_LABELS: Record<string, string> = {
+  scheduleTaskId: 'Task',
+  assignee: 'Who',
+  response: 'Have they said yes',
+  agreedAmount: 'Agreed amount',
+  notes: 'Notes',
+  reason: 'Reason',
+};
+
+/**
+ * WHO, as one select value.
+ *
+ * The database holds two nullable foreign keys with a check that exactly one
+ * is set (see `db/schema/assignments.ts`), and a form cannot submit that shape
+ * without two controls that have to agree. So the picker is ONE control whose
+ * options are prefixed -- `vendor:<uuid>` or `user:<uuid>` -- and this is where
+ * the prefix is taken apart, once, on the way in.
+ *
+ * The prefix is not a magic string standing in for a person. It names WHICH
+ * TABLE the id belongs to, which is the one thing a uuid does not carry, and
+ * the action then resolves it against that table inside its own transaction.
+ * "Me" is `user:<the owner's own id>` and nothing about it is special.
+ */
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export type AssigneeKind = 'vendor' | 'user';
+export interface Assignee {
+  kind: AssigneeKind;
+  id: string;
+}
+
+/** The value an option carries. Written once, so the form and the parse cannot drift. */
+export function assigneeValue(kind: AssigneeKind, id: string): string {
+  return `${kind}:${id}`;
+}
+
+export function parseAssignee(raw: string): Assignee | null {
+  const separator = raw.indexOf(':');
+  if (separator === -1) return null;
+  const kind = raw.slice(0, separator);
+  const id = raw.slice(separator + 1);
+  if (kind !== 'vendor' && kind !== 'user') return null;
+  if (!UUID.test(id)) return null;
+  return { kind, id };
+}
+
+const assigneeField = z
+  .string()
+  .transform((value) => value.trim())
+  .refine((value) => parseAssignee(value) !== null, 'is not somebody on the list')
+  .transform((value) => parseAssignee(value)!);
+
+/**
+ * What was agreed for this task, in integer cents, or nothing at all.
+ *
+ * Blank is NULL and NOT zero, which is the opposite of the choice
+ * `expenses.amountField` makes -- and the difference is the column, not the
+ * taste. Every money column on an expense is NOT NULL, because a receipt with
+ * no tax on it had no tax: that is a figure. An assignment with no agreed price
+ * has no price YET, and writing zero would report a sub lined up for nothing.
+ * Zero is still typeable and means agreed at zero -- an own-crew day, or work
+ * folded into another line.
+ *
+ * Parsed by `lib/money/format`, which builds cents by concatenating digit
+ * strings rather than multiplying a float by a hundred, and stored as those
+ * cents. Nothing downstream computes against it, so no intermediate ever
+ * becomes a JavaScript number carrying a fraction.
+ */
+const agreedAmountField = z
+  .string()
+  .transform((value) => value.trim())
+  .transform((raw) =>
+    raw === ''
+      ? { blank: true, value: null as number | null }
+      : { blank: false, value: parseAmountToCents(raw) },
+  )
+  .refine(
+    (parsed) => parsed.blank || parsed.value !== null,
+    'must be an amount, with at most two decimal places',
+  )
+  .refine(
+    (parsed) => parsed.value === null || parsed.value >= 0,
+    'cannot be negative — a credit from a sub is an expense with a sign on it, not a price',
+  )
+  // Ten million dollars for one task on one job is a decimal point in the
+  // wrong place. A typo catch, not a rule about what work is worth.
+  .refine(
+    (parsed) => parsed.value === null || parsed.value <= 1_000_000_000,
+    'is larger than one task should be — check the decimal point',
+  )
+  .transform((parsed) => parsed.value);
+
+/**
+ * Yes, no, or nothing heard back -- the three states the pair of dates can
+ * hold, asked as the one question a person can actually answer.
+ *
+ * Named `response` rather than `status` because the row stores no status: it
+ * stores `confirmed_at` and `declined_at`, and this is only how the screen asks
+ * about them. The action maps this back to the dates and DOES NOT RESTAMP one
+ * that is already set, so saving a note against a confirmed assignment cannot
+ * silently move the day he said yes.
+ */
+export const ASSIGNMENT_RESPONSES = ['waiting', 'confirmed', 'declined'] as const;
+export type AssignmentResponse = (typeof ASSIGNMENT_RESPONSES)[number];
+
+export const RESPONSE_LABELS: Record<AssignmentResponse, string> = {
+  waiting: 'Asked, nothing heard back',
+  confirmed: 'Confirmed',
+  declined: 'Said no',
+};
+
+export function responseTone(response: AssignmentResponse): Tone {
+  switch (response) {
+    case 'confirmed':
+      return 'positive';
+    case 'declined':
+      return 'negative';
+    default:
+      // Not a warning. Nobody has done anything wrong by not having rung back
+      // yet, and painting every fresh assignment amber makes the colour mean
+      // nothing by the third task.
+      return 'neutral';
+  }
+}
+
+/** Which of the three a row is in, read off the dates rather than stored. */
+export function responseOf(row: {
+  confirmedAt: Date | null;
+  declinedAt: Date | null;
+}): AssignmentResponse {
+  if (row.confirmedAt !== null) return 'confirmed';
+  if (row.declinedAt !== null) return 'declined';
+  return 'waiting';
+}
+
+export const newAssignmentFields = z.object({
+  scheduleTaskId: z.uuid('is not a task'),
+  assignee: assigneeField,
+  agreedAmount: agreedAmountField,
+  notes: optionalText(2000),
+});
+
+export const editAssignmentFields = z.object({
+  id: z.uuid('is not an assignment'),
+  response: z.enum(ASSIGNMENT_RESPONSES),
+  agreedAmount: agreedAmountField,
+  notes: optionalText(2000),
+});
+
+/**
+ * Taking somebody off a task, which is neither a delete nor a void.
+ *
+ * The reason is required for the reason a void reason is: "Dave is not on
+ * framing any more" with nothing beside it teaches nobody anything in
+ * February, and this row is the only record that he ever was.
+ */
+export const removeAssignmentFields = z.object({
+  id: z.uuid('is not an assignment'),
+  reason: z.string().trim().min(1, 'is required').max(300, 'must be 300 characters or fewer'),
+});
+
+/* -------------------------------------------------------------------------
+   Double-booking
+   ------------------------------------------------------------------------- */
+
+/** A stretch of calendar days a task occupies. Both ends inclusive. */
+export interface Span {
+  start: string;
+  end: string;
+}
+
+/**
+ * Whether two tasks share a day.
+ *
+ * Both ends inclusive, because `planned_start` and `planned_end` are: a
+ * one-day task is the same date twice, and a half-open comparison would report
+ * every milestone as clashing with nothing at all.
+ *
+ * ISO dates compare correctly as strings, which is why the columns are `date`
+ * and the wire format is ISO rather than anything friendlier.
+ */
+export function spansOverlap(a: Span, b: Span): boolean {
+  return a.start <= b.end && b.start <= a.end;
+}
+
+/** How many days two tasks share. Zero when they do not touch. */
+export function overlapDays(a: Span, b: Span): number {
+  if (!spansOverlap(a, b)) return 0;
+  const start = a.start > b.start ? a.start : b.start;
+  const end = a.end < b.end ? a.end : b.end;
+  return daysBetween(start, end) + 1;
+}
+
+/** One other task the same person is already on, over days these two share. */
+export interface Clash {
+  taskName: string;
+  projectId: string;
+  projectNumber: string;
+  projectName: string;
+  span: Span;
+  days: number;
+}
+
+/**
+ * A double-booking, in a sentence.
+ *
+ * **This is a WARNING and never a refusal, and that is the decision this
+ * helper exists to carry.**
+ *
+ * Refusing would be wrong, and not marginally. A schedule task stores calendar
+ * days with no hours in them, so the data physically cannot tell "both of them
+ * on Thursday morning" from "one Thursday morning and one Thursday afternoon"
+ * -- and a sub really does split a day, and a ten-day framing task really does
+ * overlap a one-day inspection he is also down for. Refusing on evidence that
+ * cannot distinguish those would refuse correct schedules, and the owner would
+ * learn inside a week to work around the picker rather than through it.
+ *
+ * Saying nothing would be worse, and this is the mistake the feature exists to
+ * catch. The two tasks are on TWO DIFFERENT JOBS, therefore on two different
+ * screens, so the one place a clash is naturally invisible is exactly where it
+ * costs money: a framer promised to two sites on the same Tuesday, discovered
+ * on the Tuesday.
+ *
+ * So it is written, and it is said -- once in the confirmation when the
+ * assignment is made, and then permanently on the row, because a warning that
+ * appears once and scrolls away is a warning nobody acted on.
+ */
+export function clashSentence(
+  who: string,
+  clashes: readonly Clash[],
+  currentProjectId: string,
+): string {
+  if (clashes.length === 0) return '';
+  const first = clashes[0]!;
+  const elsewhere = clashes.some((clash) => clash.projectId !== currentProjectId);
+  // The last clause is the reason this is said at all, so it has to be true.
+  // A clash on ANOTHER job is invisible here; one on this job is two rows the
+  // reader can already see, and claiming otherwise would teach them to
+  // distrust the warning that matters.
+  const why = elsewhere
+    ? "but nothing else was going to tell you, because that work is on another job's screen."
+    : 'so check the two are not the same hours before you promise them.';
+  const where = elsewhere ? ` for ${first.projectNumber}` : ' on this job';
+  if (clashes.length === 1) {
+    return `${who} is also on ${first.taskName}${where}, and the two overlap by ${first.days} ${first.days === 1 ? 'day' : 'days'}. That is allowed — these dates carry no hours, and a sub can split a day — ${why}`;
+  }
+  return `${who} is also on ${clashes.length} other tasks that overlap these dates, starting with ${first.taskName}${where}. That is allowed — a sub can split a day — ${why}`;
+}
+
+/** The short form, for the pill that stays on the row. */
+export function clashPillLabel(clashes: readonly Clash[], currentProjectId: string): string {
+  if (clashes.length === 1) {
+    const only = clashes[0]!;
+    // Naming this job back at somebody looking at it says nothing. The task is
+    // what they need, and it is on screen a few rows away.
+    return only.projectId === currentProjectId
+      ? `Also on ${only.taskName}`
+      : `Also on ${only.projectNumber}`;
+  }
+  return `Also on ${clashes.length} other tasks`;
+}
+
+/* -------------------------------------------------------------------------
+   Rendering a moment
+   ------------------------------------------------------------------------- */
+
+/**
+ * A timestamp as the day it happened IN THE TENANT'S ZONE.
+ *
+ * `dayFormatter` above renders date-only values and pins UTC, because those
+ * carry no time to convert. These do: `confirmed_at` is an instant, and a
+ * confirmation taken at seven on a Toronto evening is stored as the next day in
+ * UTC. Rendered in the server's zone it would read as tomorrow, which on a
+ * screen about who turns up when is the difference between Friday and the
+ * weekend somebody thought they had.
+ */
+export function momentFormatter(locale: string, timeZone: string): (at: Date) => string {
+  const build = (zone: string) =>
+    new Intl.DateTimeFormat(locale, {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      timeZone: zone,
+    });
+  let format: Intl.DateTimeFormat;
+  try {
+    format = build(timeZone);
+  } catch {
+    // An unrecognised zone on the organization row must not take the whole
+    // schedule down. UTC is the same fallback `tenantToday` coalesces to.
+    format = build('UTC');
+  }
+  return (at: Date) => format.format(at);
+}
+
+/**
+ * A duplicate assignment, said in full.
+ *
+ * The unique index is partial -- live rows only -- so the row already holding
+ * this person may have been added in another tab since this screen was drawn,
+ * and a bare "already assigned" sends somebody hunting a row they cannot see.
+ */
+export function duplicateAssignmentText(who: string): string {
+  return `${who} is already on this task. Somebody may have added them while this screen was open — reload the schedule to see it. Nothing was written.`;
+}
+
+/**
+ * Integer cents back into the box somebody types an amount into.
+ *
+ * String surgery on the digits rather than `cents / 100`, so the round trip
+ * from the column to the input and back is integer arithmetic the whole way:
+ * `formatCents` divides because it is producing a string for a person to read
+ * and never goes back, and this one is the value the next save re-parses.
+ *
+ * Unlocalised on purpose. `formatCents` groups thousands according to the
+ * tenant's locale, and a grouping mark that `parseAmountToCents` does not
+ * recognise -- a narrow no-break space in fr-CA, for one -- would turn opening
+ * the sheet and pressing Save into a refusal on a figure nobody touched.
+ */
+export function centsToInput(cents: number): string {
+  const digits = String(Math.abs(cents)).padStart(3, '0');
+  return `${cents < 0 ? '-' : ''}${digits.slice(0, -2)}.${digits.slice(-2)}`;
 }

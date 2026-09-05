@@ -26,8 +26,8 @@ export const VENDOR_LABELS: Record<string, string> = {
   postalCode: 'Postal code',
   businessNumber: 'Business number',
   taxRegistrationNumber: 'Tax registration number',
-  isSubcontractor: 'Subcontractor',
-  trade: 'Trade',
+  vendorTypeId: 'Vendor type',
+  tradeId: 'Trade',
   paymentTermsDays: 'Payment terms',
   defaultCostCodeId: 'Usual cost code',
   notes: 'Notes',
@@ -48,6 +48,8 @@ const nameField = z
   .refine((value) => value !== '', 'is required')
   .refine((value) => value.length <= 200, 'must be 200 characters or fewer');
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /**
  * A blankable id, refused unless it looks like one.
  *
@@ -56,25 +58,29 @@ const nameField = z
  * POST turning a foreign key column into a 23503 with the failed SQL on the
  * screen.
  */
-const optionalUuid = z
-  .string()
-  .transform((value) => value.trim())
-  .refine(
-    (value) =>
-      value === '' ||
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value),
-    'is not a cost code on the list',
-  )
-  .transform((value) => (value === '' ? null : value));
+const optionalUuid = (message: string) =>
+  z
+    .string()
+    .transform((value) => value.trim())
+    .refine((value) => value === '' || UUID.test(value), message)
+    .transform((value) => (value === '' ? null : value));
 
 /**
- * The checkbox that decides who gets a T5018 slip and who appears in the
- * schedule's assignment picker.
+ * What the form submits. Note what is NOT here: `isSubcontractor`.
  *
- * A browser sends nothing at all for a box that is not ticked, so absent is
- * the off state rather than an error -- which is also why this one cannot be
- * `required`: "not a subcontractor" is a real answer and has to be
- * submittable.
+ * It used to be a checkbox on this form, and it is now derived in the database
+ * from the chosen type -- see `db/schema/vendor-lists.ts`. Three things and
+ * nothing else turn on it (a T5018 slip, a WSIB clearance check, an assignment
+ * picker), so leaving it submittable would leave the answer to a filing on a
+ * field any browser can edit. The trigger reads `vendor_types`, this schema
+ * cannot express the column, and `toColumns` below cannot write it.
+ *
+ * The trade is asked only of a vendor whose type performs work. The form hides
+ * the field the rest of the time rather than removing it -- one DOM tree, so a
+ * trade already picked survives a change of mind -- which means a value can
+ * still arrive for a supplier. It is dropped in the action, from the type read
+ * in the same transaction, rather than trusted here: this schema does not know
+ * which types are subcontractor types and must not be given a way to guess.
  */
 export const vendorFields = z.object({
   name: nameField,
@@ -88,16 +94,19 @@ export const vendorFields = z.object({
   postalCode: optionalText(20),
   businessNumber: optionalText(60),
   taxRegistrationNumber: optionalText(60),
-  isSubcontractor: z
-    .stringbool()
-    .optional()
-    .transform((value) => value ?? false),
-  trade: optionalText(120),
+  /**
+   * Required, and required on an EDIT too. The vendors that predate the list
+   * carry no type, and the way that data gets fixed is that the next person to
+   * save one has to answer -- rather than the product answering for him, which
+   * would be the product guessing at a tax filing.
+   */
+  vendorTypeId: z.string().trim().regex(UUID, 'is required'),
+  tradeId: optionalUuid('is not a trade on the list'),
   // 3650 is ten years. Not a business rule -- there is no sane term above a
   // few months -- but the ceiling that stops a mistyped date landing in a
   // column measured in days.
   paymentTermsDays: optionalInt(0, 3650),
-  defaultCostCodeId: optionalUuid,
+  defaultCostCodeId: optionalUuid('is not a cost code on the list'),
   notes: optionalText(2000),
 });
 
@@ -120,8 +129,8 @@ export function toColumns(input: VendorInput) {
     postalCode: input.postalCode,
     businessNumber: input.businessNumber,
     taxRegistrationNumber: input.taxRegistrationNumber,
-    isSubcontractor: input.isSubcontractor,
-    trade: input.trade,
+    vendorTypeId: input.vendorTypeId,
+    tradeId: input.tradeId,
     paymentTermsDays: input.paymentTermsDays,
     defaultCostCodeId: input.defaultCostCodeId,
     notes: input.notes,
@@ -205,22 +214,123 @@ export function costCodeProblem(code: CostCodeRef | undefined): string | null {
 }
 
 /* -------------------------------------------------------------------------
+   The type, and the trade that follows from it
+   ------------------------------------------------------------------------- */
+
+/** The columns a chosen vendor type is judged on. Nothing else is read. */
+export interface VendorTypeRef {
+  id: string;
+  name: string;
+  isSubcontractor: boolean;
+  isActive: boolean;
+  recordStatus: string;
+}
+
+/** The columns a chosen trade is judged on. Nothing else is read. */
+export interface TradeRef {
+  id: string;
+  name: string;
+  isActive: boolean;
+  recordStatus: string;
+}
+
+/**
+ * Whether a vendor may be filed under the chosen type, and if not, why in a
+ * sentence somebody can act on.
+ *
+ * Pure and separate from the action, because the rule is the interesting part
+ * and the action is a transaction around it. The action supplies the row --
+ * read inside the same transaction as the write, because a type that was on
+ * the list when the form was rendered can be void by the time the button is
+ * pressed, and because `is_subcontractor` is read off that same row.
+ *
+ * Void is refused and retired is allowed, and the asymmetry is the same one
+ * `costCodeProblem` draws. Retired means "do not offer this on new vendors",
+ * which is a statement about NEW vendors: somebody already on a winding-down
+ * type must be able to have their phone number corrected without being moved,
+ * and moving them is exactly what would restate whether they are owed a T5018.
+ * Void means the row should never have existed, and a filing resting on a row
+ * the screen calls a mistake is not a filing anybody can defend.
+ */
+export function vendorTypeProblem(type: VendorTypeRef | undefined): string | null {
+  if (!type) return 'The vendor type you chose is not on the list.';
+  if (type.recordStatus === 'void') {
+    return `${type.name} is void, so nothing can be filed under it. Choose a type that still stands — whether a vendor counts as a subcontractor is read off this row, and a voided row is not an answer.`;
+  }
+  return null;
+}
+
+/**
+ * Whether the trade answer fits the chosen type, and if not, why.
+ *
+ * The two halves of the owner's ask, written once: a supplier is not asked
+ * which trade it is, and a subcontractor is not allowed to skip it. Called
+ * with the trade the form sent -- which for a supplier may be a leftover,
+ * because the field is hidden rather than removed so a value already picked
+ * survives a change of mind. `null` is what the action should write in that
+ * case; `problem` is what it should refuse with.
+ *
+ * The order matters: the type decides, and the trade obeys. Nothing here reads
+ * a submitted flag.
+ */
+export function tradeProblem(input: {
+  typeIsSubcontractor: boolean;
+  /** Null when the field was left blank, or was never shown. */
+  chosen: TradeRef | undefined | null;
+  /** Whether an id was submitted at all, so a missing row can be told apart. */
+  submitted: boolean;
+}): string | null {
+  const { typeIsSubcontractor, chosen, submitted } = input;
+
+  // A supplier's trade is not refused, it is dropped. Refusing it would put a
+  // message about a box that is not on the screen in front of somebody who was
+  // correcting an address.
+  if (!typeIsSubcontractor) return null;
+
+  if (!submitted) {
+    return 'Which trade is this? A subcontractor is somebody you hire to do a particular kind of work, and the trade is how the schedule and the vendor list say who to go looking for.';
+  }
+  if (!chosen) return 'The trade you chose is not on the list.';
+  if (chosen.recordStatus === 'void') {
+    return `${chosen.name} is void, so it should not be given to anybody new. Choose a trade that still stands, or add the right one under Settings, Trades.`;
+  }
+  return null;
+}
+
+/** What a supplier's trade becomes: nothing, whatever the form sent. */
+export function tradeToWrite(typeIsSubcontractor: boolean, tradeId: string | null): string | null {
+  return typeIsSubcontractor ? tradeId : null;
+}
+
+/* -------------------------------------------------------------------------
    What the screen says about a row
    ------------------------------------------------------------------------- */
 
 /**
- * The one-line description of what a vendor is, from the two columns that
- * decide it.
+ * The one-line description of what a vendor is.
  *
  * Written once because it is said in three places -- the list, the sheet's
  * subtitle, and the confirmation an action returns -- and because the
  * distinction it draws is the one the whole table exists for. A reader who
  * cannot tell a subcontractor from a supplier at a glance cannot tell who is
  * owed a T5018.
+ *
+ * `typeName` is the tenant's own word for the kind of counterparty and is
+ * preferred when there is one; it is optional because the vendors that predate
+ * the type list have none, and because a caller who holds only the derived
+ * flag -- the assignment picker, a confirmation message -- should not have to
+ * join to say "Subcontractor". The flag, not the name, is what decides which
+ * fallback is used: a type could be called anything.
  */
-export function vendorKindLabel(row: { isSubcontractor: boolean; trade: string | null }): string {
-  if (!row.isSubcontractor) return 'Supplier';
-  return row.trade ? `Subcontractor · ${row.trade}` : 'Subcontractor';
+export function vendorKindLabel(row: {
+  typeName?: string | null;
+  isSubcontractor: boolean;
+  trade: string | null;
+}): string {
+  const kind = row.typeName ?? (row.isSubcontractor ? 'Subcontractor' : 'Supplier');
+  // A trade is only ever asked of a subcontractor, so printing one beside any
+  // other kind would be printing a leftover as though it were a fact.
+  return row.isSubcontractor && row.trade ? `${kind} · ${row.trade}` : kind;
 }
 
 /** Net days as a phrase, including the two cases a bare number gets wrong. */

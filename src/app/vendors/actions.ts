@@ -4,7 +4,7 @@ import { eq, sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { db } from '@/db/client';
-import { costCodes, vendors } from '@/db/schema';
+import { costCodes, trades, vendorTypes, vendors } from '@/db/schema';
 import { guard } from '@/lib/auth/guard';
 import { type ActionResult, refused, saved } from '@/app/settings/result';
 import { formValues, invalid } from '@/app/settings/validate';
@@ -13,7 +13,10 @@ import {
   costCodeProblem,
   isDuplicateName,
   toColumns,
+  tradeProblem,
+  tradeToWrite,
   vendorFields,
+  vendorTypeProblem,
 } from '@/app/vendors/schema';
 
 /**
@@ -37,6 +40,15 @@ import {
  *    never leaves. The database role holds no DELETE privilege at all.
  * 3. **Changing a vendor cannot restate a filing.** Nothing here writes a
  *    figure, and no amount anywhere is read from this table.
+ * 4. **Nothing here writes `is_subcontractor`.** It is derived in the database
+ *    from `vendor_type_id` by the `derive_vendor_subcontractor` trigger, and
+ *    the flag that trigger reads is fixed on a vendor type when the type is
+ *    created. So the answer to "does this counterparty receive a T5018 slip, a
+ *    WSIB clearance check and a place in the assignment picker" is not
+ *    something a form field, a stale tab or a hand-made POST can state -- it
+ *    follows from a type somebody chose on a screen that says what choosing it
+ *    means. The only way to change it is to move the vendor to a different
+ *    type, which is a deliberate act and is reported back as one.
  *
  * `rates:edit` is the capability for adding, editing and retiring, rather than
  * `quote:write` or `organization:edit`. The reasoning is the same one that put
@@ -60,7 +72,15 @@ import {
 
 const REFUSAL = 'Your role does not permit changing the vendor list.';
 
-/** A rule about the default cost code, carried out of a transaction as a sentence. */
+/**
+ * A rule about one of the three choices -- the type, the trade, the default
+ * cost code -- carried out of a transaction as a sentence.
+ *
+ * One class rather than three, because all three are read inside the writing
+ * transaction and all three reach the person as the same kind of thing: a
+ * sentence about a row that was on the list when the form was rendered and is
+ * not any more.
+ */
 class ProposalError extends Error {}
 
 function failureText(error: unknown): string {
@@ -115,6 +135,85 @@ const COST_CODE_REF = {
   recordStatus: costCodes.recordStatus,
 };
 
+/**
+ * The columns a chosen type is judged on -- including the one that decides the
+ * vendor's standing, which is read here and never submitted.
+ */
+const VENDOR_TYPE_REF = {
+  id: vendorTypes.id,
+  name: vendorTypes.name,
+  isSubcontractor: vendorTypes.isSubcontractor,
+  isActive: vendorTypes.isActive,
+  recordStatus: vendorTypes.recordStatus,
+};
+
+/** The columns a chosen trade is judged on, and nothing else. */
+const TRADE_REF = {
+  id: trades.id,
+  name: trades.name,
+  isActive: trades.isActive,
+  recordStatus: trades.recordStatus,
+};
+
+/**
+ * The three choices, checked together inside one transaction.
+ *
+ * Together rather than one at a time, because the trade rule depends on the
+ * TYPE row: a supplier is not asked which trade it is, and a subcontractor may
+ * not skip it. Reading the type outside the transaction that writes the vendor
+ * would be reading it off a screen rendered before somebody voided it.
+ *
+ * Returns what should actually be STORED for the trade, which is not always
+ * what the form sent. The field is hidden rather than removed when the chosen
+ * type does not perform work -- one DOM tree, so a trade already picked
+ * survives a change of mind -- so a leftover can still arrive, and dropping it
+ * here is quieter than refusing somebody who was correcting an address.
+ */
+async function resolveChoices(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  input: { vendorTypeId: string; tradeId: string | null; defaultCostCodeId: string | null },
+): Promise<{ isSubcontractor: boolean; tradeId: string | null }> {
+  const [type] = await tx
+    .select(VENDOR_TYPE_REF)
+    .from(vendorTypes)
+    .where(eq(vendorTypes.id, input.vendorTypeId));
+
+  const typeProblem = vendorTypeProblem(type);
+  if (typeProblem) throw new ProposalError(typeProblem);
+  // Past `vendorTypeProblem` the row exists -- it returns a sentence for a
+  // missing one. TypeScript needs that said out loud.
+  const chosenType = type!;
+
+  const [trade] =
+    input.tradeId === null
+      ? []
+      : await tx.select(TRADE_REF).from(trades).where(eq(trades.id, input.tradeId));
+
+  const problem = tradeProblem({
+    typeIsSubcontractor: chosenType.isSubcontractor,
+    chosen: trade,
+    submitted: input.tradeId !== null,
+  });
+  if (problem) throw new ProposalError(problem);
+
+  if (input.defaultCostCodeId !== null) {
+    // Read inside the transaction rather than off the screen: the screen was
+    // rendered before the code that has since been voided was voided.
+    const [code] = await tx
+      .select(COST_CODE_REF)
+      .from(costCodes)
+      .where(eq(costCodes.id, input.defaultCostCodeId));
+
+    const codeProblem = costCodeProblem(code);
+    if (codeProblem) throw new ProposalError(codeProblem);
+  }
+
+  return {
+    isSubcontractor: chosenType.isSubcontractor,
+    tradeId: tradeToWrite(chosenType.isSubcontractor, input.tradeId),
+  };
+}
+
 /* -------------------------------------------------------------------------
    One vendor at a time
    ------------------------------------------------------------------------- */
@@ -132,23 +231,26 @@ export async function createVendor(
   if (!parsed.success) return invalid(parsed.error, VENDOR_LABELS);
   const input = parsed.data;
 
+  let isSubcontractor = false;
   try {
-    // One transaction, because the proposed cost code has to still stand at
-    // the moment of the insert and not merely at the moment of the check.
-    await db.transaction(async (tx) => {
-      if (input.defaultCostCodeId !== null) {
-        // Read inside the transaction rather than off the screen: the screen
-        // was rendered before the code that has since been voided was voided.
-        const [code] = await tx
-          .select(COST_CODE_REF)
-          .from(costCodes)
-          .where(eq(costCodes.id, input.defaultCostCodeId));
+    // One transaction, because every row this insert is judged against -- the
+    // type, the trade, the proposed cost code -- has to still stand at the
+    // moment of the insert and not merely at the moment of the check.
+    isSubcontractor = await db.transaction(async (tx) => {
+      const resolved = await resolveChoices(tx, input);
 
-        const problem = costCodeProblem(code);
-        if (problem) throw new ProposalError(problem);
-      }
+      await tx.insert(vendors).values({
+        ...toColumns(input),
+        // The form's trade, or nothing at all when the chosen type does not
+        // perform work.
+        tradeId: resolved.tradeId,
+        // `is_subcontractor` is deliberately absent: the trigger derives it
+        // from `vendor_type_id`, and a value written here would be a form
+        // field deciding a tax filing.
+        createdBy: allowed.actor.id,
+      });
 
-      await tx.insert(vendors).values({ ...toColumns(input), createdBy: allowed.actor.id });
+      return resolved.isSubcontractor;
     });
   } catch (error) {
     if (isDuplicateName(error)) return refused(await takenBy(input.name));
@@ -157,9 +259,9 @@ export async function createVendor(
 
   revalidatePath('/vendors');
   return saved(
-    input.isSubcontractor
-      ? `${input.name} added as a subcontractor. They will be offered wherever work is assigned, and they are on the list of people a T5018 is filed for — which is why the business number is worth chasing now rather than in February.`
-      : `${input.name} added as a supplier. They will be offered wherever spend is coded. No T5018 is filed for a supplier, and no WSIB clearance is asked of one.`,
+    isSubcontractor
+      ? `${input.name} added as a subcontractor, because that is what their type means. They will be offered wherever work is assigned, and they are on the list of people a T5018 is filed for — which is why the business number is worth chasing now rather than in February.`
+      : `${input.name} added. Their type does not perform work, so no trade is asked of them, no T5018 is filed for them and no WSIB clearance is asked of them. They will be offered wherever spend is coded.`,
   );
 }
 
@@ -193,39 +295,55 @@ export async function updateVendor(
   if (!parsed.success) return invalid(parsed.error, VENDOR_LABELS);
   const { id, ...rest } = parsed.data;
 
-  let name: string | undefined;
+  let result: { name: string; isSubcontractor: boolean; moved: boolean } | undefined;
   try {
-    name = await db.transaction(async (tx) => {
-      if (rest.defaultCostCodeId !== null) {
-        const [code] = await tx
-          .select(COST_CODE_REF)
-          .from(costCodes)
-          .where(eq(costCodes.id, rest.defaultCostCodeId));
+    result = await db.transaction(async (tx) => {
+      // Read before the write so the confirmation can say whether the vendor
+      // changed STANDING rather than merely details. Moving somebody between
+      // types is the one edit on this form that reaches a tax filing, and a
+      // save that reported it the same way as a new phone number would be a
+      // save nobody double-checked.
+      const [before] = await tx
+        .select({ vendorTypeId: vendors.vendorTypeId })
+        .from(vendors)
+        .where(eq(vendors.id, id));
 
-        const problem = costCodeProblem(code);
-        if (problem) throw new ProposalError(problem);
-      }
+      const resolved = await resolveChoices(tx, rest);
 
       const rows = await tx
         .update(vendors)
         // `updated_at` is deliberately absent: a trigger maintains it, and a
         // value written here would be the one the sync cursor trusts.
-        .set(toColumns(rest))
+        // `is_subcontractor` is absent for a stronger reason -- rule 4 at the
+        // top of this file.
+        .set({ ...toColumns(rest), tradeId: resolved.tradeId })
         .where(eq(vendors.id, id))
         .returning({ name: vendors.name });
 
-      return rows[0]?.name;
+      const row = rows[0];
+      if (!row) return undefined;
+      return {
+        name: row.name,
+        isSubcontractor: resolved.isSubcontractor,
+        moved: (before?.vendorTypeId ?? null) !== rest.vendorTypeId,
+      };
     });
   } catch (error) {
     if (isDuplicateName(error)) return refused(await takenBy(rest.name));
     return refused(failureText(error));
   }
 
-  if (!name) return refused('That vendor no longer exists.');
+  if (!result) return refused('That vendor no longer exists.');
 
   revalidatePath('/vendors');
   return saved(
-    `${name} saved. Everything already recorded against them reads the new details, because a record points at this row rather than copying it.`,
+    `${result.name} saved. Everything already recorded against them reads the new details, because a record points at this row rather than copying it.${
+      result.moved
+        ? result.isSubcontractor
+          ? ' Their type now says they perform work, so they are on the T5018 list, their WSIB clearance is checked before they are paid, and they appear where work is assigned.'
+          : ' Their type does not say they perform work, so no T5018 is filed for them, no clearance is asked of them, and they no longer appear where work is assigned.'
+        : ''
+    }`,
   );
 }
 
@@ -286,10 +404,12 @@ const voidFields = z.object({
  * re-add the corrected record under the same name.
  *
  * See the note at the top of this file: this does NOT yet refuse a vendor
- * other records point at, because no table references `vendors` yet. When
- * `expenses` lands, the count goes inside the transaction below, beside the
- * void, for the reason `voidCostCode` counts inside its own -- the screen was
- * rendered before the expense that now names this vendor was written.
+ * other records point at. That count belongs inside the transaction below,
+ * beside the void, for the reason `voidCostCode` counts inside its own -- the
+ * screen was rendered before the expense that now names this vendor was
+ * written. It is still absent because the tables that reference `vendors` are
+ * being built alongside this change and are still moving. The two settings
+ * screens this change DOES add both count before they void, and both refuse.
  */
 export async function voidVendor(
   _previous: ActionResult | null,
