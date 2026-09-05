@@ -7,6 +7,7 @@ import { db } from '@/db/client';
 import { organization } from '@/db/schema';
 import { requireCapability } from '@/app/settings/actor';
 import { percentField } from '@/app/settings/percent-schema';
+import { parseRateToTenThou } from '@/lib/money/format';
 import { type ActionResult, refused, saved } from '@/app/settings/result';
 import {
   checkbox,
@@ -231,6 +232,7 @@ const financialLabels = {
   paymentTermsDays: 'Payment terms days',
   paymentTermsText: 'Payment terms',
   insuranceStatement: 'Insurance statement',
+  mileageRatePerKm: 'Mileage rate',
   targetMargin: 'Target margin',
 };
 
@@ -263,6 +265,35 @@ const financialSchema = z
     paymentTermsDays: optionalInt(0, 3650),
     paymentTermsText: optionalText(4000),
     insuranceStatement: optionalText(500),
+    /**
+     * What a kilometre driven on a job costs, in ten-thousandths of a
+     * currency unit: $0.7200 is 7200.
+     *
+     * Parsed by the rate parser rather than the percent one, because this is
+     * an amount per unit and not a share of anything -- `parseRateToTenThou`
+     * takes the four decimal places the scale actually holds, where
+     * `percentField` would divide by a hundred and turn 0.72 into 72
+     * ten-thousandths of a cent.
+     *
+     * Required, and floored at zero: the column is NOT NULL, and a blank here
+     * would be a rate of nothing costing every future trip at zero. Capped at
+     * ten currency units a kilometre, which is a decimal point in the wrong
+     * place rather than a policy about how much driving may cost.
+     */
+    mileageRatePerKm: z
+      .string()
+      .transform((value) => value.trim())
+      .refine((value) => value !== '', 'is required')
+      .transform((raw) => parseRateToTenThou(raw))
+      .refine(
+        (value) => value !== null,
+        'must be an amount per kilometre, with at most four decimal places',
+      )
+      .refine(
+        (value) => value === null || (value >= 0n && value <= 100_000n),
+        'must be between 0 and 10.0000 per kilometre',
+      )
+      .transform((value) => value!),
     // Basis points and rate ten-thousandths are the same scale -- 25% is 2500
     // of either -- so the percentage parser converts a target margin exactly.
     targetMargin: percentField({ min: 0, max: 100 }),
@@ -300,12 +331,16 @@ export async function saveFinancial(
   const parsed = financialSchema.safeParse(formValues(formData));
   if (!parsed.success) return invalid(parsed.error, financialLabels);
 
-  const { defaultHoldbackPct, targetMargin, ...rest } = parsed.data;
+  const { defaultHoldbackPct, mileageRatePerKm, targetMargin, ...rest } = parsed.data;
 
   return patchOrganization(
     {
       ...rest,
       defaultHoldbackPctTenThou: defaultHoldbackPct,
+      // What the NEXT trip will cost. Every trip already logged snapshotted
+      // the rate it was driven at onto its own row, so this write cannot
+      // restate one -- which is the whole reason that column exists.
+      mileageRatePerKmTenThou: mileageRatePerKm,
       // Stored as a plain integer count of basis points rather than a scaled
       // bigint, so the conversion happens here and not at the margin gauge.
       targetMarginBp: targetMargin === null ? null : Number(targetMargin),

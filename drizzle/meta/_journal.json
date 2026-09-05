@@ -78,6 +78,20 @@
       "when": 1788574394849,
       "tag": "0010_vendors",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1788575842128,
+      "tag": "0011_job_expenses_and_mileage",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1788576556757,
+      "tag": "0012_schedule_tasks",
+      "breakpoints": true
     }
   ]
 }

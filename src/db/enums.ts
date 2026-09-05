@@ -187,3 +187,51 @@ export const reminderTriggerEnum = pgEnum('reminder_trigger', [
   'quote_sent', 'quote_expiring', 'stage_entered', 'no_activity',
   'site_visit_scheduled', 'project_won',
 ]);
+
+/**
+ * Job expenses, mileage and receipts (spec 3.2, and the mileage section of the
+ * job-costs plan).
+ */
+
+/**
+ * What kind of spend a row records, and the reason `expenses` is one table
+ * rather than two.
+ *
+ * A mileage entry is not a purchase: nobody was paid, no receipt exists, and
+ * there is no tax to claim. It is still a cost against the job, and job
+ * costing is a single query per project only while every cost lives in one
+ * table. The price of that is this discriminator and two columns that are
+ * null on most rows; the price of two tables is every costing query becoming
+ * a union, forever.
+ */
+export const expenseKindEnum = pgEnum('expense_kind', ['purchase', 'mileage']);
+
+/**
+ * How the money left. NOT how it was categorised -- that is `cost_code_id`.
+ *
+ * 'account' is a supplier account billed monthly, which is the one member that
+ * is not an instrument: it says the money has not left yet, which is what the
+ * Phase 4 payables view will read.
+ */
+export const paymentMethodEnum = pgEnum('payment_method', [
+  'cash', 'debit', 'credit', 'cheque', 'etransfer', 'account',
+]);
+
+/**
+ * Where the row came from. 'ocr' and 'import' are created here and left
+ * unused, deliberately: the plan's third decision defers reading receipts, and
+ * adding this column later would be a migration against a table that by then
+ * holds a year of live spend.
+ */
+export const expenseSourceEnum = pgEnum('expense_source', ['manual', 'ocr', 'import']);
+
+/**
+ * How far along the capture workflow a row is (spec 3.3).
+ *
+ * 'review' is what an OCR-proposed row lands in and nothing writes yet.
+ * 'posted' means a person confirmed it, and job costing counts posted rows
+ * only -- which is why every row typed by hand is written 'posted' directly:
+ * a person typing it IS the confirmation step, and a manual row parked at
+ * 'captured' would be spend the owner entered and the costing view ignored.
+ */
+export const expenseStatusEnum = pgEnum('expense_status', ['captured', 'review', 'posted']);

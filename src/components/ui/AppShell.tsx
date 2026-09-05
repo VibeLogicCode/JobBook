@@ -3,8 +3,8 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
-  BellRing, ClipboardList, FileText, HardHat, Home, LayoutTemplate, Moon, Ruler, Settings, Sun,
-  Users,
+  BellRing, ClipboardList, FileText, HardHat, Home, LayoutTemplate, Moon, Receipt, Ruler, Settings,
+  Sun, Users,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
@@ -25,6 +25,10 @@ const DESTINATIONS = [
   // anything on the bottom bar. Vendors are looked up at a desk when a bill
   // arrives or a sub is hired, not thumbed at on site.
   { href: '/vendors', label: 'Vendors', icon: HardHat },
+  // Beside vendors rather than beside the pipeline: these two are the
+  // money-going-out pair, and a bill is entered in the same sitting as the
+  // counterparty it is owed to.
+  { href: '/expenses', label: 'Expenses', icon: Receipt },
   { href: '/templates', label: 'Templates', icon: LayoutTemplate },
   { href: '/settings', label: 'Setup', icon: Settings },
 ];

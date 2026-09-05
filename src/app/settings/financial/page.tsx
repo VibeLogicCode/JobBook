@@ -13,7 +13,7 @@ import {
 } from '@/components/settings/Fields';
 import { Notice } from '@/components/ui/Notice';
 import { Section } from '@/components/settings/Section';
-import { formatBasisPoints } from '@/lib/money/format';
+import { formatBasisPoints, formatRate } from '@/lib/money/format';
 import { RATE_SCALE, divRoundHalfUp } from '@/lib/money/scale';
 
 export const dynamic = 'force-dynamic';
@@ -219,6 +219,40 @@ export default async function FinancialSettingsPage() {
               rows={4}
               defaultValue={org?.paymentTermsText}
               hint="Deposit and draw structure. A quote can override it per job, because a deposit that suits a bathroom does not suit a custom home."
+            />
+
+            <div className="sm:col-span-2">
+              <h3 className="t-heading mt-2">Mileage</h3>
+              <p className="mt-1 max-w-prose t-small text-muted">
+                What a kilometre driven on a job costs. It is configuration rather than a figure
+                written into the product, because the allowance is your tax authority&apos;s and
+                it moves most years — the value below is a starting point, not an authority.
+                Confirm it against whatever is published for the year before you rely on it.
+              </p>
+              <p className="mt-1 max-w-prose t-small text-muted">
+                Changing it sets what the <em>next</em> trip costs. Every trip already logged
+                stored the rate it was driven at on its own entry and is not touched, for the
+                same reason a quote line keeps the price it was quoted at: a trip taken this year
+                has to go on costing what this year cost, and a rate resolved at display time
+                would silently restate every trip ever logged the first January after a change.
+              </p>
+            </div>
+
+            <TextField
+              name="mileageRatePerKm"
+              label="Mileage rate"
+              inputMode="decimal"
+              numeric
+              required
+              suffix="per km"
+              maxLength={10}
+              defaultValue={
+                org?.mileageRatePerKmTenThou === null ||
+                org?.mileageRatePerKmTenThou === undefined
+                  ? ''
+                  : formatRate(org.mileageRatePerKmTenThou)
+              }
+              hint="Four decimal places. Mileage is a cost only — it moves the margin on a job and never appears on anything a customer is sent."
             />
 
             <div className="sm:col-span-2">

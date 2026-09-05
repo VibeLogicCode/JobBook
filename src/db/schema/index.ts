@@ -11,3 +11,5 @@ export * from '@/db/schema/auth';
 export * from '@/db/schema/invoices';
 export * from '@/db/schema/reminders';
 export * from '@/db/schema/vendors';
+export * from '@/db/schema/expenses';
+export * from '@/db/schema/schedule';
