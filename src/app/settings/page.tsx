@@ -61,6 +61,24 @@ export default async function SettingsIndexPage() {
               </span>
             </Link>
           </li>
+          <li>
+            {/* Vendors are their own screen for the same reason scope templates
+                are: a subcontractor is added the day one is hired, which is
+                work rather than configuration, and the mirror of it is
+                `/customers` rather than anything on this nav. The link is here
+                because Setup is where somebody hunts for a list, and because
+                the navigation rail is not this file's to change. */}
+            <Link
+              href="/vendors"
+              className="flex min-h-11 flex-col justify-center rounded-control border border-line px-3 py-2 hover:bg-surface-2"
+            >
+              <span className="font-semibold">Vendors and subcontractors</span>
+              <span className="t-small text-muted">
+                Everyone you pay. Marking somebody a subcontractor is what decides who gets a
+                T5018 and whose WSIB clearance is checked.
+              </span>
+            </Link>
+          </li>
         </ul>
       </Section>
     </div>

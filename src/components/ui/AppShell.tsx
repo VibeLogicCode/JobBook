@@ -3,7 +3,8 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
-  BellRing, ClipboardList, FileText, Home, LayoutTemplate, Moon, Ruler, Settings, Sun, Users,
+  BellRing, ClipboardList, FileText, HardHat, Home, LayoutTemplate, Moon, Ruler, Settings, Sun,
+  Users,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
@@ -20,6 +21,10 @@ const DESTINATIONS = [
   { href: '/projects', label: 'Pipeline', icon: ClipboardList },
   { href: '/customers', label: 'People', icon: Users },
   { href: '/rates', label: 'Rates', icon: Ruler },
+  // Appended after the fifth, so it reaches the rail without displacing
+  // anything on the bottom bar. Vendors are looked up at a desk when a bill
+  // arrives or a sub is hired, not thumbed at on site.
+  { href: '/vendors', label: 'Vendors', icon: HardHat },
   { href: '/templates', label: 'Templates', icon: LayoutTemplate },
   { href: '/settings', label: 'Setup', icon: Settings },
 ];
