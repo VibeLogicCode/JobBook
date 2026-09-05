@@ -12,6 +12,13 @@ import type { NavItem } from '@/components/settings/SettingsNav';
  * rarely, and read by every job for years afterwards. That is the same shape
  * as the tax rates and the users already on this nav, and it is why the entry
  * sits directly under Tax rates.
+ *
+ * Reminder rules sit last of the lists, immediately before Users, because they
+ * are the only setting in this area that WRITES rows on its own. Everything
+ * above decides what a document says when somebody makes one; this decides
+ * what the machine puts in front of him at seven on a Tuesday whether he asked
+ * or not. It is the entry an owner comes looking for when the list has started
+ * making noise, which is the only moment anybody opens it.
  */
 export const SETTINGS_SECTIONS: NavItem[] = [
   {
@@ -48,6 +55,11 @@ export const SETTINGS_SECTIONS: NavItem[] = [
     href: '/settings/cost-codes',
     label: 'Cost codes',
     summary: 'How spend is categorised. Retiring one is not voiding it, and nothing is deleted.',
+  },
+  {
+    href: '/settings/reminder-rules',
+    label: 'Reminder rules',
+    summary: 'What the hourly job decides to chase you about. Off is not gone, and never was.',
   },
   {
     href: '/settings/users',
