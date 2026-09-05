@@ -7,6 +7,52 @@ import { Button } from '@/components/ui/Button';
 import { Notice } from '@/components/ui/Notice';
 
 /**
+ * Writes a submitted FormData back into a form React has just blanked.
+ *
+ * Checkboxes are the case worth spelling out: an unchecked box sends NOTHING,
+ * so its name is absent from the FormData entirely. Reading the entries alone
+ * would leave a box the person had just UNticked still ticked, which is a
+ * silent wrong answer rather than a visible blank. So every checkbox and radio
+ * is cleared first and then set from what was actually sent.
+ *
+ * File inputs are skipped and cannot be otherwise: a browser refuses to let a
+ * script set a file control's value, which is a security property and not a
+ * limitation to work around. A refused form that had a file attached loses the
+ * attachment, and that is worth knowing rather than pretending.
+ */
+function restoreInto(form: HTMLFormElement, data: FormData | null): void {
+  if (!data) return;
+
+  for (const element of form.elements) {
+    if (element instanceof HTMLInputElement && (element.type === 'checkbox' || element.type === 'radio')) {
+      element.checked = false;
+    }
+  }
+
+  for (const [name, value] of data.entries()) {
+    if (typeof value !== 'string') continue;
+    const found = form.elements.namedItem(name);
+    if (!found) continue;
+
+    // A repeated name -- a checkbox group, or radios -- comes back as a
+    // collection rather than one element.
+    const controls = found instanceof RadioNodeList ? Array.from(found) : [found];
+    for (const control of controls) {
+      if (control instanceof HTMLInputElement) {
+        if (control.type === 'file') continue;
+        if (control.type === 'checkbox' || control.type === 'radio') {
+          if (control.value === value) control.checked = true;
+        } else {
+          control.value = value;
+        }
+      } else if (control instanceof HTMLTextAreaElement || control instanceof HTMLSelectElement) {
+        control.value = value;
+      }
+    }
+  }
+}
+
+/**
  * A form whose server action returns a result instead of throwing.
  *
  * The client half of this area is deliberately thin: the fields are plain
@@ -38,8 +84,30 @@ export function ActionForm({
   resetOnSuccess?: boolean;
   destructive?: boolean;
 }) {
-  const [state, formAction] = useActionState<ActionResult | null, FormData>(action, null);
   const formRef = useRef<HTMLFormElement>(null);
+
+  /**
+   * What was typed, kept so a refusal can put it back.
+   *
+   * React resets an uncontrolled form once its action settles, and it cannot
+   * know the action REFUSED -- so a server-side "that code is already taken"
+   * arrived with every field wiped. The person was told what was wrong with
+   * work they could no longer see, on forms running to a dozen fields.
+   *
+   * Restoring here rather than making every field controlled is deliberate:
+   * the fields are server-rendered HTML on purpose, and threading value and
+   * onChange through all of them to solve a problem that belongs to the form
+   * would turn this whole area client-side.
+   */
+  const submitted = useRef<FormData | null>(null);
+
+  const [state, formAction] = useActionState<ActionResult | null, FormData>(
+    async (previous, formData) => {
+      submitted.current = formData;
+      return action(previous, formData);
+    },
+    null,
+  );
 
   // Marking the offending controls is done here rather than by threading an
   // error prop through every field: the fields are server components, and a
@@ -59,6 +127,10 @@ export function ActionForm({
       }
     }
     if (state?.ok && resetOnSuccess) form.reset();
+
+    // A refusal is not a reason to lose the typing. Runs after React's own
+    // reset, which is what makes this a restore rather than a race.
+    if (state && !state.ok) restoreInto(form, submitted.current);
   }, [state, resetOnSuccess]);
 
   return (
