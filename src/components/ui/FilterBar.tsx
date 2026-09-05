@@ -1,5 +1,4 @@
 import Link from 'next/link';
-import { buttonClass } from '@/components/ui/Button';
 import { SubmitButton } from '@/components/ui/SubmitButton';
 import { Card } from '@/components/ui/Card';
 
@@ -58,9 +57,12 @@ export interface FilterSelect {
 /**
  * The one control that reveals what the screen hides by default.
  *
- * `hiddenCount` is not decoration. A list that quietly drops finished records
- * is a list the owner reads as having lost them, so the bar has to say how
- * many are behind the control before he has any reason to press it.
+ * `hiddenCount` is not decoration, and it is not only wording. A list that
+ * quietly drops finished records is a list the owner reads as having lost
+ * them, so the bar has to say how many are behind the control before he has
+ * any reason to press it -- and when the answer is NONE, the control is not
+ * drawn at all. A reveal over nothing is a button whose only effect is to add
+ * empty columns.
  */
 export interface FilterReveal {
   /** The URL parameter, set to `1` when everything is showing. */
@@ -114,15 +116,29 @@ export function FilterBar({
     ? filterHref(basePath, { q, ...current, [reveal.name]: reveal.on ? '' : '1' })
     : undefined;
 
+  /**
+   * The reveal is drawn only when it would DO something.
+   *
+   * It used to render whenever a screen passed one, so on a board with nothing
+   * lost or complete behind it, pressing "Show lost and complete" added two
+   * empty grey columns and changed nothing else -- a control that answers a
+   * question nobody can have asked, taking a full button's height at the top
+   * of a phone screen. It stays visible while it is ON, because the way back
+   * from a revealed list has to be where the way in was.
+   */
+  const revealShown = reveal !== undefined && (reveal.on || reveal.hiddenCount > 0);
+
   return (
     <div className="mb-3 flex flex-col gap-2">
+      {/* A column on a phone; at `sm` and up ONE WRAPPING ROW again -- the
+          select row below sets `sm:contents`, so its children stop being a
+          block and become items of this row. `items-end` so a label above one
+          control does not push its own input out of line with the box beside
+          it. Two rows is what a phone needs and what a monitor wastes. */}
       <form
         method="get"
         action={basePath}
-        // A column on a phone and a wrapping row above it: one DOM tree, and
-        // `items-end` so a label above one control does not push its own
-        // input out of line with the button beside it.
-        className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end"
+        className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end sm:gap-3"
         role="search"
       >
         {/* The reveal is a link, not a checkbox, so it takes one press rather
@@ -130,81 +146,133 @@ export function FilterBar({
             which is what this carries. */}
         {reveal?.on ? <input type="hidden" name={reveal.name} value="1" /> : null}
 
-        <div className="flex min-w-0 flex-col gap-1 sm:flex-1 sm:basis-64">
+        {/* The box and the button that works it, ON ONE ROW. Stacked, they
+            cost a 48px input plus a 44px button plus two gaps before any work
+            appeared, which is most of why the first card on this board sat 600
+            pixels down an 844px phone. Capped at `sm` so the pair stays a
+            control rather than becoming a 900px-wide slot with a button
+            stranded at the far edge of a monitor. */}
+        <div className="flex min-w-0 flex-col gap-1 sm:max-w-xl sm:flex-1 sm:basis-64">
           <label htmlFor="filter-q" className="t-small font-semibold">
             {searchLabel}
           </label>
-          <input
-            id="filter-q"
-            name="q"
-            type="search"
-            defaultValue={q}
-            placeholder={searchPlaceholder}
-            className="field"
-          />
+          {/* No `items-center`: stretch is what makes the button take the
+              input's height, which is 48px on a phone and 32px above it. */}
+          <div className="flex min-w-0 gap-2">
+            <input
+              id="filter-q"
+              name="q"
+              type="search"
+              defaultValue={q}
+              placeholder={searchPlaceholder}
+              className="field min-w-0 flex-1"
+            />
+            {/* `SubmitButton`, not `Button`: this form is a plain GET that the
+                browser posts, so `useFormStatus` reports nothing for it and the
+                search button was the one control in the product that could be
+                pressed twice with nothing on screen to say why. */}
+            <SubmitButton variant="primary" pendingLabel="Searching…">
+              Search
+            </SubmitButton>
+          </div>
         </div>
 
-        {selects.map((select) => (
-          <div key={select.name} className="flex min-w-0 flex-col gap-1 sm:flex-1 sm:basis-44">
-            <label htmlFor={`filter-${select.name}`} className="t-small font-semibold">
-              {select.label}
-            </label>
-            <select
-              id={`filter-${select.name}`}
-              name={select.name}
-              defaultValue={select.value}
-              className="field"
-            >
-              <option value="">{select.anyLabel}</option>
-              {select.options?.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-              {select.groups?.map((group) => (
-                <optgroup key={group.label} label={group.label}>
-                  {group.options.map((option) => (
+        {/* Two selects sit SIDE BY SIDE on a phone, half width each, and each
+            keeps its own label above it -- a select is unreadable without one,
+            and a placeholder option standing in for a label disappears the
+            moment somebody chooses something. A lone select takes the row, in
+            a flex rather than a grid, because half a row of "Type" beside
+            nothing looks like a control that failed to load. */}
+        {selects.length > 0 ? (
+          <div
+            className={
+              selects.length > 1
+                ? 'grid grid-cols-2 gap-2 sm:contents'
+                : 'flex gap-2 sm:contents'
+            }
+          >
+            {selects.map((select) => (
+              <div
+                key={select.name}
+                className="flex min-w-0 flex-1 flex-col gap-1 sm:max-w-xs sm:basis-44"
+              >
+                <label htmlFor={`filter-${select.name}`} className="t-small font-semibold">
+                  {select.label}
+                </label>
+                <select
+                  id={`filter-${select.name}`}
+                  name={select.name}
+                  defaultValue={select.value}
+                  className="field"
+                >
+                  <option value="">{select.anyLabel}</option>
+                  {select.options?.map((option) => (
                     <option key={option.value} value={option.value}>
                       {option.label}
                     </option>
                   ))}
-                </optgroup>
-              ))}
-            </select>
+                  {select.groups?.map((group) => (
+                    <optgroup key={group.label} label={group.label}>
+                      {group.options.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </select>
+              </div>
+            ))}
           </div>
-        ))}
-
-        <div className="flex flex-wrap items-center gap-2">
-          {/* `SubmitButton`, not `Button`: this form is a plain GET that the
-              browser posts, so `useFormStatus` reports nothing for it and the
-              search button was the one control in the product that could be
-              pressed twice with nothing on screen to say why. */}
-          <SubmitButton variant="primary" pendingLabel="Searching…">
-            Search
-          </SubmitButton>
-          {reveal && revealHref ? (
-            <Link href={revealHref} className={buttonClass('secondary')}>
-              {reveal.on ? reveal.hideLabel : reveal.showLabel}
-            </Link>
-          ) : null}
-          {filtered ? (
-            <Link href={basePath} className={buttonClass('secondary')}>
-              Clear
-            </Link>
-          ) : null}
-        </div>
+        ) : null}
       </form>
 
-      {/* Announced, not merely drawn: the count is the answer to what the
-          person just did, and it is the only thing on screen that says a
-          filter removed anything. */}
-      <p role="status" aria-live="polite" className="t-small text-muted">
-        {shown} {shown === 1 ? noun.singular : noun.plural} shown
-        {filtered ? ' · filtered' : ''}
-        {reveal && !reveal.on && reveal.hiddenCount > 0
-          ? ` · ${reveal.hiddenCount} ${reveal.hiddenNoun} hidden`
-          : ''}
-        {reveal?.on ? ` · including ${reveal.hiddenNoun}` : ''}
+      {/* The count, and the two controls that belong WITH it rather than above
+          it. "Show lost and complete" and "Clear" are both statements about
+          what this line is counting, so they read as one sentence with it and
+          cost no extra row -- where as full-height secondary buttons they were
+          the second of two control rows the owner has to scroll past to reach
+          his work. They are links because each is a navigation to another URL,
+          which is also why they sit outside the form. */}
+      <p className="flex flex-wrap items-center gap-x-4 gap-y-1 t-small">
+        {/* Announced, not merely drawn: the count is the answer to what the
+            person just did, and it is the only thing on screen that says a
+            filter removed anything. The live region is the TEXT alone -- with
+            the links inside it, every filter change read the controls out
+            too. */}
+        <span role="status" aria-live="polite" className="min-w-0 text-muted">
+          {shown} {shown === 1 ? noun.singular : noun.plural} shown
+          {filtered ? ' · filtered' : ''}
+          {reveal && !reveal.on && reveal.hiddenCount > 0
+            ? ` · ${reveal.hiddenCount} ${reveal.hiddenNoun} hidden`
+            : ''}
+          {reveal?.on ? ` · including ${reveal.hiddenNoun}` : ''}
+        </span>
+
+        {revealShown || filtered ? (
+          <span className="no-print ml-auto flex shrink-0 items-center gap-x-4">
+            {revealShown && revealHref ? (
+              // `min-h-8` rather than the 44px a button gets: a text link in a
+              // line of prose cannot be 44px tall without becoming the row it
+              // was moved out of, so this is the deliberate trade -- still a
+              // comfortable target, at a third of the height.
+              <Link
+                href={revealHref}
+                className="inline-flex min-h-8 items-center text-accent-text hover:underline"
+              >
+                {reveal.on ? reveal.hideLabel : reveal.showLabel}
+              </Link>
+            ) : null}
+            {filtered ? (
+              <Link
+                href={basePath}
+                className="inline-flex min-h-8 items-center text-accent-text hover:underline"
+              >
+                Clear
+              </Link>
+            ) : null}
+          </span>
+        ) : null}
       </p>
     </div>
   );

@@ -11,7 +11,7 @@ import {
 } from '@/components/detail/labels';
 import { Board } from '@/components/pipeline/Board';
 import {
-  boardStages, CLOSED_STAGES, nextReminderByProject, SHARED_STAGES, type PipelineCard,
+  CLOSED_STAGES, nextReminderByProject, SHARED_STAGES, showsClosed, type PipelineCard,
 } from '@/components/pipeline/columns';
 import { normalizeSearch, searchCondition } from '@/lib/list/search';
 import { tenantToday } from '@/lib/quote/dates';
@@ -118,9 +118,12 @@ export default async function ProjectsPage({
 
   const closed = inArray(projects.stage, CLOSED_STAGES);
 
-  // Asking for a finished stage overrides the default hiding, so choosing
-  // "Lost" does not return an empty screen.
-  const showClosed = params.closed === '1' || CLOSED_STAGES.includes(stage as ProjectStage);
+  // The `closed` parameter as the board reads it, so the query and the columns
+  // cannot disagree about whether finished work is on screen. `showsClosed`
+  // holds the rule -- including that asking for a finished stage overrides the
+  // default hiding, so choosing "Lost" does not return an empty screen.
+  const closedParam = params.closed === '1' ? '1' : '';
+  const showClosed = showsClosed({ stage, closed: closedParam });
 
   const search = searchCondition(q, [
     projects.name,
@@ -149,8 +152,14 @@ export default async function ProjectsPage({
       id: projects.id,
       projectNumber: projects.projectNumber,
       name: projects.name,
+      // The town, because a contractor names a job by where it is.
+      siteCity: projects.siteCity,
       stage: projects.stage,
       scheduledStart: projects.scheduledStart,
+      // The end DATE a running job is working towards. Scheduled, not actual:
+      // an actual end is a job that is finished, and a finished job is not on
+      // this board by default.
+      scheduledEnd: projects.scheduledEnd,
       actualStart: projects.actualStart,
       customerName: customers.name,
       // Contract value is DERIVED from accepted quotes, never stored: two
@@ -210,13 +219,18 @@ export default async function ProjectsPage({
     projectNumber: row.projectNumber,
     name: row.name,
     customerName: row.customerName,
+    siteCity: row.siteCity,
     stage: row.stage,
     isJob: Number(row.acceptedQuotes) > 0,
     contractValueCents: Number(row.contractValueCents),
     daysInStage: row.daysInStage === null ? null : Number(row.daysInStage),
-    // Actual start beats scheduled: once a job has really begun, the date it
-    // was meant to begin is history the detail screen keeps for slippage.
-    startsOn: row.actualStart ?? row.scheduledStart ?? null,
+    // The three dates are handed over as they are stored. Which of them a card
+    // says, and in what words, is `columns.ts`'s decision -- a running job
+    // reports the day it really started and the day it is due to finish, and
+    // everything else reports when it begins.
+    scheduledStart: row.scheduledStart,
+    actualStart: row.actualStart,
+    scheduledEnd: row.scheduledEnd,
   }));
 
   // The next thing to do about each card. Two small queries and only when
@@ -247,12 +261,13 @@ export default async function ProjectsPage({
 
   return (
     <div className="px-4 py-4 sm:px-6">
+      {/* No description. It said that value is contract value derived from
+          accepted quotes and that unwon work carries none -- a docblock shown
+          to the user, four lines down a phone screen, explaining an absence
+          the Opportunities band now states by being called that. */}
       <PageHeader
         className="mb-4"
         title="Pipeline"
-        // Said out loud because the board shows no figure on most of its left
-        // half, and a reader who does not know why reads it as broken.
-        description="Value is contract value, derived from accepted quotes — work that has not been won carries none."
         actions={
           <Link href="/projects/new" className={buttonClass('primary')}>
             New opportunity
@@ -321,12 +336,11 @@ export default async function ProjectsPage({
       ) : (
         <Board
           cards={cards}
-          stages={boardStages({ stage, kind, showClosed }, cards.map((card) => card.stage))}
           reminderOf={reminderOf}
           today={today}
           basePath="/projects"
-          filters={{ q, kind, closed: params.closed === '1' ? '1' : '' }}
-          stageFiltered={stage !== ''}
+          filters={{ q, stage, kind, closed: closedParam }}
+          showClosed={showClosed}
         />
       )}
     </div>
