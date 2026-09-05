@@ -62,6 +62,22 @@ function readKind(raw: string | undefined): 'opportunity' | 'job' | '' {
   return raw === 'opportunity' || raw === 'job' ? raw : '';
 }
 
+/**
+ * What to call the things counted, which depends on what is being shown.
+ *
+ * "5 records" is the word a database uses, and this product deliberately does
+ * not: an opportunity and a job are the same row at different stages, and the
+ * distinction is the one the owner actually thinks in -- `workNoun` exists so
+ * that every other screen says it. Once the list is narrowed to one half, the
+ * count can say which half. Unfiltered it names both rather than reaching for
+ * a generic that means nothing to him.
+ */
+function countNoun(kind: 'opportunity' | 'job' | ''): { singular: string; plural: string } {
+  if (kind === 'job') return { singular: 'job', plural: 'jobs' };
+  if (kind === 'opportunity') return { singular: 'opportunity', plural: 'opportunities' };
+  return { singular: 'opportunity or job', plural: 'opportunities and jobs' };
+}
+
 export default async function ProjectsPage({
   searchParams,
 }: {
@@ -200,7 +216,7 @@ export default async function ProjectsPage({
           hiddenNoun: 'closed',
         }}
         shown={rows.length}
-        noun={{ singular: 'record', plural: 'records' }}
+        noun={countNoun(kind)}
       />
 
       {rows.length === 0 ? (
