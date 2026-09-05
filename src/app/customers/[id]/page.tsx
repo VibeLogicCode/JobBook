@@ -13,6 +13,7 @@ import { CustomerForm } from '@/components/detail/CustomerForm';
 import { DetailList, DetailRow, EmptyState, Panel } from '@/components/detail/Panel';
 import { VoidControl } from '@/components/detail/VoidControl';
 import { tenantIsoToday } from '@/components/detail/dates';
+import { AddReminderForm } from '@/components/reminders/AddReminderForm';
 import { LogActivityForm } from '@/components/timeline/LogActivityForm';
 import { Timeline } from '@/components/timeline/Timeline';
 import { listTimeline } from '@/lib/reminders/repository';
@@ -244,11 +245,22 @@ export default async function CustomerPage({
           up as silence -- and the `no_activity` rule reads exactly this. */}
       <Panel title="Activity">
         {active ? (
-          <div className="mb-4">
+          <div className="mb-4 flex flex-wrap gap-2">
             <LogActivityForm
               entityType="customer"
               entityId={customer.id}
               today={today}
+            />
+            {/* Beside logging, not under it. Both answer "what about this
+                record?" -- one records what already happened, the other puts
+                something on the screen for a morning still to come -- and a
+                reminder control anywhere else is one the owner has to go
+                looking for. Secondary, so it does not compete with the
+                primary action next to it. */}
+            <AddReminderForm
+              entityType="customer"
+              entityId={customer.id}
+              label={customer.name}
             />
           </div>
         ) : null}

@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { db } from '@/db/client';
 import { Card } from '@/components/ui/Card';
 import { FilterBar, NoMatches } from '@/components/ui/FilterBar';
+import { PageHeader } from '@/components/ui/PageHeader';
 import { ReminderList } from '@/components/reminders/ReminderList';
 import { normalizeSearch } from '@/lib/list/search';
 import { tenantToday } from '@/lib/quote/dates';
@@ -47,9 +48,17 @@ export default async function RemindersPage({
 
   return (
     <div className="px-4 py-4 sm:px-6">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-        <h1 className="t-title">Reminders</h1>
-      </div>
+      {/* No action in the header, and that is the answer to the obvious
+          question rather than an oversight: nothing on this screen creates a
+          reminder. The hourly evaluator writes them from the owner's rules,
+          and this is where they are dealt with -- so the description says so,
+          because a screen with no add button and no explanation reads as a
+          screen with a missing button. */}
+      <PageHeader
+        className="mb-4"
+        title="Reminders"
+        description="Written by the hourly evaluator from your rules, not by hand. This is where they get completed, deferred, moved out or dismissed."
+      />
 
       <FilterBar
         basePath="/reminders"

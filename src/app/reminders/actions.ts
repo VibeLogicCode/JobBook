@@ -3,12 +3,18 @@
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { db } from '@/db/client';
+import { timelineEntityTypeEnum } from '@/db/enums';
 import type { FormResult } from '@/components/detail/form-state';
+import {
+  DUE_VALUES, ON_A_DATE, REMINDER_KIND_CHOICES, dueOffsetDays,
+} from '@/components/reminders/new-reminder';
 import { guard } from '@/lib/auth/guard';
 import { addDays, tenantToday } from '@/lib/quote/dates';
 import {
-  completeReminder, dismissReminder, rescheduleReminder, snoozeReminder,
+  completeReminder, createReminder, describeEntities, dismissReminder, entityKey,
+  rescheduleReminder, snoozeReminder,
 } from '@/lib/reminders/repository';
+import type { EntityType, ReminderKind } from '@/lib/reminders/types';
 
 /**
  * What the reminder screen may do to a reminder.
@@ -46,6 +52,67 @@ const rescheduleFields = withId.extend({
     .trim()
     .regex(/^\d{4}-\d{2}-\d{2}$/, 'that is not a date'),
 });
+
+/**
+ * The record types a reminder may hang off, read from the enum the column is
+ * declared with rather than restated here.
+ *
+ * `entity_type`/`entity_id` is a polymorphic reference and the database cannot
+ * enforce it, so this is the only place the pair is checked at all -- and a
+ * list retyped in an action is a list that goes stale the day a fourth type
+ * lands. The cast is the tuple shape `z.enum` wants; the values are the
+ * enum's.
+ */
+const ENTITY_TYPES = timelineEntityTypeEnum.enumValues as readonly [EntityType, ...EntityType[]];
+
+/**
+ * And the kinds a PERSON may pick, which is a shorter list than the enum on
+ * purpose -- see `REMINDER_KIND_CHOICES`. Validated against the same constant
+ * the dropdown renders from, so the form and the action cannot disagree.
+ */
+const KINDS = REMINDER_KIND_CHOICES as readonly [ReminderKind, ...ReminderKind[]];
+
+const DUE = DUE_VALUES as readonly [string, ...string[]];
+
+const createFields = z
+  .object({
+    entityType: z.enum(ENTITY_TYPES, 'that record type is not valid'),
+    entityId: z.string().uuid('that record id is not valid'),
+    title: z
+      .string()
+      .trim()
+      .min(1, 'say what the reminder is for')
+      .max(300, 'that title is too long'),
+    /**
+     * Days, not a date, for the reason `snoozeFields` gives above: the offset
+     * is resolved against `tenantToday` below, so a device whose clock is a
+     * day out cannot file a reminder on a day nobody meant.
+     */
+    when: z.enum(DUE, 'say when this is due'),
+    dueOn: z
+      .string()
+      .trim()
+      .optional()
+      .transform((value) => (value === undefined || value === '' ? undefined : value))
+      .refine(
+        (value) => value === undefined || /^\d{4}-\d{2}-\d{2}$/.test(value),
+        'that is not a date',
+      ),
+    kind: z.enum(KINDS, 'say what kind of reminder this is'),
+    detail: z
+      .string()
+      .trim()
+      .max(20_000, 'that is longer than this field will hold')
+      .optional()
+      .transform((value) => (value === undefined || value === '' ? null : value)),
+  })
+  // The date field only means anything on the one choice that asks for it, and
+  // a form posted with 'On a date' and nothing in the box would otherwise fall
+  // through to today -- a reminder due on a day the owner did not pick.
+  .refine(
+    (value) => value.when !== ON_A_DATE || value.dueOn !== undefined,
+    'pick the day it is due',
+  );
 
 function fields(formData: FormData): Record<string, string> {
   const out: Record<string, string> = {};
@@ -181,6 +248,73 @@ export async function dismissReminderAction(
     return { ok: false, error: failureText(error) };
   }
 
+  revalidateReminderScreens();
+  return { ok: true };
+}
+
+/**
+ * A reminder somebody wrote by hand, against the record he was looking at.
+ *
+ * The four actions above are what the screen does to a reminder a RULE
+ * produced. This is the one that puts a reminder there in the first place, and
+ * without it the whole screen is a list of things the machine thought of --
+ * which is not the list the owner keeps in his head. "Call Dave back Thursday"
+ * has no rule and never will.
+ *
+ * `generated_by_rule_id` stays NULL, which `createReminder` guarantees and
+ * this action deliberately offers no way to set. That is what keeps the row
+ * outside `reminders_one_open_per_rule` -- PostgreSQL treats nulls as distinct
+ * -- so the same reminder may be written twice, and the hourly evaluation
+ * never mistakes one of these for its own work.
+ */
+export async function createReminderAction(
+  _state: FormResult | null,
+  formData: FormData,
+): Promise<FormResult> {
+  const parsed = createFields.safeParse(fields(formData));
+  if (!parsed.success) return { ok: false, error: firstProblem(parsed.error) };
+
+  const { entityType, entityId, title, when, dueOn, kind, detail } = parsed.data;
+
+  let href: string;
+  try {
+    const allowed = await guard('quote:write');
+    if (!allowed.ok) return { ok: false, error: allowed.error };
+
+    // WHICH DAY, decided here rather than in the browser. `tenantToday` reads
+    // the organization's zone out of PostgreSQL; `new Date()` in a UTC
+    // container after 7pm Toronto is already tomorrow, and "today" would file
+    // the reminder a day late every evening.
+    const today = await db.transaction((tx) => tenantToday(tx));
+    const offset = dueOffsetDays(when);
+    const due = offset === null ? dueOn! : addDays(today, offset);
+
+    // The pair is polymorphic, so nothing in the schema refuses a reminder
+    // pointing at a row that is not there. A stale tab and a hand-made POST
+    // both arrive here, and a reminder against a deleted-in-spirit record
+    // would sit on the screen for ever with nothing to open.
+    const found = await describeEntities([{ entityType, entityId }]);
+    const entity = found.get(entityKey(entityType, entityId));
+    if (!entity) return { ok: false, error: 'that record could not be found' };
+    href = entity.href;
+
+    await createReminder({
+      entityType,
+      entityId,
+      title,
+      dueOn: due,
+      kind,
+      detail,
+      actorId: allowed.actor.id,
+    });
+  } catch (error) {
+    return { ok: false, error: failureText(error) };
+  }
+
+  // The record it was written against, as well as the two reminder screens:
+  // the panel on that page counts open reminders, and a count that has not
+  // moved is how the owner concludes the button did nothing.
+  revalidatePath(href);
   revalidateReminderScreens();
   return { ok: true };
 }

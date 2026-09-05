@@ -16,6 +16,7 @@ import { ProjectForm } from '@/components/detail/ProjectForm';
 import { StageControl } from '@/components/detail/StageControl';
 import { StageTimeline } from '@/components/detail/StageTimeline';
 import { tenantIsoToday } from '@/components/detail/dates';
+import { AddReminderForm } from '@/components/reminders/AddReminderForm';
 import { LogActivityForm } from '@/components/timeline/LogActivityForm';
 import { Timeline } from '@/components/timeline/Timeline';
 import { listTimeline } from '@/lib/reminders/repository';
@@ -295,11 +296,22 @@ export default async function ProjectPage({
           because a form nobody scrolls to is a form nobody fills in. */}
       <Panel title="Activity">
         {active ? (
-          <div className="mb-4">
+          <div className="mb-4 flex flex-wrap gap-2">
             <LogActivityForm
               entityType="project"
               entityId={project.id}
               today={today}
+            />
+            {/* Beside logging, not under it. Both answer "what about this
+                record?" -- one records what already happened, the other puts
+                something on the screen for a morning still to come -- and a
+                reminder control anywhere else is one the owner has to go
+                looking for. Secondary, so it does not compete with the
+                primary action next to it. */}
+            <AddReminderForm
+              entityType="project"
+              entityId={project.id}
+              label={project.name}
             />
           </div>
         ) : null}
