@@ -16,6 +16,7 @@ import { Notice } from '@/components/ui/Notice';
 export function ActionForm({
   action,
   submitLabel,
+  pendingLabel,
   children,
   disabled,
   disabledNote,
@@ -24,6 +25,12 @@ export function ActionForm({
 }: {
   action: FormAction;
   submitLabel: string;
+  /**
+   * The verb for what is actually happening, when "Saving…" is the wrong
+   * word. `Submit` has taken one of these since it was written; nothing could
+   * reach it, because this component never passed it on.
+   */
+  pendingLabel?: string;
   children: React.ReactNode;
   /** True when the signed-in role may read this screen but not change it. */
   disabled?: boolean;
@@ -81,7 +88,12 @@ export function ActionForm({
       {disabled && disabledNote ? <Notice tone="warning">{disabledNote}</Notice> : null}
 
       <div className="flex items-center gap-3">
-        <Submit label={submitLabel} disabled={disabled} destructive={destructive} />
+        <Submit
+          label={submitLabel}
+          pendingLabel={pendingLabel}
+          disabled={disabled}
+          destructive={destructive}
+        />
       </div>
     </form>
   );

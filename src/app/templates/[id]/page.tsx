@@ -26,6 +26,8 @@ import {
   TextField,
 } from '@/components/settings/Fields';
 import { Notice } from '@/components/ui/Notice';
+import { buttonClass } from '@/components/ui/Button';
+import { PageHeader } from '@/components/ui/PageHeader';
 import { Section } from '@/components/settings/Section';
 import { Pill } from '@/components/ui/Pill';
 import { AmountCell, TableWrap } from '@/components/ui/Table';
@@ -88,25 +90,28 @@ export default async function TemplateDetailPage({
 
   return (
     <div className="px-4 py-4 sm:px-6">
-      <div className="mb-1 flex flex-wrap items-center gap-2">
-        <Link href="/templates" className="t-small text-accent-text underline underline-offset-2">
-          Scope templates
-        </Link>
-        <span className="t-small text-subtle" aria-hidden>
-          /
-        </span>
-        <h1 className="t-title">{template.name}</h1>
-        {template.isActive ? (
-          <Pill tone="positive">Available</Pill>
-        ) : (
-          <Pill tone="neutral">Retired</Pill>
-        )}
-      </div>
-      <p className="mb-4 max-w-prose t-small text-muted">
-        Every line names a rate item and a rule for its quantity. Nothing here reaches a quote
-        already written: a quote line copies its description, rates and cost code at the moment
-        it is created, so this screen is a starting point and never a live reference.
-      </p>
+      <PageHeader
+        className="mb-4"
+        eyebrow={
+          <>
+            <Link href="/templates" className="text-accent-text underline underline-offset-2">
+              Scope templates
+            </Link>
+            {template.isActive ? (
+              <Pill tone="positive">Available</Pill>
+            ) : (
+              <Pill tone="neutral">Retired</Pill>
+            )}
+          </>
+        }
+        title={template.name}
+        description="Every line names a rate item and a rule for its quantity. Nothing here reaches a quote already written: a quote line copies its description, rates and cost code at the moment it is created, so this screen is a starting point and never a live reference."
+        actions={
+          <a href="#add-line" className={buttonClass('primary')}>
+            Add a line
+          </a>
+        }
+      />
 
       <div className="flex flex-col gap-4">
         <Section title="Template">
@@ -382,6 +387,7 @@ export default async function TemplateDetailPage({
           </TableWrap>
         </Section>
 
+        <div id="add-line" tabIndex={-1} className="scroll-mt-4">
         <Section
           title="Add a line"
           description={
@@ -487,6 +493,7 @@ export default async function TemplateDetailPage({
             </ActionForm>
           )}
         </Section>
+        </div>
       </div>
     </div>
   );

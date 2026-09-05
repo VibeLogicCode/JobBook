@@ -82,14 +82,26 @@ export function AppShell({
                 <Link
                   href={href}
                   aria-current={active ? 'page' : undefined}
-                  className={`flex min-h-11 items-center gap-3 rounded-control px-3 ${
+                  // `relative` so the collapsed label below has a containing
+                  // block of its own: `.sr-only` is `position: absolute`, and
+                  // an unpositioned ancestor hands it the page instead, which
+                  // is how an off-screen span ends up widening the document.
+                  className={`relative flex min-h-11 items-center gap-3 rounded-control px-3 ${
                     active
                       ? 'bg-accent-soft text-accent-soft-fg'
                       : 'text-muted hover:bg-surface-2 hover:text-ink'
                   }`}
                 >
                   <Icon size={18} aria-hidden />
-                  <span className="hidden xl:inline">{label}</span>
+                  {/* `sr-only`, not `hidden`. Between `sm` and `xl` the rail is
+                      icons only, and `hidden` removes the label from the
+                      accessibility tree along with the layout -- so every
+                      destination in this list became an unnamed link, on the
+                      one navigation a screen reader is meant to use. The icon
+                      is `aria-hidden`, so there was nothing else to fall back
+                      on: eight links announced as "link". Now the word is
+                      always in the tree and only its box collapses. */}
+                  <span className="sr-only xl:not-sr-only xl:inline">{label}</span>
                 </Link>
               </li>
             );

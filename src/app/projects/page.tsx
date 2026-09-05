@@ -5,6 +5,7 @@ import { customers, projects, quotes } from '@/db/schema';
 import { buttonClass } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { FilterBar, NoMatches } from '@/components/ui/FilterBar';
+import { PageHeader } from '@/components/ui/PageHeader';
 import { Pill } from '@/components/ui/Pill';
 import { AmountCell, TableWrap } from '@/components/ui/Table';
 import {
@@ -176,15 +177,15 @@ export default async function ProjectsPage({
 
   return (
     <div className="px-4 py-4 sm:px-6">
-      <div className="mb-4 flex flex-wrap items-center gap-3">
-        <h1 className="t-title">Pipeline</h1>
-        <Link
-          href="/projects/new"
-          className={buttonClass('primary', { className: 'ml-auto' })}
-        >
-          New opportunity
-        </Link>
-      </div>
+      <PageHeader
+        className="mb-4"
+        title="Pipeline"
+        actions={
+          <Link href="/projects/new" className={buttonClass('primary')}>
+            New opportunity
+          </Link>
+        }
+      />
 
       <FilterBar
         basePath="/projects"

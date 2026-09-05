@@ -103,6 +103,27 @@ describe('the primitives themselves', () => {
     expect(offences).toEqual([]);
   });
 
+  it('never animates without saying what a reduced-motion reader gets instead', async () => {
+    // A spinner is motion. Somebody who has asked their operating system for
+    // less of it is entitled to a busy indication, not to nothing -- so every
+    // animated element here pairs its animation with the reduced-motion case
+    // rather than relying on a global rule in a file three directories away.
+    const offences = (await primitiveSources())
+      .filter(({ text }) => text.includes('animate-spin') && !text.includes('motion-reduce:'))
+      .map(({ name }) => name);
+    expect(offences).toEqual([]);
+  });
+
+  it('leaves the button pending prop undefaulted, which is what reserves the spinner', async () => {
+    // The pending and idle labels are stacked in one grid cell so the button
+    // cannot change width as it goes busy -- a control that resizes under the
+    // pointer is a control the second press misses. Passing `pending` at all
+    // is what opts into that reserved width, so a default of `false` would
+    // silently widen every button in the product by a spinner.
+    const button = (await primitiveSources()).find(({ name }) => name === 'Button.tsx');
+    expect(button?.text).not.toContain('pending = false');
+  });
+
   it('leaves no primitive without its reasoning', async () => {
     // The comments are the part of this port that was worth carrying. A file
     // that arrives here with none is a file the next person will rewrite from

@@ -5,6 +5,7 @@ import { customers } from '@/db/schema';
 import { buttonClass } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { FilterBar, NoMatches } from '@/components/ui/FilterBar';
+import { PageHeader } from '@/components/ui/PageHeader';
 import { Pill } from '@/components/ui/Pill';
 import { TableWrap } from '@/components/ui/Table';
 import { CUSTOMER_TYPES } from '@/components/detail/labels';
@@ -63,15 +64,15 @@ export default async function CustomersPage({
 
   return (
     <div className="px-4 py-4 sm:px-6">
-      <div className="mb-4 flex flex-wrap items-center gap-3">
-        <h1 className="t-title">People</h1>
-        <Link
-          href="/customers/new"
-          className={buttonClass('primary', { className: 'ml-auto' })}
-        >
-          New customer
-        </Link>
-      </div>
+      <PageHeader
+        className="mb-4"
+        title="People"
+        actions={
+          <Link href="/customers/new" className={buttonClass('primary')}>
+            New customer
+          </Link>
+        }
+      />
 
       <FilterBar
         basePath="/customers"

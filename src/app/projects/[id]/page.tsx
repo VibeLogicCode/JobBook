@@ -6,6 +6,7 @@ import { customers, organization, projects, quotes, stageHistory } from '@/db/sc
 import { buttonClass } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Notice } from '@/components/ui/Notice';
+import { PageHeader } from '@/components/ui/PageHeader';
 import { Pill, statusTone } from '@/components/ui/Pill';
 import { AmountCell, TableWrap } from '@/components/ui/Table';
 import { formatBasisPoints, formatCents } from '@/lib/money/format';
@@ -125,14 +126,17 @@ export default async function ProjectPage({
       {/* Identity and the actions only. What the job is worth, who it is for
           and where it stands all read from the one block below, because the
           fact in two places is how this screen went wrong before. */}
-      <header className="flex flex-wrap items-center gap-x-3 gap-y-1">
-        <h1 className="t-title">{project.name}</h1>
-        <span className="num t-small text-muted">{project.projectNumber}</span>
-        <span className="t-small text-subtle">{noun}</span>
-        {active ? null : <Pill tone="negative">Void</Pill>}
-
-        <div className="no-print ml-auto flex flex-wrap gap-2">
-          {active && !editing ? (
+      <PageHeader
+        eyebrow={
+          <>
+            <span className="num">{project.projectNumber}</span>
+            <span>{noun}</span>
+            {active ? null : <Pill tone="negative">Void</Pill>}
+          </>
+        }
+        title={project.name}
+        actions={
+          active && !editing ? (
             <>
               <Link href={`/projects/${project.id}?edit=1`} className={buttonClass('secondary')}>
                 Edit
@@ -154,9 +158,9 @@ export default async function ProjectPage({
                 New quote
               </Link>
             </>
-          ) : null}
-        </div>
-      </header>
+          ) : null
+        }
+      />
 
       {/* Where the job stands, in one place: what it is worth, what it is,
           and which stage it is in. A stage with a panel of its own read as a
@@ -296,7 +300,6 @@ export default async function ProjectPage({
               entityType="project"
               entityId={project.id}
               today={today}
-              startOpen={timeline.length === 0}
             />
           </div>
         ) : null}

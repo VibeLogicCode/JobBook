@@ -8,6 +8,7 @@ import { PROJECT_TYPE_LABELS, PROJECT_TYPE_OPTIONS } from '@/app/templates/schem
 import { ActionForm, RowAction } from '@/components/settings/ActionForm';
 import { FieldGrid, SelectField, TextAreaField, TextField } from '@/components/settings/Fields';
 import { Notice } from '@/components/ui/Notice';
+import { PageHeader } from '@/components/ui/PageHeader';
 import { Section } from '@/components/settings/Section';
 import { buttonClass } from '@/components/ui/Button';
 import { Pill } from '@/components/ui/Pill';
@@ -40,12 +41,20 @@ export default async function TemplatesPage() {
 
   return (
     <div className="px-4 py-4 sm:px-6">
-      <h1 className="t-title mb-1">Scope templates</h1>
-      <p className="mb-4 max-w-prose t-small text-muted">
-        A template is a line set plus the rule for each quantity. Choose one on a quote, enter
-        the measurements, and the whole scope generates — then adjust it. It is the difference
-        between quoting from a list and quoting from memory.
-      </p>
+      <PageHeader
+        className="mb-4"
+        title="Scope templates"
+        description="A template is a line set plus the rule for each quantity. Choose one on a quote, enter the measurements, and the whole scope generates — then adjust it. It is the difference between quoting from a list and quoting from memory."
+        actions={
+          // The form that does this is the second panel down, which on a
+          // tenant with a dozen templates is below the fold. The action is
+          // still one press; it just starts from the top of the screen, where
+          // a page's controls belong.
+          <a href="#create-template" className={buttonClass('primary')}>
+            Create a template
+          </a>
+        }
+      />
 
       <div className="flex flex-col gap-4">
         <Section title="Templates">
@@ -132,6 +141,9 @@ export default async function TemplatesPage() {
           </TableWrap>
         </Section>
 
+        {/* `tabIndex` so the jump from the header moves the keyboard focus
+            here too, rather than only the scroll position. */}
+        <div id="create-template" tabIndex={-1} className="scroll-mt-4">
         <Section
           title="Create a template"
           description={
@@ -181,6 +193,7 @@ export default async function TemplatesPage() {
             </FieldGrid>
           </ActionForm>
         </Section>
+        </div>
       </div>
     </div>
   );

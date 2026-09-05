@@ -7,11 +7,13 @@ import { IssueForm } from '@/app/billing/[projectId]/IssueForm';
 import { DetailList, DetailRow, EmptyState } from '@/components/detail/Panel';
 import { Field, SelectField } from '@/components/detail/Fields';
 import { tenantIsoToday } from '@/components/detail/dates';
-import { Button, buttonClass } from '@/components/ui/Button';
+import { buttonClass } from '@/components/ui/Button';
+import { SubmitButton } from '@/components/ui/SubmitButton';
 import { Card, CardBody, CardHeader } from '@/components/ui/Card';
 import { MetricCard } from '@/components/ui/MetricCard';
 import { Money } from '@/components/ui/Money';
 import { Notice } from '@/components/ui/Notice';
+import { PageHeader } from '@/components/ui/PageHeader';
 import { Pill, type Tone } from '@/components/ui/Pill';
 import { ProgressBar } from '@/components/ui/ProgressBar';
 import { SectionHeader } from '@/components/ui/SectionHeader';
@@ -170,19 +172,26 @@ export default async function BillingPage({
 
   return (
     <div className="grid gap-4 px-4 py-4 sm:px-6">
-      <header className="flex flex-wrap items-center gap-x-3 gap-y-1">
-        <h1 className="t-title">Billing</h1>
-        <Pill tone={isJob ? 'positive' : 'neutral'}>{isJob ? 'Job' : 'Opportunity'}</Pill>
-        {project.recordStatus === 'active' ? null : <Pill tone="negative">Void</Pill>}
-        <Link href={`/projects/${projectId}`} className={`${buttonClass('secondary')} ml-auto`}>
-          Open the job
-        </Link>
-      </header>
-
-      <p className="t-small text-muted">
-        <span className="num">{project.projectNumber}</span> · {project.name} ·{' '}
-        {job.customerCompany ?? job.customerName}
-      </p>
+      <PageHeader
+        eyebrow={
+          <>
+            <Pill tone={isJob ? 'positive' : 'neutral'}>{isJob ? 'Job' : 'Opportunity'}</Pill>
+            {project.recordStatus === 'active' ? null : <Pill tone="negative">Void</Pill>}
+          </>
+        }
+        title="Billing"
+        description={
+          <>
+            <span className="num">{project.projectNumber}</span> · {project.name} ·{' '}
+            {job.customerCompany ?? job.customerName}
+          </>
+        }
+        actions={
+          <Link href={`/projects/${projectId}`} className={buttonClass('secondary')}>
+            Open the job
+          </Link>
+        }
+      />
 
       {issued ? (
         <Notice tone="positive" title="Invoice issued">
@@ -284,9 +293,13 @@ export default async function BillingPage({
                 />
                 <Field label="Issue date" name="issue" type="date" defaultValue={issueDate} />
                 <div className="lg:pb-6">
-                  <Button type="submit" variant="secondary" size="lg">
+                  {/* A GET that the browser posts, so React's form status
+                      hook cannot see it -- `SubmitButton` watches the form's
+                      own submit event instead. Pricing a draw is a round trip
+                      that reads the whole invoice history of the job. */}
+                  <SubmitButton variant="secondary" size="lg" pendingLabel="Pricing…">
                     Price this draw
-                  </Button>
+                  </SubmitButton>
                 </div>
               </form>
 

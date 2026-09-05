@@ -6,6 +6,7 @@ import { customers, projects, quotes } from '@/db/schema';
 import { buttonClass } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { FilterBar, NoMatches } from '@/components/ui/FilterBar';
+import { PageHeader } from '@/components/ui/PageHeader';
 import { Pill, statusTone } from '@/components/ui/Pill';
 import { AmountCell, TableWrap } from '@/components/ui/Table';
 import { normalizeSearch, searchCondition } from '@/lib/list/search';
@@ -135,12 +136,15 @@ export default async function QuotesPage({
 
   return (
     <div className="px-4 py-4 sm:px-6">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-        <h1 className="t-title">Quotes</h1>
-        <Link href="/quotes/new" className={buttonClass('primary')}>
-          New quote
-        </Link>
-      </div>
+      <PageHeader
+        className="mb-4"
+        title="Quotes"
+        actions={
+          <Link href="/quotes/new" className={buttonClass('primary')}>
+            New quote
+          </Link>
+        }
+      />
 
       <FilterBar
         basePath="/quotes"

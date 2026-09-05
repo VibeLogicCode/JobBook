@@ -5,18 +5,25 @@ import { customers, organization, projects, quotes } from '@/db/schema';
 import { buttonClass } from '@/components/ui/Button';
 import { Card, CardBody, CardFooter, CardHeader } from '@/components/ui/Card';
 import { MetricCard } from '@/components/ui/MetricCard';
+import { PageHeader } from '@/components/ui/PageHeader';
 import { Money } from '@/components/ui/Money';
 import { Pill, statusTone } from '@/components/ui/Pill';
 import { ReminderList } from '@/components/reminders/ReminderList';
 import { formatCents } from '@/lib/money/format';
 import { tenantToday } from '@/lib/quote/dates';
 import { listReminders, type ReminderRow } from '@/lib/reminders/repository';
-import { urgencyOf } from '@/components/reminders/urgency';
+import { NEEDS_ATTENTION, urgencyOf } from '@/components/reminders/urgency';
 
 export const dynamic = 'force-dynamic';
 
 /** What the panel will show before it starts asking to be scrolled. */
-const PANEL_ROWS = 8;
+/**
+ * Eight rows could fill half a laptop screen before the owner reached the
+ * figures underneath, which was the complaint. Five is enough to see that a
+ * morning is busy without the panel becoming the page; past that the count in
+ * the footer says how many more, and the reminders screen holds them all.
+ */
+const PANEL_ROWS = 5;
 
 export default async function TodayPage() {
   const [org] = await db.select().from(organization).where(eq(organization.id, 1));
@@ -24,12 +31,16 @@ export default async function TodayPage() {
   if (!org) {
     return (
       <div className="px-4 py-8 sm:px-6">
-        <h1 className="t-title mb-2">Setup required</h1>
-        <p className="max-w-prose text-muted">
-          No organization record exists yet, so the app has no company name, tax number, or
-          branding to work from. Load the demo tenant with{' '}
-          <span className="num">npm run db:seed</span>, or complete the setup wizard.
-        </p>
+        <PageHeader
+          title="Setup required"
+          description={
+            <>
+              No organization record exists yet, so the app has no company name, tax number, or
+              branding to work from. Load the demo tenant with{' '}
+              <span className="num">npm run db:seed</span>, or complete the setup wizard.
+            </>
+          }
+        />
       </div>
     );
   }
@@ -61,22 +72,37 @@ export default async function TodayPage() {
   const outstanding = awaiting.reduce((sum, row) => sum + row.totalCents, 0);
 
   const openReminders = await listReminders({ status: 'open' });
-  // What is being asked for TODAY: late, due, or pushed out of the way. What
-  // is merely coming up is left for the reminders screen -- this panel exists
-  // to answer one question, and a list that also holds next Thursday is a list
-  // whose overdue row is one of eleven.
-  const attention = openReminders.filter((row) => urgencyOf(row, today) !== 'upcoming');
+  /**
+   * Late or due today, and nothing else.
+   *
+   * This panel answers one question -- what has to be dealt with before the
+   * day is out -- and every row that is not an answer to it makes the rows
+   * that are harder to find. A snoozed reminder is by definition NOT today's
+   * problem: the owner has already looked at it and pushed it away, and
+   * showing it back to him the same morning undoes the only thing snoozing is
+   * for. Coming-up is the same argument a week earlier.
+   *
+   * Both still live on the reminders screen, which is the one that shows
+   * everything. This one is deliberately the short list.
+   */
+  const attention = openReminders.filter((row) =>
+    NEEDS_ATTENTION.includes(urgencyOf(row, today)),
+  );
   const shown = attention.slice(0, PANEL_ROWS);
   const overflow = attention.length - shown.length;
 
   return (
     <div className="px-4 py-4 sm:px-6">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-        <h1 className="t-title">Today</h1>
-        <Link href="/quotes/new" className={buttonClass('primary')}>
-          New quote
-        </Link>
-      </div>
+      <PageHeader
+        className="mb-4"
+        title="Today"
+        description="What is out with customers, what is still a draft, and what has to be chased this morning."
+        actions={
+          <Link href="/quotes/new" className={buttonClass('primary')}>
+            New quote
+          </Link>
+        }
+      />
 
       {/* First on the screen, above the money. The figure below is what the
           business is worth this week; this is what has to happen this morning,
@@ -96,6 +122,7 @@ export default async function TodayPage() {
             rows={shown}
             today={today}
             headingLevel={3}
+            compact
             empty={
               // Good news said as good news. A blank panel here reads as a
               // failed query, and the answer to "is this broken" is to stop

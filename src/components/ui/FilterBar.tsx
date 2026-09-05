@@ -1,5 +1,6 @@
 import Link from 'next/link';
-import { Button, buttonClass } from '@/components/ui/Button';
+import { buttonClass } from '@/components/ui/Button';
+import { SubmitButton } from '@/components/ui/SubmitButton';
 import { Card } from '@/components/ui/Card';
 
 /**
@@ -174,9 +175,13 @@ export function FilterBar({
         ))}
 
         <div className="flex flex-wrap items-center gap-2">
-          <Button type="submit" variant="primary">
+          {/* `SubmitButton`, not `Button`: this form is a plain GET that the
+              browser posts, so `useFormStatus` reports nothing for it and the
+              search button was the one control in the product that could be
+              pressed twice with nothing on screen to say why. */}
+          <SubmitButton variant="primary" pendingLabel="Searching…">
             Search
-          </Button>
+          </SubmitButton>
           {reveal && revealHref ? (
             <Link href={revealHref} className={buttonClass('secondary')}>
               {reveal.on ? reveal.hideLabel : reveal.showLabel}

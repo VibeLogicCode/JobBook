@@ -25,12 +25,76 @@ House rules that apply to all of them:
 Primary, secondary or danger, with a pending state. Sizes to its content;
 `fullWidth` is the opt-in, never the default.
 
+Pass `pending` to ANY button that awaits something. It disables the control,
+sets `aria-busy`, swaps the label for `pendingLabel` and turns a spinner beside
+it -- and it does not change the button's width doing it. Both labels sit in
+one grid cell, so the box is always as wide as the wider of them; a button that
+resized as it went busy would move its own edge out from under the second press
+somebody makes when nothing appears to happen.
+
+Passing the prop is also what reserves that width, which is why it has no
+default: a button that never awaits anything omits it entirely and is laid out
+exactly as it always was.
+
 Not for navigation -- a thing that changes the URL is a `<Link>`. Give it
 `buttonClass(...)` so it matches without re-describing the styling.
 
 ```tsx
 <Button variant="primary" pending={pending} pendingLabel="Saving…">Save quote</Button>
 <Link href={`/quotes/${id}`} className={buttonClass('secondary')}>Open</Link>
+```
+
+## SubmitButton
+
+The submit for a form the BROWSER posts -- `<form method="get">`, which is what
+the filter bar and the billing preview are. `useFormStatus` reports nothing for
+those, because React only tracks a form whose `action` is a function, so they
+were the two controls in the product that could be pressed twice with nothing
+on screen to say why.
+
+Not for a form with a server action: that is a plain `Button` with `pending`
+from `useActionState`, and using this instead would report the browser's
+submit rather than the action's.
+
+```tsx
+<SubmitButton variant="primary" pendingLabel="Searching…">Search</SubmitButton>
+```
+
+## PageHeader
+
+The one `<h1>` on a page, and the page's primary action beside it. Title,
+optional `eyebrow`, optional `description`, and an `actions` slot.
+
+The action belongs at the TOP. Buried under the content it acts on it is two
+screens down on any record with history, which is the complaint that produced
+this component.
+
+`eyebrow` is for real context -- a record's number, what kind of thing it is,
+whether it is void. On a detail screen the status chips go there rather than
+beside the title: inside the `<h1>` they become part of the heading's
+accessible name, so the page announces itself as "Sample Client Commercial Tax
+exempt".
+
+The `actions` slot is ONE ROW that wraps -- full width and left-aligned below
+`sm`, right-flush above it. Never a column: the version this was copied from
+records making it `flex-col` for one dashboard's sake and stacking every other
+page's two buttons on two lines. A page that genuinely needs several rows
+composes its own wrapper and passes that one element in.
+
+It carries no margin: half the screens here are `grid gap-4` and would space it
+twice. On a page whose parent has no gap, pass `className="mb-4"`.
+
+Not for a card's title (`CardHeader`) or a group's label (`SectionHeader`), and
+not a second `<h1>` -- there is one per page.
+
+```tsx
+<PageHeader
+  className="mb-4"
+  eyebrow={<Pill tone="negative">Void</Pill>}
+  title={customer.name}
+  description="No company recorded · Referral"
+  actions={<Link href="/quotes/new" className={buttonClass('primary')}>New quote</Link>}
+/>
 ```
 
 ## Card, CardHeader, CardBody, CardFooter
@@ -164,6 +228,51 @@ a `Card` that should not fold.
 <CollapsibleGroup title="Concrete" summary={<Money cents={groupTotal} plain />} defaultOpen>
   {lines}
 </CollapsibleGroup>
+```
+
+## Sheet, SheetButton
+
+The one modal. A bottom sheet below `sm` and the same panel centred above it,
+over a blurred scrim -- with the four things a hand-rolled overlay always
+forgets: a focus trap, Escape, a body-scroll lock, and focus returned to the
+control that opened it. `toolbar` pins a search box above the scrolling body;
+`footer` pins the submit below it, reached from a form in the body with
+`form={id}`.
+
+`size` is the centred width from `sm` up -- `md` (32rem, the default and what
+the measurement sheets were written for), `lg` (42rem, a real two-column form)
+or `xl` (56rem, a table). It changes nothing below `sm`: a phone gets the full
+width at the bottom edge whatever it says. Pick by what is inside, not by
+importance -- a two-field sheet at 56rem is as wrong as a ten-field form at
+32rem, which is the complaint that produced the prop. A wider panel is never a
+taller one: the panel caps at `85dvh` and only the body scrolls, so the footer's
+save button is still on screen on a 720px laptop.
+
+`SheetButton` is the press that opens one, and exists so a SERVER component can
+have a modal without becoming a client component: the page renders the form as
+children, and only the open/shut lives in the browser. Give it `discardPrompt`
+whenever the sheet holds typed work -- Escape and the backdrop both dismiss,
+and a modal that silently eats a half-written entry is worse than the
+disclosure it replaced.
+
+What goes in one: a form, a focused task with a consequence. What does not: a
+confirm belonging to ONE ROW, where the answer turns on still being able to see
+that row -- that stays anchored where it is (`RowAction`'s own confirm). Length
+is not the test; what the decision is about is.
+
+`autoFocus` does not work through it. React applies it during commit and the
+Sheet's own focus effect wins the race, so a caller wanting a particular field
+focused does it from its own `useEffect` with a ref -- a child's effects run
+before its parent's, and `Sheet` is the child. `RatePicker` in
+`worksheet/Worksheet.tsx` is the worked example. `Measurement`, the 48px
+on-site numeric field the worksheet sheets are built from, lives in this file
+too.
+
+```tsx
+<SheetButton trigger="Change…" label={`Change ${item.code}`} title={`Change ${item.code}`}
+             subtitle={item.description} discardPrompt="Throw away the changes to this item?">
+  <ActionForm action={updateRateItem} submitLabel="Save this item">…</ActionForm>
+</SheetButton>
 ```
 
 ---

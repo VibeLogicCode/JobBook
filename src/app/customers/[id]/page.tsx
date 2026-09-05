@@ -5,6 +5,7 @@ import { db } from '@/db/client';
 import { customers, organization, projects, quotes } from '@/db/schema';
 import { buttonClass } from '@/components/ui/Button';
 import { Notice } from '@/components/ui/Notice';
+import { PageHeader } from '@/components/ui/PageHeader';
 import { Pill, statusTone } from '@/components/ui/Pill';
 import { AmountCell, TableWrap } from '@/components/ui/Table';
 import { updateCustomer, voidCustomer } from '@/app/customers/actions';
@@ -100,45 +101,47 @@ export default async function CustomerPage({
 
   return (
     <div className="grid gap-4 px-4 py-4 sm:px-6">
-      <header className="grid gap-1">
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-          <h1 className="t-title">{customer.name}</h1>
-          <Pill tone={customer.customerType === 'commercial' ? 'info' : 'neutral'}>
-            {CUSTOMER_TYPES[customer.customerType]}
-          </Pill>
-          {customer.isTaxExempt ? <Pill tone="warning">Tax exempt</Pill> : null}
-          {active ? null : <Pill tone="negative">Void</Pill>}
-
-          <div className="no-print ml-auto flex flex-wrap gap-2">
-            {active && !editing ? (
-              <>
-                <Link
-                  href={`/customers/${customer.id}?edit=1`}
-                  className={buttonClass('secondary')}
-                >
-                  Edit
-                </Link>
-                <Link
-                  href={`/projects/new?customer=${customer.id}`}
-                  className={buttonClass('secondary')}
-                >
-                  New opportunity
-                </Link>
-                <Link
-                  href={`/quotes/new?customer=${customer.id}`}
-                  className={buttonClass('primary')}
-                >
-                  New quote
-                </Link>
-              </>
-            ) : null}
-          </div>
-        </div>
-        <p className="t-small text-muted">
-          {customer.companyName ?? 'No company recorded'}
-          {customer.leadSource ? ` · ${LEAD_SOURCES[customer.leadSource]}` : ''}
-        </p>
-      </header>
+      {/* The chips move ABOVE the name rather than beside it. Inside the
+          <h1> they became part of the heading's accessible name, so the page
+          announced itself as the customer's name followed by "Commercial Tax
+          exempt" -- and what they say (what kind of record this is, whether it
+          is still live) is exactly what an eyebrow is for. */}
+      <PageHeader
+        eyebrow={
+          <>
+            <Pill tone={customer.customerType === 'commercial' ? 'info' : 'neutral'}>
+              {CUSTOMER_TYPES[customer.customerType]}
+            </Pill>
+            {customer.isTaxExempt ? <Pill tone="warning">Tax exempt</Pill> : null}
+            {active ? null : <Pill tone="negative">Void</Pill>}
+          </>
+        }
+        title={customer.name}
+        description={
+          <>
+            {customer.companyName ?? 'No company recorded'}
+            {customer.leadSource ? ` · ${LEAD_SOURCES[customer.leadSource]}` : ''}
+          </>
+        }
+        actions={
+          active && !editing ? (
+            <>
+              <Link href={`/customers/${customer.id}?edit=1`} className={buttonClass('secondary')}>
+                Edit
+              </Link>
+              <Link
+                href={`/projects/new?customer=${customer.id}`}
+                className={buttonClass('secondary')}
+              >
+                New opportunity
+              </Link>
+              <Link href={`/quotes/new?customer=${customer.id}`} className={buttonClass('primary')}>
+                New quote
+              </Link>
+            </>
+          ) : null
+        }
+      />
 
       {active ? null : (
         <Notice tone="negative" title="This customer was voided">
@@ -246,7 +249,6 @@ export default async function CustomerPage({
               entityType="customer"
               entityId={customer.id}
               today={today}
-              startOpen={timeline.length === 0}
             />
           </div>
         ) : null}
