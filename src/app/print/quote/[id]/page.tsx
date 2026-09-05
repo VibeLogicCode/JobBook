@@ -145,6 +145,11 @@ export default async function PrintQuote({ params }: { params: Promise<{ id: str
         <tbody>
           <tr>
             <th>Subtotal</th>
+            {/* `formatCents`, like every other amount on this page. Without it
+                the subtotal printed as the raw scaled integer -- a customer's
+                quote reading 5564884 where it should read $55,648.84. "Scale
+                is internal" is a Phase 1 invariant precisely because this is
+                what breaking it looks like: not a crash, a document. */}
             <td className="num right">{formatCents(quote.subtotalCents)}</td>
           </tr>
           {taxes.map((tax) => (
