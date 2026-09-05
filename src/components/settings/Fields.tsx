@@ -21,7 +21,21 @@ interface FieldShell {
   idPrefix?: string;
   disabled?: boolean;
   required?: boolean;
-  /** Spans both columns of the two-column grid. */
+  /*
+ * `self-start` is load-bearing, not tidiness.
+ *
+ * These fields sit in two-column grids, and a grid row stretches its items to
+ * the tallest of them by default. So a field WITHOUT hint text, placed beside
+ * one that has some, had its control grown to swallow the difference: a select
+ * seventy pixels tall next to a forty-pixel input, and the two boxes starting
+ * at different heights. It read as a rendering fault and it was on every
+ * two-column form in the product -- edit a job, log a call, add a reminder.
+ *
+ * Fixing it here rather than adding `items-start` to seventeen grids means a
+ * grid written tomorrow cannot reintroduce it.
+ */
+
+/** Spans both columns of the two-column grid. */
   wide?: boolean;
 }
 
@@ -45,7 +59,7 @@ function Shell({
   children: React.ReactNode;
 }) {
   return (
-    <div className={`flex min-w-0 flex-col gap-1 ${wide ? 'sm:col-span-2' : ''}`}>
+    <div className={`flex min-w-0 flex-col gap-1 self-start ${wide ? 'sm:col-span-2' : ''}`}>
       <label htmlFor={id} className="t-small font-semibold">
         {label}
         {required ? (
@@ -208,7 +222,7 @@ export function CheckboxField({
 }: FieldShell & { defaultChecked?: boolean }) {
   const id = controlId(idPrefix, name);
   return (
-    <div className={`flex min-w-0 flex-col gap-1 ${wide ? 'sm:col-span-2' : ''}`}>
+    <div className={`flex min-w-0 flex-col gap-1 self-start ${wide ? 'sm:col-span-2' : ''}`}>
       <label htmlFor={id} className="flex min-h-11 items-center gap-2 t-small font-semibold">
         <input
           id={id}
@@ -243,7 +257,7 @@ export function ReadOnlyField({
   wide?: boolean;
 }) {
   return (
-    <div className={`flex min-w-0 flex-col gap-1 ${wide ? 'sm:col-span-2' : ''}`}>
+    <div className={`flex min-w-0 flex-col gap-1 self-start ${wide ? 'sm:col-span-2' : ''}`}>
       <span className="t-small font-semibold">{label}</span>
       <span className="rounded-control border border-line bg-surface-2 px-2 py-1.5 t-small text-muted">
         {value}

@@ -1,3 +1,17 @@
+/*
+ * `self-start` is load-bearing, not tidiness.
+ *
+ * These fields sit in two-column grids, and a grid row stretches its items to
+ * the tallest of them by default. So a field WITHOUT hint text, placed beside
+ * one that has some, had its control grown to swallow the difference: a select
+ * seventy pixels tall next to a forty-pixel input, and the two boxes starting
+ * at different heights. It read as a rendering fault and it was on every
+ * two-column form in the product -- edit a job, log a call, add a reminder.
+ *
+ * Fixing it here rather than adding `items-start` to seventeen grids means a
+ * grid written tomorrow cannot reintroduce it.
+ */
+
 /**
  * Form primitives for the detail screens.
  *
@@ -31,7 +45,7 @@ type InputProps = Omit<React.ComponentProps<'input'>, 'className'> & {
 
 export function Field({ label, hint, numeric = false, ...input }: InputProps) {
   return (
-    <label className="grid gap-1">
+    <label className="grid gap-1 self-start">
       <Legend label={label} required={input.required} />
       <input {...input} className={`field min-h-11 ${numeric ? 'field-num' : ''}`.trim()} />
       {hint ? <span className="t-small text-subtle">{hint}</span> : null}
@@ -49,7 +63,7 @@ type SelectProps = Omit<React.ComponentProps<'select'>, 'className' | 'children'
 
 export function SelectField({ label, hint, placeholder, options, ...select }: SelectProps) {
   return (
-    <label className="grid gap-1">
+    <label className="grid gap-1 self-start">
       <Legend label={label} required={select.required} />
       <select {...select} className="field min-h-11">
         {placeholder ? <option value="">{placeholder}</option> : null}
@@ -71,7 +85,7 @@ type TextAreaProps = Omit<React.ComponentProps<'textarea'>, 'className'> & {
 
 export function TextAreaField({ label, hint, ...area }: TextAreaProps) {
   return (
-    <label className="grid gap-1">
+    <label className="grid gap-1 self-start">
       <Legend label={label} required={area.required} />
       {/* Three rows, not the 44px control floor every other field takes. A
           multi-line field whose minimum is one line tall is a single-line
@@ -91,7 +105,7 @@ type CheckProps = Omit<React.ComponentProps<'input'>, 'className' | 'type'> & {
 
 export function CheckField({ label, hint, ...input }: CheckProps) {
   return (
-    <label className="flex min-h-11 items-center gap-3">
+    <label className="flex min-h-11 items-center gap-3 self-start">
       <input {...input} type="checkbox" className="size-5 accent-accent" />
       <span className="grid">
         <span>{label}</span>
