@@ -4,6 +4,7 @@ import { customers, organization, projects, quotes, scopeTemplates } from '@/db/
 import { startQuote } from '@/app/quotes/new/actions';
 import { StartQuoteForm } from '@/app/quotes/new/StartQuoteForm';
 import { Panel } from '@/components/detail/Panel';
+import { PageHeader } from '@/components/ui/PageHeader';
 
 export const dynamic = 'force-dynamic';
 
@@ -90,13 +91,13 @@ export default async function NewQuotePage({
 
   return (
     <div className="grid max-w-4xl gap-4 px-4 py-4 sm:px-6">
-      <header>
-        <h1 className="t-title">New quote</h1>
-        <p className="t-small text-muted">
-          A quote belongs to an opportunity, and an opportunity becomes a job once one of its
-          quotes is accepted. Both can be created here.
-        </p>
-      </header>
+      {/* No header action: on a form page the primary action IS the form's
+          submit, and a second copy of it at the top would be a button that
+          cannot say whether the fields below are filled in. */}
+      <PageHeader
+        title="New quote"
+        description="A quote belongs to an opportunity, and an opportunity becomes a job once one of its quotes is accepted. Both can be created here."
+      />
 
       <Panel title="Quote">
         <StartQuoteForm

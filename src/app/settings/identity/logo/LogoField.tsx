@@ -30,6 +30,10 @@ export async function LogoField({
     <ActionForm
       action={uploadLogo}
       submitLabel="Upload logo"
+      // Not "Saving…". This is a file crossing the wire, which is the one
+      // control in settings where the wait is long enough to be noticed and
+      // long enough to be pressed twice.
+      pendingLabel="Uploading…"
       disabled={!allowed}
       disabledNote={disabledNote}
       resetOnSuccess

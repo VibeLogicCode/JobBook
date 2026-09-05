@@ -4,6 +4,7 @@ import { organization } from '@/db/schema';
 import { createCustomer } from '@/app/customers/actions';
 import { CustomerForm } from '@/components/detail/CustomerForm';
 import { Panel } from '@/components/detail/Panel';
+import { PageHeader } from '@/components/ui/PageHeader';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,12 +19,10 @@ export default async function NewCustomerPage() {
 
   return (
     <div className="grid gap-4 px-4 py-4 sm:px-6">
-      <header>
-        <h1 className="t-title">New customer</h1>
-        <p className="t-small text-muted">
-          A quote is written against a job, and a job belongs to a customer, so this comes first.
-        </p>
-      </header>
+      <PageHeader
+        title="New customer"
+        description="A quote is written against a job, and a job belongs to a customer, so this comes first."
+      />
 
       <Panel title="Customer">
         <CustomerForm

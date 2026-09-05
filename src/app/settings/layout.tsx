@@ -1,5 +1,6 @@
 import { SETTINGS_SECTIONS } from '@/app/settings/nav';
 import { SettingsNav } from '@/components/settings/SettingsNav';
+import { PageHeader } from '@/components/ui/PageHeader';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,11 +14,11 @@ export const dynamic = 'force-dynamic';
 export default function SettingsLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="px-4 py-4 sm:px-6">
-      <h1 className="t-title mb-1">Settings</h1>
-      <p className="mb-4 max-w-prose t-small text-muted">
-        Everything a customer document says about your company is here. Nothing about it is
-        built into the product, which is why this screen is long.
-      </p>
+      <PageHeader
+        className="mb-4"
+        title="Settings"
+        description="Everything a customer document says about your company is here. Nothing about it is built into the product, which is why this screen is long."
+      />
 
       <div className="flex flex-col gap-4 sm:flex-row sm:gap-6">
         <div className="sm:w-56 sm:shrink-0">

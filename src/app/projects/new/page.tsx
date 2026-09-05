@@ -4,6 +4,7 @@ import { db } from '@/db/client';
 import { customers, organization } from '@/db/schema';
 import { createProject } from '@/app/projects/actions';
 import { Panel } from '@/components/detail/Panel';
+import { PageHeader } from '@/components/ui/PageHeader';
 import { ProjectForm } from '@/components/detail/ProjectForm';
 
 export const dynamic = 'force-dynamic';
@@ -30,17 +31,19 @@ export default async function NewProjectPage({
 
   return (
     <div className="grid max-w-4xl gap-4 px-4 py-4 sm:px-6">
-      <header>
-        <h1 className="t-title">New opportunity</h1>
-        <p className="t-small text-muted">
-          Holds every quote for one piece of work, and becomes a job when one of them is accepted.
-          Usually there is no need to come here:{' '}
-          <Link href="/quotes/new" className="text-accent-text hover:underline">
-            starting a quote
-          </Link>{' '}
-          creates the opportunity with it.
-        </p>
-      </header>
+      <PageHeader
+        title="New opportunity"
+        description={
+          <>
+            Holds every quote for one piece of work, and becomes a job when one of them is
+            accepted. Usually there is no need to come here:{' '}
+            <Link href="/quotes/new" className="text-accent-text hover:underline">
+              starting a quote
+            </Link>{' '}
+            creates the opportunity with it.
+          </>
+        }
+      />
 
       <Panel title="Opportunity">
         {customerList.length === 0 ? (
