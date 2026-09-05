@@ -1,8 +1,12 @@
+import { eq } from 'drizzle-orm';
 import { notFound } from 'next/navigation';
+import { db } from '@/db/client';
+import { projects, quotes } from '@/db/schema';
 import { AddReminderForm } from '@/components/reminders/AddReminderForm';
 import { Acceptance } from '@/app/quotes/[id]/Acceptance';
 import { loadRelations } from '@/app/quotes/[id]/related';
 import { loadAcceptanceSiblings } from '@/app/quotes/[id]/siblings';
+import { PageParentLink } from '@/components/ui/PageHeader';
 import { Worksheet } from '@/components/worksheet/Worksheet';
 import { loadQuote } from '@/lib/quote/load';
 
@@ -10,17 +14,38 @@ export const dynamic = 'force-dynamic';
 
 export default async function QuotePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  // All three reads hit the same row set, so they go out together rather than
-  // stacking three round trips in front of the first paint.
-  const [data, relations, siblings] = await Promise.all([
+  // All four reads hit the same row set, so they go out together rather than
+  // stacking round trips in front of the first paint.
+  const [data, relations, siblings, owner] = await Promise.all([
     loadQuote(id),
     loadRelations(id),
     loadAcceptanceSiblings(id),
+    loadOwningProject(id),
   ]);
   if (!data) notFound();
 
   return (
     <>
+      {/* A quote is the one document in the product that gets sent, bookmarked
+          and reopened cold -- from a reminder, from the pipeline, from a link
+          he mailed himself the night before. Arriving that way, the worksheet
+          named the JOB in its <h1> but gave no route to it, so the record the
+          quote belongs to was a name on screen and nowhere to press.
+
+          Its own strip above the worksheet band rather than a slot inside it:
+          the worksheet's header is a client component owning the quote's
+          controls, and the way back is not a control of the quote. Same
+          background, so the two read as one band; `no-print` because the
+          customer's copy comes from /print and has no app to return to. */}
+      {owner ? (
+        <div className="no-print bg-surface px-4 pt-3 t-micro uppercase text-subtle sm:px-6">
+          <PageParentLink
+            href={`/projects/${owner.id}`}
+            label={`${owner.projectNumber} · ${owner.name}`}
+          />
+        </div>
+      ) : null}
+
       <Worksheet
         quote={data.quote}
         lines={data.lines}
@@ -46,4 +71,26 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
       <Acceptance quote={data.quote} lines={data.lines} siblings={siblings} />
     </>
   );
+}
+
+/**
+ * The opportunity or job this quote was written against.
+ *
+ * Read here rather than folded into `loadQuote`: that loader builds the wire
+ * shape the worksheet computes from, and the project's id and number are
+ * navigation, not part of the document. It is a single indexed row on the join
+ * the loader already makes, so it costs a round trip and nothing else.
+ */
+async function loadOwningProject(quoteId: string) {
+  const [row] = await db
+    .select({
+      id: projects.id,
+      projectNumber: projects.projectNumber,
+      name: projects.name,
+    })
+    .from(quotes)
+    .innerJoin(projects, eq(quotes.projectId, projects.id))
+    .where(eq(quotes.id, quoteId));
+
+  return row ?? null;
 }

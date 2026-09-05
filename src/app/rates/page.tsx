@@ -20,6 +20,7 @@ import {
 } from '@/components/settings/Fields';
 import { Section } from '@/components/settings/Section';
 import { Notice } from '@/components/ui/Notice';
+import { PageHeader } from '@/components/ui/PageHeader';
 import { Pill } from '@/components/ui/Pill';
 import { SheetButton } from '@/components/ui/Sheet';
 import { AmountCell, TableWrap } from '@/components/ui/Table';
@@ -106,11 +107,15 @@ export default async function RatesPage() {
 
   return (
     <div className="px-4 py-4 sm:px-6">
-      <h1 className="t-title mb-1">Rates</h1>
-      <p className="mb-4 max-w-prose t-small text-muted">
-        One list per deployment. Editing a rate never moves a quote already
-        written — every line snapshots its rates when it is created.
-      </p>
+      {/* No `parent`, and that is the finding rather than an omission: the
+          rate book is a top-level destination on the rail, reached from
+          nowhere else and belonging to no record. A header that pointed
+          somewhere would be inventing a hierarchy the data does not have. */}
+      <PageHeader
+        className="mb-4"
+        title="Rates"
+        description="One list per deployment. Editing a rate never moves a quote already written — every line snapshots its rates when it is created."
+      />
 
       <div className="flex flex-col gap-4">
         <Section title="Rate items">

@@ -90,11 +90,50 @@ not a second `<h1>` -- there is one per page.
 ```tsx
 <PageHeader
   className="mb-4"
+  parent={{ href: `/projects/${project.id}`, label: `${project.projectNumber} · ${project.name}` }}
   eyebrow={<Pill tone="negative">Void</Pill>}
   title={customer.name}
   description="No company recorded · Referral"
   actions={<Link href="/quotes/new" className={buttonClass('primary')}>New quote</Link>}
 />
+```
+
+## PageHeader `parent`, and PageParentLink
+
+The one way a screen says "I belong to that record". Pass `parent` to any page
+that is ABOUT one record but lives at another record's URL -- a job's expenses,
+a job's schedule, a job's billing, a quote's job, a template's list.
+
+It is STRUCTURAL, not historical, and that is the whole point. A
+`router.back()` button answers "how did I get here", which has no answer on a
+refresh, a pasted link, a bookmark, or a form post. `parent` answers "what is
+this page about", which is true however the URL was reached, and it is a real
+`href` so it middle-clicks and copies like any other link.
+
+Rules, all enforced by the component so no call site re-decides them:
+
+- **ONE parent, never a trail.** The hierarchy is two deep and the third crumb
+  is always a word already in the rail. A trail also wraps to two lines on a
+  phone, and owes a `nav` landmark plus an `aria-current` duplicating the `<h1>`
+  three pixels below it.
+- **The label is the record's NAME, never a verb.** Not "Open the job", not
+  "Back to job" -- those two shipped on two screens, which is the drift this
+  replaced. `P-2026-0001 · Basement finish` says where you are as
+  well as where the link goes. The chevron carries the relationship; a hidden
+  "Back to" gives the link the accessible name "Back to P-2026-0001 · …".
+- **It is not an action.** It shares the eyebrow row with the status chips, so
+  on a screen that has chips it costs no height at all. In `actions` it renders
+  as a full-width button on a phone, which is a 44px row spent on leaving.
+- **Omit it when there is no parent.** `/expenses` from the rail is nobody's
+  child, and a header that named a job there would be lying about the list
+  under it. `parent` is optional and stays optional.
+
+`PageParentLink` is the same link on its own, for the one screen whose heading
+is not a `PageHeader` -- the quote worksheet. Put it in a `t-micro uppercase
+text-subtle` strip; it carries its own `no-print`.
+
+```tsx
+<PageParentLink href={`/projects/${id}`} label={`${projectNumber} · ${name}`} />
 ```
 
 ## Card, CardHeader, CardBody, CardFooter
