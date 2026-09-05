@@ -1,9 +1,9 @@
 'use client';
 
-import { useMemo, useRef, useState, useTransition } from 'react';
+import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ChevronDown, ChevronRight, Plus, Trash2, X } from 'lucide-react';
+import { ChevronDown, ChevronRight, Plus, Trash2 } from 'lucide-react';
 import {
   addLine,
   editLine,
@@ -24,6 +24,7 @@ import {
 } from '@/components/worksheet/keyboard';
 import { MarginGauge } from '@/components/worksheet/MarginGauge';
 import { RegenerateDialog, ScopeSheet } from '@/components/worksheet/ScopeSheet';
+import { Sheet } from '@/components/worksheet/Sheet';
 import type {
   WireLine,
   WireQuote,
@@ -839,28 +840,43 @@ function LineSheet({
   const [rate, setRate] = useState(formatRate(BigInt(line.unitPriceTenThou)));
 
   return (
-    <div className="fixed inset-0 z-20 flex items-end bg-black/40 sm:items-center sm:justify-center">
-      <div
-        role="dialog"
-        aria-label={`Edit ${line.description}`}
-        className="w-full rounded-t-[6px] border-t border-line-strong bg-surface p-4 shadow-pop sm:max-w-md sm:rounded-panel sm:border"
-      >
-        <div className="mb-3 flex items-start justify-between gap-3">
-          <div>
-            <p className="t-heading">{line.description}</p>
-            <p className="present-hide num t-small text-muted">{line.code}</p>
-          </div>
-          <button
-            type="button"
-            aria-label="Close"
-            className="flex min-h-11 min-w-11 items-center justify-center rounded-control text-muted hover:bg-surface-2"
-            onClick={onClose}
+    // `Sheet` rather than a hand-rolled overlay: this editor and the rate
+    // picker below each had their own, and neither carried Escape, a focus
+    // trap, a scroll lock or focus restoration -- the three of them had drifted
+    // into three different answers to one question.
+    <Sheet
+      label={`Edit ${line.description}`}
+      title={line.description}
+      subtitle={<span className="present-hide num">{line.code}</span>}
+      onClose={onClose}
+      footer={
+        <>
+          <Button
+            size="lg"
+            className="flex-1"
+            pending={pending}
+            pendingLabel="Saving…"
+            onClick={() => {
+              onCommit(() =>
+                editLine({
+                  quoteId,
+                  lineId: line.id,
+                  qty: line.calcMode === 'qty' ? qty : undefined,
+                  unitPrice: rate,
+                }),
+              );
+              onClose();
+            }}
           >
-            <X size={18} aria-hidden />
-          </button>
-        </div>
-
-        <div className="grid gap-3">
+            Save
+          </Button>
+          <Button variant="secondary" size="lg" onClick={onClose}>
+            Cancel
+          </Button>
+        </>
+      }
+    >
+      <div className="grid gap-3">
           {line.calcMode === 'qty' ? (
             <label className="grid gap-1">
               <span className="t-small text-muted">Quantity ({line.unitLabel})</span>
@@ -891,33 +907,7 @@ function LineSheet({
           <span className="t-small text-muted">Line total</span>
           <span className="num t-title">{formatCents(line.lineTotalCents)}</span>
         </div>
-
-        <div className="mt-4 flex gap-2">
-          <Button
-            size="lg"
-            className="flex-1"
-            pending={pending}
-            pendingLabel="Saving…"
-            onClick={() => {
-              onCommit(() =>
-                editLine({
-                  quoteId,
-                  lineId: line.id,
-                  qty: line.calcMode === 'qty' ? qty : undefined,
-                  unitPrice: rate,
-                }),
-              );
-              onClose();
-            }}
-          >
-            Save
-          </Button>
-          <Button variant="secondary" size="lg" onClick={onClose}>
-            Cancel
-          </Button>
-        </div>
-      </div>
-    </div>
+    </Sheet>
   );
 }
 
@@ -934,6 +924,23 @@ function RatePicker({
   onPick: (rateItemId: string) => void;
 }) {
   const [query, setQuery] = useState('');
+  /**
+   * `autoFocus` alone does not survive here. React applies it imperatively
+   * during commit rather than rendering an `autofocus` attribute, and `Sheet`'s
+   * own effect -- which moves focus to the panel when nothing inside has
+   * claimed it -- was winning that race, landing focus on the dialog instead of
+   * the search box.
+   *
+   * A child's effects run before its parent's, and `Sheet` is this component's
+   * child, so focusing from HERE runs strictly after the shell has had its go.
+   * Search-first is the whole point of this picker: the rate list runs to
+   * hundreds of items and nobody scrolls it.
+   */
+  const searchRef = useRef<HTMLInputElement | null>(null);
+  useEffect(() => {
+    searchRef.current?.focus();
+  }, []);
+
   const needle = query.trim().toLowerCase();
   const matches = needle
     ? items.filter(
@@ -944,32 +951,25 @@ function RatePicker({
     : items;
 
   return (
-    <div className="fixed inset-0 z-20 flex items-end bg-black/40 sm:items-center sm:justify-center">
-      <div
-        role="dialog"
-        aria-label="Add a line"
-        className="flex max-h-[80dvh] w-full flex-col rounded-t-[6px] border-t border-line-strong bg-surface p-4 shadow-pop sm:max-w-lg sm:rounded-panel sm:border"
-      >
-        <div className="mb-3 flex items-center gap-2">
-          <input
-            autoFocus
-            aria-label="Search the rate list"
-            placeholder="Search the rate list"
-            className="field"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-          />
-          <button
-            type="button"
-            aria-label="Close"
-            className="flex min-h-11 min-w-11 items-center justify-center rounded-control text-muted hover:bg-surface-2"
-            onClick={onClose}
-          >
-            <X size={18} aria-hidden />
-          </button>
-        </div>
-
-        <ul className="flex-1 overflow-y-auto">
+    <Sheet
+      label="Add a line"
+      title="Add a line"
+      onClose={onClose}
+      // In the toolbar rather than the body, so it stays put while the list
+      // under it scrolls -- the rate list runs to hundreds of items, and a
+      // search box that scrolls away is worse than none.
+      toolbar={
+        <input
+          ref={searchRef}
+          aria-label="Search the rate list"
+          placeholder="Search the rate list"
+          className="field w-full"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+        />
+      }
+    >
+        <ul>
           {matches.length === 0 ? (
             <li className="py-6 text-center t-small text-muted">
               Nothing matches. Rate items are managed under Rates.
@@ -996,7 +996,6 @@ function RatePicker({
             ))
           )}
         </ul>
-      </div>
-    </div>
+    </Sheet>
   );
 }

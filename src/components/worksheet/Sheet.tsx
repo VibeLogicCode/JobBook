@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useRef, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { X } from 'lucide-react';
 
 /**
@@ -9,12 +10,50 @@ import { X } from 'lucide-react';
  * behaviour: a phone gets a grab handle and the full width at the bottom edge,
  * a desktop gets a 6px-radius panel in the middle, and the content inside knows
  * about neither.
+ *
+ * The modal behaviour below is ported from the sibling project's `RowDialog`,
+ * which had already learned it the hard way. What is NOT taken is its shape:
+ * that component is centred at every width, and a centred box is the wrong
+ * answer on a phone held one-handed in a basement, which is where this one is
+ * actually used. So the behaviour is theirs and the geometry stays ours.
  */
+
+/**
+ * Nothing hand-rolled keeps Tab inside an overlay on its own -- only a native
+ * `<dialog>.showModal()` does, and this product hand-rolls its overlays rather
+ * than take a dialog library for one component.
+ *
+ * `input[type="hidden"]` is excluded even though the bare `input` selector
+ * would otherwise match it: a hidden field can never take focus in a real
+ * browser, and counting it as a stop breaks the wrap-around by one at both
+ * ends. The list is read fresh on every Tab rather than cached at open,
+ * because a sheet's own controls can add or remove focusable elements while it
+ * stays open -- adding a measurement row is exactly that.
+ */
+const FOCUSABLE =
+  'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+function trapTab(container: HTMLElement, event: ReactKeyboardEvent<HTMLDivElement>): void {
+  if (event.key !== 'Tab') return;
+  const focusable = Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE));
+  if (focusable.length === 0) return;
+  const first = focusable[0]!;
+  const last = focusable[focusable.length - 1]!;
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
+}
+
 export function Sheet({
   label,
   title,
   subtitle,
   onClose,
+  toolbar,
   children,
   footer,
 }: {
@@ -23,24 +62,103 @@ export function Sheet({
   title: React.ReactNode;
   subtitle?: React.ReactNode;
   onClose: () => void;
+  /**
+   * Pinned under the header, outside the scrolling body: a search box that
+   * scrolls away from the list it filters is worse than no search box, because
+   * the person has to scroll back up to correct a typo.
+   */
+  toolbar?: React.ReactNode;
   children: React.ReactNode;
-  footer: React.ReactNode;
+  /** Omitted where the sheet has no terminating action -- picking from a list
+   *  IS the action, and a lone Cancel below it would be a control invented to
+   *  fill a slot. */
+  footer?: React.ReactNode;
 }) {
+  const panelRef = useRef<HTMLDivElement | null>(null);
+
+  /**
+   * Who had focus immediately before this opened, so closing it puts focus
+   * back on the row that was tapped rather than dumping it at the top of the
+   * document.
+   *
+   * Captured during RENDER rather than in the effect below, and that is
+   * load-bearing here: `Measurement` takes an `autoFocus`, and React handles
+   * `autoFocus` with a real `.focus()` call in the COMMIT phase, which runs
+   * before any effect. Reading `document.activeElement` from an effect would
+   * therefore capture the just-focused input as "the opener". Render runs
+   * strictly before commit, so this is the last moment it still names the real
+   * trigger.
+   *
+   * `undefined` means not yet read; `null` is a legitimate answer (nothing had
+   * focus), which is why the check is against `undefined` rather than falsy.
+   * The `document` guard is for the server pass, where there is no activeElement
+   * and the sheet is not interactive anyway.
+   */
+  const openerRef = useRef<HTMLElement | null | undefined>(undefined);
+  if (openerRef.current === undefined) {
+    openerRef.current = typeof document === 'undefined' ? null : (document.activeElement as HTMLElement | null);
+  }
+
+  /**
+   * The three things a modal owes somebody working from a keyboard or a screen
+   * reader. Empty dependency array on purpose: this component is only rendered
+   * while it is open, so a fresh mount already is a fresh open. A caller
+   * switching which ROW the sheet edits without closing it first must pass a
+   * `key` that changes with the row id, or the effect will not re-run.
+   */
+  useEffect(() => {
+    // Only if nothing inside has already claimed it: a sheet whose first field
+    // carries `autoFocus` has a better answer than the shell does, and stealing
+    // focus back a moment later would undo it.
+    if (!panelRef.current?.contains(document.activeElement)) {
+      panelRef.current?.focus();
+    }
+
+    // Or a touch scroll moves the page behind a scrim the person can no longer
+    // see, and closing the sheet leaves them somewhere they did not navigate to.
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      openerRef.current?.focus();
+    };
+  }, []);
+
+  function onKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+    // Escape closes from anywhere inside, including from a field: a sheet that
+    // can only be dismissed by finding its close button is a trap for anyone
+    // working from the keyboard.
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      event.stopPropagation();
+      onClose();
+      return;
+    }
+    if (panelRef.current) trapTab(panelRef.current, event);
+  }
+
   return (
-    <div className="fixed inset-0 z-30 flex items-end bg-black/40 sm:items-center sm:justify-center">
+    <div
+      // The blur is not decoration. A worksheet is a dense grid of numbers, and
+      // a flat 40% scrim over it leaves every one of them legible enough to
+      // keep reading -- so the eye stays on the table it cannot edit instead of
+      // the one field it opened the sheet to change.
+      className="fixed inset-0 z-30 flex items-end bg-black/50 backdrop-blur-sm sm:items-center sm:justify-center"
+      onClick={onClose}
+    >
       <div
+        ref={panelRef}
         role="dialog"
         aria-modal="true"
         aria-label={label}
-        // Escape closes the sheet from anywhere inside it, including from a
-        // field: a sheet that can only be dismissed by finding its close button
-        // is a trap for anyone working from the keyboard.
-        onKeyDown={(event) => {
-          if (event.key !== 'Escape') return;
-          event.stopPropagation();
-          onClose();
-        }}
-        className="flex max-h-[85dvh] w-full flex-col rounded-t-[6px] border-t border-line-strong bg-surface shadow-pop sm:max-w-lg sm:rounded-panel sm:border"
+        tabIndex={-1}
+        // Stops a click anywhere inside the panel bubbling to the scrim above,
+        // so pressing a control -- or empty space beside one -- never closes
+        // the sheet. Only the scrim itself does.
+        onClick={(event) => event.stopPropagation()}
+        onKeyDown={onKeyDown}
+        className="flex max-h-[85dvh] w-full flex-col rounded-t-panel border-t border-line-strong bg-surface shadow-pop outline-none sm:max-w-lg sm:rounded-panel sm:border"
       >
         <div
           aria-hidden
@@ -62,9 +180,13 @@ export function Sheet({
           </button>
         </div>
 
+        {toolbar ? <div className="shrink-0 px-4 pb-2">{toolbar}</div> : null}
+
         <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-2">{children}</div>
 
-        <div className="flex shrink-0 flex-wrap gap-2 border-t border-line p-4">{footer}</div>
+        {footer ? (
+          <div className="flex shrink-0 flex-wrap gap-2 border-t border-line p-4">{footer}</div>
+        ) : null}
       </div>
     </div>
   );
