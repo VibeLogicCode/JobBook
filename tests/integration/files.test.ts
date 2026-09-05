@@ -7,6 +7,7 @@ import { GET } from '@/app/api/files/[id]/route';
 import { pointLogoAt } from '@/app/settings/identity/logo/logo';
 import { db } from '@/db/client';
 import { files, organization } from '@/db/schema';
+import { INLINE_TYPES, STORABLE_TYPES } from '@/lib/files/sniff';
 import {
   LOGO_MAX_BYTES,
   ORGANIZATION_ENTITY_ID,
@@ -110,6 +111,18 @@ function jpegBytes(width: number, height: number): Uint8Array {
   return bytes;
 }
 
+/**
+ * A PDF, as a producer emits the front of one.
+ *
+ * The `%PDF-` header, one object, and the trailer, which is enough for the
+ * store: what a file IS is decided from its leading signature, exactly as it is
+ * for the two image formats above, so a fixture carrying the real signature is
+ * as acceptable to it as a supplier's invoice is.
+ */
+const PDF_BYTES = new TextEncoder().encode(
+  '%PDF-1.7\n1 0 obj\n<< /Type /Catalog >>\nendobj\ntrailer\n<< /Root 1 0 R >>\n%%EOF\n',
+);
+
 /** A real 1x1 PNG, as an encoder actually emits one. */
 const GENUINE_PNG = Uint8Array.from(
   atob(
@@ -130,6 +143,13 @@ function upload(bytes: Uint8Array, name: string, claimedType = 'image/png'): Fil
   return new File([owned], name, { type: claimedType });
 }
 
+/**
+ * The logo path, which takes only the types a PAGE renders.
+ *
+ * `INLINE_TYPES`, the same constant the action passes, so this test goes on
+ * asserting what the logo field accepts rather than what the store happens to
+ * know how to keep.
+ */
 function storeLogo(source: File) {
   return saveFile({
     entityType: 'organization',
@@ -137,7 +157,28 @@ function storeLogo(source: File) {
     source,
     uploadedBy: ACTOR,
     maxBytes: LOGO_MAX_BYTES,
+    accept: INLINE_TYPES,
   });
+}
+
+/** The receipt path, which takes everything the store keeps -- PDFs included. */
+function storeReceipt(source: File) {
+  return saveFile({
+    entityType: 'receipt',
+    entityId: null,
+    source,
+    uploadedBy: ACTOR,
+    maxBytes: LOGO_MAX_BYTES,
+    accept: STORABLE_TYPES,
+  });
+}
+
+async function receiptNames(): Promise<string[]> {
+  try {
+    return (await readdir(path.join(filesRoot(), 'receipt'))).sort();
+  } catch {
+    return [];
+  }
 }
 
 async function storedNames(): Promise<string[]> {
@@ -206,6 +247,54 @@ describe('saving a file', () => {
     expect(result.file.mimeType).toBe('image/jpeg');
     expect(result.file.storagePath).toBe(`organization/${result.file.id}.jpg`);
     expect(result.file.dimensions).toEqual({ width: 600, height: 200 });
+  });
+});
+
+describe('storing a PDF', () => {
+  it('sniffs the %PDF- signature and stores it under .pdf', async () => {
+    // Named .jpg on purpose. The extension is a claim; the signature is not.
+    const result = await storeReceipt(upload(PDF_BYTES, 'invoice.jpg', 'image/jpeg'));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.file.mimeType).toBe('application/pdf');
+    expect(result.file.storagePath).toBe(`receipt/${result.file.id}.pdf`);
+    // Points, not pixels. There is no honest answer in these units.
+    expect(result.file.dimensions).toBeNull();
+
+    const [row] = await db.select().from(files).where(eq(files.id, result.file.id));
+    expect(row?.mimeType).toBe('application/pdf');
+    expect(await receiptNames()).toContain(`${result.file.id}.pdf`);
+  });
+
+  it('judges a renamed PNG by its bytes, not by the .pdf it claims to be', async () => {
+    // The whole point of the sniff, stated in the direction that matters now
+    // that one stored type is downloaded and the others are rendered: calling a
+    // PNG `receipt.pdf` must not get it treated as a PDF, any more than calling
+    // an SVG `logo.png` got it treated as a PNG.
+    const result = await storeReceipt(upload(GENUINE_PNG, 'receipt.pdf', 'application/pdf'));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.file.mimeType).toBe('image/png');
+    expect(result.file.storagePath).toBe(`receipt/${result.file.id}.png`);
+    // The display name is what arrived, because it is display metadata and
+    // nothing routes off it.
+    expect(result.file.fileName).toBe('receipt.pdf');
+
+    const response = await request(result.file.id);
+    expect(response.headers.get('content-type')).toBe('image/png');
+    expect(response.headers.get('content-disposition')).toContain('inline');
+  });
+
+  it('refuses a PDF on the logo field, which stores only what a page renders', async () => {
+    // Widening the STORE must not widen every field that uses it. The refusal
+    // names the format rather than saying "not a PNG or a JPEG" about a file
+    // this application stores perfectly well somewhere else.
+    const result = await storeLogo(upload(PDF_BYTES, 'letterhead.pdf', 'application/pdf'));
+    expect(result).toEqual({ ok: false, reason: 'unsupported-type', looksLike: 'a PDF' });
+    expect(await db.select().from(files)).toHaveLength(0);
+    expect(await namesAdded()).toEqual([]);
   });
 });
 
@@ -328,6 +417,39 @@ describe('the serve route', () => {
     expect(response.headers.get('cache-control')).toContain('private');
     expect(response.headers.get('content-length')).toBe(String(GENUINE_PNG.length));
     expect(new Uint8Array(await response.arrayBuffer())).toEqual(GENUINE_PNG);
+  });
+
+  it('hands a PDF over as a download, with nosniff kept', async () => {
+    const result = await storeReceipt(upload(PDF_BYTES, 'supplier-invoice.pdf'));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    const response = await request(result.file.id);
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toBe('application/pdf');
+    // The point of the whole exercise: never `inline`. A PDF displayed from
+    // this origin is a document IN this origin, and a PDF can carry script.
+    expect(response.headers.get('content-disposition')).toContain('attachment');
+    expect(response.headers.get('content-disposition')).not.toContain('inline');
+    expect(response.headers.get('content-disposition')).toContain('supplier-invoice.pdf');
+    // Nothing the images already had is weakened by the new branch.
+    expect(response.headers.get('x-content-type-options')).toBe('nosniff');
+    expect(response.headers.get('cache-control')).toContain('private');
+    expect(response.headers.get('cache-control')).toContain('immutable');
+    expect(response.headers.get('content-length')).toBe(String(PDF_BYTES.length));
+    expect(new Uint8Array(await response.arrayBuffer())).toEqual(PDF_BYTES);
+  });
+
+  it('gives a downloaded PDF a name that does not lie about its type', async () => {
+    // The stored name came from a client, so what it claims about the type is a
+    // claim too -- and for an attachment that claim becomes the name on
+    // somebody's disk.
+    const result = await storeReceipt(upload(PDF_BYTES, 'receipt.png', 'image/png'));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    const response = await request(result.file.id);
+    expect(response.headers.get('content-disposition')).toContain('receipt.png.pdf');
   });
 
   it('404s for an unknown id', async () => {

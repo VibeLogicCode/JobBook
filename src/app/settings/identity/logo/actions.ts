@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { requireCapability } from '@/app/settings/actor';
-import { formatBytes, pointLogoAt } from '@/app/settings/identity/logo/logo';
+import { LOGO_TYPES, formatBytes, pointLogoAt } from '@/app/settings/identity/logo/logo';
 import { type ActionResult, refused, saved } from '@/app/settings/result';
 import {
   LOGO_MAX_BYTES,
@@ -55,6 +55,18 @@ function refusalFor(result: Extract<SaveResult, { ok: false }>): ActionResult {
     ]);
   }
 
+  if (result.looksLike === 'a PDF') {
+    return refused('A PDF cannot be used as the logo.', [
+      {
+        ...LOGO_FIELD,
+        message:
+          'is a PDF. Receipts may be PDFs, because a receipt is only ever downloaded; a logo is' +
+          ' drawn into every page and every document, and a PDF is never rendered by this' +
+          ' application. Export the artwork as a PNG or a JPEG.',
+      },
+    ]);
+  }
+
   const looks = result.looksLike ? ` It looks like ${result.looksLike}.` : '';
   return refused('That file is not a PNG or a JPEG.', [
     {
@@ -89,6 +101,10 @@ export async function uploadLogo(
     source,
     uploadedBy: guard.actor.id,
     maxBytes: LOGO_MAX_BYTES,
+    // The types a PAGE can render, not the types the store can keep. Receipts
+    // taught the store to keep PDFs; a letterhead is still a PNG or a JPEG,
+    // and stating the list here is what keeps those two facts separate.
+    accept: LOGO_TYPES,
   });
   if (!stored.ok) return refusalFor(stored);
 

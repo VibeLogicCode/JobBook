@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { files, organization } from '@/db/schema';
-import type { Dimensions } from '@/lib/files/sniff';
+import { type Dimensions, INLINE_TYPES } from '@/lib/files/sniff';
 import {
   type FileRow,
   activeFileRow,
@@ -19,8 +19,17 @@ import {
  * form.
  */
 
-/** What the file input offers, and the only two types the store will accept. */
-export const LOGO_ACCEPT = 'image/png,image/jpeg';
+/**
+ * The types a logo may be, and the string the file input offers.
+ *
+ * `INLINE_TYPES`, which is exactly the point. The store now keeps PDFs, because
+ * a supplier emails a receipt as one -- but a logo is drawn into the header of
+ * every page and onto every document, and a PDF is the one stored type this
+ * application deliberately never renders. So this field takes what a page can
+ * render, and widening the store did not widen it.
+ */
+export const LOGO_TYPES = INLINE_TYPES;
+export const LOGO_ACCEPT = LOGO_TYPES.join(',');
 
 export interface CurrentLogo {
   row: FileRow;

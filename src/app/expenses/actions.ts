@@ -13,6 +13,7 @@ import { formValues, invalid } from '@/app/settings/validate';
 import {
   EXPENSE_LABELS,
   RECEIPT_MAX_BYTES,
+  RECEIPT_TYPES,
   type TaxLineInput,
   constraintMessage,
   formatRatePerKm,
@@ -32,36 +33,40 @@ import { tenantToday } from '@/lib/quote/dates';
 /**
  * The write side of job expenses, mileage and receipts.
  *
- * **The capability is `quote:write`, chosen rather than inherited.** An
- * expense is a priced record against a job -- it moves the margin the owner
- * plans against, and once posted it moves what the accountant export reports.
- * The matrix's own note says what separates a `bookkeeper` from the other two
- * roles is exactly that: "What the role cannot do is change a priced record,
- * which is `quote:write`, `quote:transition` and `record:void` being false."
- * So this is the capability the matrix already means.
+ * **The capability is `expense:write`, which exists for exactly this.** These
+ * actions were originally gated on `quote:write`, because an expense is a
+ * priced record and that is the capability the matrix used to mean by one. It
+ * was the wrong answer for one of the three roles: a `bookkeeper` is the person
+ * most likely to be typing forty receipts, and under `quote:write` they could
+ * not type one. `expense:write` is now its own row of the matrix, held by all
+ * three roles, and `quote:write` is left meaning what it means -- a quote, a
+ * project, a customer, the records a customer sees.
  *
- * It is also, honestly, the wrong answer for one of the three roles. A
- * bookkeeper is the person most likely to be typing forty receipts, and under
- * `quote:write` they cannot. That is a gap in the matrix rather than a
- * decision to be worked around here: the fix is an `expense:write` capability
- * that `bookkeeper` holds and `quote:write` does not become, which changes
- * what every role may do product-wide and belongs to whoever owns that table.
- * Reaching for `worksheet:read` because a bookkeeper happens to hold it would
- * put a read capability on a write path, which is worse than the gap.
+ * Not `worksheet:read` because a bookkeeper happens to hold it: that would put
+ * a read capability on a write path, which is worse than the gap it closed.
+ * Not `rates:edit`, which the vendor list uses -- a vendor is a reference row
+ * carrying no money, and an expense is money. Not `organization:edit`, which is
+ * the per-kilometre rate in settings: one figure that changes what every FUTURE
+ * trip costs is a different blast radius from one trip already driven.
  *
- * Not `rates:edit`, which the vendor list uses: a vendor is a reference row
- * carrying no money, and an expense is money. Not `organization:edit`, which
- * is the per-kilometre rate in settings -- one figure that changes what every
- * FUTURE trip costs is a different blast radius from one trip already driven.
- *
- * Voiding is `record:void`, as it is everywhere else in the product, and a
- * `bookkeeper` holds neither.
+ * **Voiding an expense is `expense:write` too, and not `record:void`.** That is
+ * the one place this file departs from the rest of the product, so it is worth
+ * saying why. `record:void` is section 10.2's "void a quote, project, or
+ * customer" and it still is: nothing here widens what a role may retract on
+ * those records. An expense is different in kind. It is a line in this
+ * company's own ledger, entered from paper somebody is holding, and voiding it
+ * is the only correction this product offers -- the row stays, with a reason
+ * and an actor on it, and the tax lines go with it. Splitting entry from
+ * correction would mean a bookkeeper who typed a receipt twice must leave the
+ * double-count standing or interrupt an owner, and an owner interrupted forty
+ * times issues an `admin` account instead, which hands over `quote:write`,
+ * `quote:transition` and the real `record:void` in one move.
  *
  * Every refusal lives here rather than only in the screen. A disabled button
  * is a hint; a stale tab and a hand-made POST are not obliged to read it.
  */
 
-const REFUSAL = 'Your role can read the expense list but not add to it.';
+const REFUSAL = 'Your role can read the expense list but not write to it.';
 
 /** A rule carried out of a transaction as a sentence a person can act on. */
 class RuleError extends Error {}
@@ -284,7 +289,8 @@ const RECEIPT_FIELD = { field: 'receipt', label: 'Receipt' };
  * signature and stores the file under a name derived from that. So a
  * `receipt.png` that is really an SVG is refused here, with the reason said
  * out loud, rather than served back later from this application's own origin
- * with a type its uploader chose.
+ * with a type its uploader chose. A `receipt.pdf` that is really a PNG is
+ * stored as the PNG it is, for the same reason read the other way round.
  */
 function receiptRefusal(result: Extract<SaveResult, { ok: false }>): ActionResult {
   if (result.reason === 'empty') {
@@ -313,13 +319,13 @@ function receiptRefusal(result: Extract<SaveResult, { ok: false }>): ActionResul
     ]);
   }
   const looks = result.looksLike ? ` It looks like ${result.looksLike}.` : '';
-  return refused('That receipt is not a photograph this can store.', [
+  return refused('That receipt is not a file this can store.', [
     {
       ...RECEIPT_FIELD,
       message:
-        `is not a PNG or a JPEG.${looks} The contents are checked rather than the name, so` +
-        ' renaming a file .jpg does not change what is inside it. A PDF is not accepted yet —' +
-        ' photograph the paper instead.',
+        `is not a PNG, a JPEG or a PDF.${looks} The contents are checked rather than the name,` +
+        ' so renaming a file .jpg does not change what is inside it, and a PDF named .png is' +
+        ' still handled as the PDF it is.',
     },
   ]);
 }
@@ -332,7 +338,7 @@ export async function createExpense(
   _previous: ActionResult | null,
   formData: FormData,
 ): Promise<ActionResult> {
-  const allowed = await guard('quote:write');
+  const allowed = await guard('expense:write');
   if (!allowed.ok) return guardFailure(allowed.error);
 
   const values = formValues(formData);
@@ -374,6 +380,7 @@ export async function createExpense(
       source,
       uploadedBy: allowed.actor.id,
       maxBytes: RECEIPT_MAX_BYTES,
+      accept: RECEIPT_TYPES,
     });
     if (!stored.ok) return receiptRefusal(stored);
     receiptFileId = stored.file.id;
@@ -494,7 +501,7 @@ export async function createMileage(
   _previous: ActionResult | null,
   formData: FormData,
 ): Promise<ActionResult> {
-  const allowed = await guard('quote:write');
+  const allowed = await guard('expense:write');
   if (!allowed.ok) return guardFailure(allowed.error);
 
   const parsed = mileageFields.safeParse(formValues(formData));
@@ -597,7 +604,7 @@ export async function createExpenseBatch(
   _previous: ActionResult | null,
   formData: FormData,
 ): Promise<ActionResult> {
-  const allowed = await guard('quote:write');
+  const allowed = await guard('expense:write');
   if (!allowed.ok) return guardFailure(allowed.error);
 
   const values = formValues(formData);
@@ -726,8 +733,8 @@ export async function voidExpense(
   _previous: ActionResult | null,
   formData: FormData,
 ): Promise<ActionResult> {
-  const allowed = await guard('record:void');
-  if (!allowed.ok) return refused(allowed.error);
+  const allowed = await guard('expense:write');
+  if (!allowed.ok) return guardFailure(allowed.error);
 
   const parsed = voidFields.safeParse(formValues(formData));
   if (!parsed.success) return invalid(parsed.error, EXPENSE_LABELS, 'That void needs a reason.');

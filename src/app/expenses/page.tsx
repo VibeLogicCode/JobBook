@@ -2,7 +2,7 @@ import { and, asc, desc, eq, ne, sql } from 'drizzle-orm';
 import Link from 'next/link';
 import { db } from '@/db/client';
 import {
-  costCodes, expenseTaxes, expenses, organization, projects, taxRates, vendors,
+  costCodes, expenseTaxes, expenses, files, organization, projects, taxRates, vendors,
 } from '@/db/schema';
 import { resolveActor } from '@/app/settings/actor';
 import { can } from '@/lib/auth/permissions';
@@ -10,6 +10,7 @@ import { createExpense, createMileage, voidExpense } from '@/app/expenses/action
 import { BulkGrid } from '@/app/expenses/BulkGrid';
 import {
   PAYMENT_METHODS,
+  RECEIPT_ACCEPT,
   RECEIPT_MAX_BYTES,
   expenseStatusLabel,
   formatDistance,
@@ -36,13 +37,14 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { Pill } from '@/components/ui/Pill';
 import { SheetButton } from '@/components/ui/Sheet';
 import { AmountCell, TableWrap } from '@/components/ui/Table';
+import { isInlineType } from '@/lib/files/sniff';
 import { normalizeSearch, searchCondition } from '@/lib/list/search';
 import { formatCents } from '@/lib/money/format';
 import { tenantToday } from '@/lib/quote/dates';
 
 export const dynamic = 'force-dynamic';
 
-const REFUSAL = 'Your role can read the expense list but not add to it.';
+const REFUSAL = 'Your role can read the expense list but not write to it.';
 
 const KIND_OPTIONS = [
   { value: 'purchase', label: 'Purchases' },
@@ -82,8 +84,11 @@ export default async function ExpensesPage({
   const showVoided = one('voided') === '1';
 
   const state = await resolveActor();
-  const allowed = state.actor ? can(state.actor.role, 'quote:write') : false;
-  const mayVoid = state.actor ? can(state.actor.role, 'record:void') : false;
+  // One capability for both, because entering an expense and retracting one
+  // are the same job. `record:void` stays what it is elsewhere -- a quote, a
+  // project, a customer -- and is deliberately not consulted here.
+  const allowed = state.actor ? can(state.actor.role, 'expense:write') : false;
+  const mayVoid = allowed;
 
   const [org] = await db
     .select({
@@ -178,6 +183,13 @@ export default async function ExpensesPage({
       totalCents: expenses.totalCents,
       paymentMethod: expenses.paymentMethod,
       receiptFileId: expenses.receiptFileId,
+      // Read from the file row rather than assumed from the expense, because a
+      // receipt is now a PNG, a JPEG or a PDF and only the first two are
+      // rendered into this page. `mime_type` is the store's own sniffed answer,
+      // and it is used here to choose a control, never to decide a policy --
+      // the serve route consults the allowlist for itself.
+      receiptMimeType: files.mimeType,
+      receiptFileName: files.fileName,
       vendorTaxNumberCaptured: expenses.vendorTaxNumberCaptured,
       status: expenses.status,
       isBillable: expenses.isBillable,
@@ -197,6 +209,7 @@ export default async function ExpensesPage({
     .innerJoin(projects, eq(projects.id, expenses.projectId))
     .leftJoin(vendors, eq(vendors.id, expenses.vendorId))
     .leftJoin(costCodes, eq(costCodes.id, expenses.costCodeId))
+    .leftJoin(files, eq(files.id, expenses.receiptFileId))
     .where(
       and(
         search,
@@ -445,22 +458,27 @@ export default async function ExpensesPage({
             <label htmlFor="new-expense-receipt" className="t-small font-semibold">
               Receipt
             </label>
+            {/* `accept` is the list the action enforces, not a second copy
+                of it. `capture` is deliberately gone: it sends a phone straight
+                to the camera, which is the wrong door for the supplier PDF
+                sitting in the mail app. The camera is still one tap inside the
+                picker. */}
             <input
               id="new-expense-receipt"
               name="receipt"
               type="file"
-              accept="image/png,image/jpeg"
-              capture="environment"
+              accept={RECEIPT_ACCEPT}
               disabled={!allowed}
               aria-describedby="new-expense-receipt-hint"
               className={`field ${allowed ? '' : 'opacity-60'}`}
             />
             <p id="new-expense-receipt-hint" className="t-small text-subtle">
-              A photograph of the paper, up to{' '}
-              <span className="num">{formatBytes(RECEIPT_MAX_BYTES)}</span>. On a phone this opens
-              the camera. The file is identified by its contents rather than its name, so renaming
-              something .jpg will not get it past this, and it is served back only as the type it
-              actually is. A PDF is not accepted yet — photograph the paper instead.
+              A photograph of the paper or the supplier&apos;s own PDF, up to{' '}
+              <span className="num">{formatBytes(RECEIPT_MAX_BYTES)}</span>. On a phone the picker
+              offers the camera. The file is identified by its contents rather than its name, so
+              renaming something .jpg will not get it past this. A photograph is shown on the entry;
+              a PDF downloads instead of opening here, deliberately — a PDF can carry script, and
+              one displayed inside this application would be running inside it.
             </p>
           </div>
 
@@ -863,24 +881,43 @@ export default async function ExpensesPage({
                             <h3 className="t-small font-semibold">The receipt</h3>
                             {row.receiptFileId ? (
                               <>
-                                <a
-                                  href={`/api/files/${row.receiptFileId}`}
-                                  className="block w-fit rounded-control border border-line-strong bg-surface-2 p-2"
-                                >
-                                  {/* A plain img: the optimiser would fetch
-                                      through its own loader, and this route is
-                                      authenticated because a receipt is tenant
-                                      data. The src is the row id and nothing
-                                      else — no path, no name, no extension. */}
-                                  <img
-                                    src={`/api/files/${row.receiptFileId}`}
-                                    alt={`The receipt attached to ${row.description}`}
-                                    className="max-h-64 w-auto max-w-full"
-                                  />
-                                </a>
+                                {isInlineType(row.receiptMimeType ?? '') ? (
+                                  <a
+                                    href={`/api/files/${row.receiptFileId}`}
+                                    className="block w-fit rounded-control border border-line-strong bg-surface-2 p-2"
+                                  >
+                                    {/* A plain img: the optimiser would fetch
+                                        through its own loader, and this route is
+                                        authenticated because a receipt is tenant
+                                        data. The src is the row id and nothing
+                                        else — no path, no name, no extension. */}
+                                    <img
+                                      src={`/api/files/${row.receiptFileId}`}
+                                      alt={`The receipt attached to ${row.description}`}
+                                      className="max-h-64 w-auto max-w-full"
+                                    />
+                                  </a>
+                                ) : (
+                                  // Not an <img>, and not an <embed> either. A
+                                  // PDF is stored and never rendered by this
+                                  // application, so the only control that tells
+                                  // the truth about it is a link the browser
+                                  // downloads.
+                                  <a
+                                    href={`/api/files/${row.receiptFileId}`}
+                                    className="inline-block w-fit rounded-control border border-line-strong bg-surface-2 px-3 py-2 t-small font-semibold"
+                                  >
+                                    Download {row.receiptFileName ?? 'the receipt'}
+                                  </a>
+                                )}
                                 <p className="mt-1 max-w-prose t-small text-subtle">
                                   Served as the type its bytes actually are, never the one the
                                   uploader named it.
+                                  {isInlineType(row.receiptMimeType ?? '')
+                                    ? ''
+                                    : ' A PDF is handed to the browser as a download rather than opened' +
+                                      ' in this page, because a PDF can carry script and one displayed' +
+                                      ' here would run with this application’s rights.'}
                                 </p>
                               </>
                             ) : (

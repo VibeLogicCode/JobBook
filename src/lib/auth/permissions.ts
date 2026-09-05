@@ -37,6 +37,7 @@ export const CAPABILITIES = [
   'quote:write',
   'quote:transition',
   'record:void',
+  'expense:write',
   'worksheet:read',
   'document:generate',
   'user:manage',
@@ -65,8 +66,30 @@ export type Capability = (typeof CAPABILITIES)[number];
  * `bookkeeper` holding `worksheet:read` is deliberate. The role exists for
  * whoever prepares the year end, and a set of books carrying the revenue but
  * not the cost is not a set of books. What the role cannot do is change a
- * priced record, which is `quote:write`, `quote:transition` and `record:void`
- * being false.
+ * PRICED, CUSTOMER-FACING record, which is `quote:write`, `quote:transition`
+ * and `record:void` being false.
+ *
+ * `expense:write` is the one write the role does hold, and it is a separate row
+ * rather than a loosening of the three above because it is a different kind of
+ * record. A quote is a document sent to somebody outside the company and a
+ * project is the job it became; an expense is a line in this company's own
+ * ledger, entered from paper that already exists. Whoever prepares the year end
+ * is the person most likely to be typing forty receipts, and a books role that
+ * can read the cost but not record it is a role that hands the shoebox back.
+ *
+ * It covers VOIDING an expense as well as entering one, and that is the part
+ * worth arguing. `record:void` keeps its own meaning exactly: section 10.2
+ * names it "void a quote, project, or customer", and an expense was never on
+ * that list, so nothing about a bookkeeper's reach into quotes, projects or
+ * customers changes here. What voiding an expense actually is, is the only
+ * correction this product has -- nothing is deleted, the row stays with a
+ * reason and an actor on it and an audit row behind it, and every figure
+ * reported is a sum over live rows. Entering forty receipts and being unable to
+ * retract the one typed twice does not make the books safer; it leaves a
+ * double-count standing, or it turns every typo into an interruption for
+ * somebody who will, in the end, just hand the bookkeeper an `admin` account --
+ * and that grants `quote:write`, `quote:transition` and `record:void` in one
+ * move. The narrow capability is the smaller grant.
  *
  * The five owner-only capabilities are the ones whose blast radius is the
  * whole deployment rather than one job: the tax rate every future quote
@@ -78,6 +101,7 @@ export const CAPABILITY_MATRIX = {
     'quote:write': true,
     'quote:transition': true,
     'record:void': true,
+    'expense:write': true,
     'worksheet:read': true,
     'document:generate': true,
     'user:manage': true,
@@ -94,6 +118,7 @@ export const CAPABILITY_MATRIX = {
     'quote:write': true,
     'quote:transition': true,
     'record:void': true,
+    'expense:write': true,
     'worksheet:read': true,
     'document:generate': true,
     // "Yes, except `owner` rows and except granting `owner`". Those exceptions
@@ -114,6 +139,10 @@ export const CAPABILITY_MATRIX = {
     'quote:write': false,
     'quote:transition': false,
     'record:void': false,
+    // The one write this role holds. See the note above: an expense is this
+    // company's own ledger line, not a document sent to a customer, and the
+    // entry and its retraction are one job.
+    'expense:write': true,
     'worksheet:read': true,
     'document:generate': true,
     'user:manage': false,

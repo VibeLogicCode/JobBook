@@ -14,29 +14,89 @@
  */
 
 /**
- * The only types this application stores or serves, and the extension each one
- * is stored under.
+ * How a stored type is allowed to reach a browser.
  *
- * The store and the serve route read the same object on purpose. A route that
- * echoed back whatever `mime_type` its row happened to contain would serve an
- * SVG the moment some future upload path was looser than this one -- the row
- * is data, and data is not a policy.
+ * `inline` is "this application renders it into one of its own pages".
+ * `attachment` is "the browser saves it, and this application never becomes its
+ * document". The distinction is policy, not presentation: an SVG is refused
+ * outright because one served inline from this origin runs script with this
+ * application's rights, and a PDF is the same class of risk -- a PDF can carry
+ * JavaScript, and one displayed inline from this origin is IN this origin.
+ * Handing it over as a download puts it in the operating system's hands instead
+ * of this application's.
  */
-export const SERVABLE_TYPES = {
-  'image/png': '.png',
-  'image/jpeg': '.jpg',
-} as const;
+export type Rendering = 'inline' | 'attachment';
 
-export type ServableType = keyof typeof SERVABLE_TYPES;
+/**
+ * The only types this application STORES, the extension each is stored under,
+ * and how each may reach a browser.
+ *
+ * This was `SERVABLE_TYPES`, a plain map of type to extension, and that name
+ * was doing real work: it meant "types this application serves into a page".
+ * A PDF is the first type that may be stored and may NOT be rendered into a
+ * page, so "storable" and "renderable inline" stopped being the same set, and
+ * an entry here now carries both answers.
+ *
+ * One object rather than a second boolean beside the first map, because the
+ * store and the serve route reading the same object is the property worth
+ * keeping. A route that echoed back whatever `mime_type` its row happened to
+ * contain would serve an SVG the moment some future upload path was looser than
+ * this one -- the row is data, and data is not a policy. Splitting the answer
+ * across two structures would let a type land in one and not the other, which
+ * is that same failure wearing a different shape.
+ */
+export const STORED_TYPES = {
+  'image/png': { extension: '.png', rendering: 'inline' },
+  'image/jpeg': { extension: '.jpg', rendering: 'inline' },
+  'application/pdf': { extension: '.pdf', rendering: 'attachment' },
+} as const satisfies Record<string, { extension: string; rendering: Rendering }>;
 
-export function isServableType(value: string): value is ServableType {
-  return Object.hasOwn(SERVABLE_TYPES, value);
+export type StoredType = keyof typeof STORED_TYPES;
+
+export function isStoredType(value: string): value is StoredType {
+  return Object.hasOwn(STORED_TYPES, value);
+}
+
+/** Every type that may be stored, in the order they are declared above. */
+export const STORABLE_TYPES: readonly StoredType[] = Object.keys(STORED_TYPES) as StoredType[];
+
+/**
+ * The types a page may render.
+ *
+ * Derived from the map rather than written out a second time: a hand-kept list
+ * is a list that disagrees with the policy the day somebody adds a type to one
+ * and forgets the other.
+ */
+export const INLINE_TYPES: readonly StoredType[] = STORABLE_TYPES.filter(
+  (type) => STORED_TYPES[type].rendering === 'inline',
+);
+
+/**
+ * Whether a stored type may be rendered into one of this application's pages.
+ *
+ * A predicate rather than a boolean, and narrowing to `StoredType` rather than
+ * to some narrower alias: inline implies stored, so a caller that has asked
+ * this may go on to read the extension or the dimensions without asking again.
+ */
+export function isInlineType(value: string): value is StoredType {
+  return isStoredType(value) && STORED_TYPES[value].rendering === 'inline';
+}
+
+export function renderingFor(type: StoredType): Rendering {
+  return STORED_TYPES[type].rendering;
 }
 
 /** PNG: the eight-byte signature, which includes the CRLF/EOF sequences the format uses to detect mangled transfers. */
 const PNG_SIGNATURE = Uint8Array.of(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a);
 /** JPEG: SOI followed by the first marker's introducer. */
 const JPEG_SIGNATURE = Uint8Array.of(0xff, 0xd8, 0xff);
+/**
+ * PDF: the `%PDF-` the specification requires at the head of the file, ahead of
+ * the version digits. Sniffed like the other two, and for the same reason --
+ * an extension and a `Content-Type` are claims, so a PNG named `receipt.pdf`
+ * has to be stored and served as the PNG it is.
+ */
+const PDF_SIGNATURE = Uint8Array.of(0x25, 0x50, 0x44, 0x46, 0x2d);
 
 function startsWith(bytes: Uint8Array, signature: Uint8Array): boolean {
   if (bytes.length < signature.length) return false;
@@ -46,15 +106,16 @@ function startsWith(bytes: Uint8Array, signature: Uint8Array): boolean {
   return true;
 }
 
-/** The type these bytes really are, or null when they are not a type we accept. */
-export function sniffType(bytes: Uint8Array): ServableType | null {
+/** The type these bytes really are, or null when they are not a type this application stores. */
+export function sniffType(bytes: Uint8Array): StoredType | null {
   if (startsWith(bytes, PNG_SIGNATURE)) return 'image/png';
   if (startsWith(bytes, JPEG_SIGNATURE)) return 'image/jpeg';
+  if (startsWith(bytes, PDF_SIGNATURE)) return 'application/pdf';
   return null;
 }
 
-export function extensionFor(type: ServableType): string {
-  return SERVABLE_TYPES[type];
+export function extensionFor(type: StoredType): string {
+  return STORED_TYPES[type].extension;
 }
 
 /** ASCII from a byte range, for the format signatures that are plain text. */
@@ -87,6 +148,11 @@ function looksLikeText(bytes: Uint8Array): boolean {
  * SVG from a design tool and it is named `logo.png`. Naming the format he
  * actually has is the difference between a message he can act on and one he
  * reads twice.
+ *
+ * The PDF line below survives PDFs becoming storable, and does more work than
+ * before rather than less. A caller states which of the stored types IT
+ * accepts, so a PDF dropped on the logo field is a type this application stores
+ * and that field does not take, and the message still has to name it.
  */
 export function describeUnacceptable(bytes: Uint8Array): string | null {
   if (bytes.length === 0) return 'an empty file';
@@ -171,6 +237,10 @@ function jpegDimensions(bytes: Uint8Array): Dimensions | null {
  * owner as a courtesy, and a logo that stored and serves correctly must not be
  * reported as broken because its frame header sits past the bytes we read.
  */
-export function readDimensions(bytes: Uint8Array, type: ServableType): Dimensions | null {
-  return type === 'image/png' ? pngDimensions(bytes) : jpegDimensions(bytes);
+export function readDimensions(bytes: Uint8Array, type: StoredType): Dimensions | null {
+  if (type === 'image/png') return pngDimensions(bytes);
+  if (type === 'image/jpeg') return jpegDimensions(bytes);
+  // A PDF's pages are measured in points, not pixels. There is no honest answer
+  // in the units this returns, so it says nothing rather than inventing one.
+  return null;
 }

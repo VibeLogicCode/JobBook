@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { FieldError } from '@/app/settings/result';
+import { type StoredType, STORABLE_TYPES } from '@/lib/files/sniff';
 import { formatCents, formatQty, parseAmountToCents, parseQtyToMilli } from '@/lib/money/format';
 import { lineTotalCents } from '@/lib/money/scale';
 
@@ -18,6 +19,29 @@ import { lineTotalCents } from '@/lib/money/scale';
  * takes the cap as an argument precisely so neither has to be the other's.
  */
 export const RECEIPT_MAX_BYTES = 10 * 1024 * 1024;
+
+/**
+ * What a receipt may be.
+ *
+ * Every type the store keeps, which today is PNG, JPEG and PDF. A supplier
+ * emailing a PDF invoice is ordinary trade, and refusing it meant the only way
+ * to attach the paper was to print the PDF and photograph the print -- so the
+ * refusal cost the evidence it was protecting.
+ *
+ * A PDF is stored and never rendered: the serve route sends it with
+ * `Content-Disposition: attachment`, so it reaches a viewer as a file the
+ * operating system opens rather than as a document of this application's
+ * origin. That is the same reason an SVG is not stored at all, applied to a
+ * format the business genuinely needs.
+ *
+ * Stated here rather than defaulted in the store, and for the reason
+ * `RECEIPT_MAX_BYTES` is: this is the field's policy. The logo field states a
+ * narrower one, and neither has to be the other's.
+ */
+export const RECEIPT_TYPES: readonly StoredType[] = STORABLE_TYPES;
+
+/** What the file input offers, from the same list the action enforces. */
+export const RECEIPT_ACCEPT = RECEIPT_TYPES.join(',');
 
 /**
  * What an expense looks like arriving from a form, and the three pure rules

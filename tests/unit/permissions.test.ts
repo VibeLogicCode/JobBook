@@ -45,9 +45,21 @@ const MATRIX_10_2: SpecRow[] = [
     owner: true, admin: true, bookkeeper: false,
   },
   {
+    // "A quote, project, or customer" is the whole of this row. An expense is
+    // not on it and never was, which is what lets `expense:write` carry the
+    // voiding of an expense without changing what this capability means.
     row: 'Void a quote, project, or customer',
     capability: 'record:void',
     owner: true, admin: true, bookkeeper: false,
+  },
+  {
+    // The bookkeeper's one write. The role prepares the year end, so it enters
+    // the receipts -- and retracts the one it typed twice, because splitting
+    // entry from correction leaves a double-count standing in the books the
+    // role exists to keep.
+    row: 'Enter, correct and void an expense or a mileage entry',
+    capability: 'expense:write',
+    owner: true, admin: true, bookkeeper: true,
   },
   {
     // "Yes, read-only" for bookkeeper. The read is allowed; what is withheld is

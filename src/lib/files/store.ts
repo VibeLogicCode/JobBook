@@ -9,10 +9,10 @@ import type { entityTypeEnum } from '@/db/enums';
 import { files } from '@/db/schema';
 import {
   type Dimensions,
-  type ServableType,
+  type StoredType,
   describeUnacceptable,
   extensionFor,
-  isServableType,
+  isInlineType,
   readDimensions,
   sniffType,
 } from '@/lib/files/sniff';
@@ -30,6 +30,13 @@ import {
  *    does not already know about.
  * 2. The stored name is derived from the SNIFFED type and a fresh UUID, never
  *    from the client filename. That name is display metadata and nothing else.
+ * 3. WHAT may be stored is the sniff's answer intersected with the list the
+ *    CALLER passed. `sniff.ts` says what this application knows how to store at
+ *    all; a caller says which of those its own field takes. A receipt takes a
+ *    PDF because a supplier emails invoices as PDFs; a logo does not, because a
+ *    logo is rendered into a page and a PDF is deliberately never rendered into
+ *    one. Widening the store must not widen every field that uses it, and the
+ *    list is a required argument so a new caller has to answer the question.
  *
  * Nothing here deletes. The application role holds no DELETE privilege
  * (migration 0001), so an accidental delete is a permission error rather than a
@@ -114,7 +121,7 @@ export interface StoredFile {
   entityType: EntityType;
   entityId: string | null;
   fileName: string;
-  mimeType: ServableType;
+  mimeType: StoredType;
   sizeBytes: number;
   /** Relative to the root, so moving the volume does not rewrite every row. */
   storagePath: string;
@@ -148,6 +155,12 @@ export interface SaveFileInput {
   /** The `users` row that uploaded it, when a request has an actor. */
   uploadedBy?: string | null;
   maxBytes: number;
+  /**
+   * The stored types THIS field takes, which is a subset of what the store
+   * knows. Required, not defaulted: a default would silently hand every future
+   * caller whatever the widest set happens to be on the day it is written.
+   */
+  accept: readonly StoredType[];
 }
 
 /**
@@ -199,7 +212,7 @@ async function readCapped(
  * a kilobyte of padding renders badly in a table and worse in a response
  * header.
  */
-function displayName(raw: string, type: ServableType): string {
+function displayName(raw: string, type: StoredType): string {
   const lastSegment = raw.split(/[\\/]/).pop() ?? '';
   const cleaned = Array.from(lastSegment)
     .filter((character) => {
@@ -230,8 +243,13 @@ export async function saveFile(input: SaveFileInput): Promise<SaveResult> {
   if (bytes.length === 0) return { ok: false, reason: 'empty' };
   if (overCap) return { ok: false, reason: 'too-large', maxBytes: input.maxBytes };
 
+  // Two questions, in this order and both from the bytes. What IS this, and is
+  // that one of the types this field takes? A PDF arriving at the logo field
+  // fails the second, and `describeUnacceptable` still names it, so the refusal
+  // reads "it looks like a PDF" rather than "it is not a PNG or a JPEG" about a
+  // file the store elsewhere accepts.
   const mimeType = sniffType(bytes);
-  if (!mimeType) {
+  if (!mimeType || !input.accept.includes(mimeType)) {
     return { ok: false, reason: 'unsupported-type', looksLike: describeUnacceptable(bytes) };
   }
 
@@ -349,7 +367,10 @@ export async function describeStored(
 ): Promise<StoredDescription | null> {
   const size = await statStored(row);
   if (size === null) return null;
-  if (!isServableType(row.mimeType)) return { sizeBytes: size, dimensions: null };
+  // Only the types a page renders have pixel dimensions worth reading, and only
+  // those have a caption to put them in. A PDF is neither, so its header is not
+  // read at all rather than read and discarded.
+  if (!isInlineType(row.mimeType)) return { sizeBytes: size, dimensions: null };
 
   let handle;
   try {
