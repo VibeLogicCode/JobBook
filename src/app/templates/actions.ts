@@ -1,6 +1,6 @@
 'use server';
 
-import { eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { db } from '@/db/client';
@@ -20,6 +20,7 @@ import {
   multiplierField,
   projectTypeField,
   qtySourceField,
+  timesPhrase,
 } from '@/app/templates/schema';
 
 /**
@@ -189,8 +190,27 @@ export async function addTemplateLine(
     createdBy: guard.actor.id,
   });
 
+  // Two lines of the same item in different groups can be legitimate -- a
+  // second flooring line for a different room, priced separately -- so this
+  // never refuses the add. It only says so, because a quote built from here
+  // will bill the item that many times and nobody asked for that on purpose.
+  const [{ count }] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(scopeTemplateItems)
+    .where(
+      and(
+        eq(scopeTemplateItems.scopeTemplateId, scopeTemplateId),
+        eq(scopeTemplateItems.rateItemId, rateItemId),
+        eq(scopeTemplateItems.recordStatus, 'active'),
+      ),
+    );
+
   revalidatePath(`/templates/${scopeTemplateId}`);
-  return saved(`${item.description} added to the template.`);
+  return saved(
+    count > 1
+      ? `${item.description} added to the template. It now appears ${timesPhrase(count)} in this template.`
+      : `${item.description} added to the template.`,
+  );
 }
 
 const updateLineSchema = z

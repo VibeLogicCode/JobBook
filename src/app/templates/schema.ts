@@ -107,3 +107,14 @@ export const PROJECT_TYPE_LABELS: Record<string, string> = Object.fromEntries(
 export const QTY_SOURCE_LABELS: Record<string, string> = Object.fromEntries(
   QTY_SOURCE_OPTIONS.map((option) => [option.value, option.label]),
 );
+
+/**
+ * "once" / "twice" / "3 times" -- the phrasing a duplicate rate item is
+ * reported with, shared by the add-a-line success message and the page's
+ * warning notice so the two never describe the same count two different ways.
+ */
+export function timesPhrase(count: number): string {
+  if (count === 1) return 'once';
+  if (count === 2) return 'twice';
+  return `${count} times`;
+}

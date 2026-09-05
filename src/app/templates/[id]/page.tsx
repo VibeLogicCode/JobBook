@@ -3,35 +3,17 @@ import { notFound } from 'next/navigation';
 import { db } from '@/db/client';
 import { organization, rateItems, scopeTemplateItems, scopeTemplates } from '@/db/schema';
 import { can, resolveActor } from '@/app/settings/actor';
-import {
-  addTemplateLine,
-  setTemplateActive,
-  updateTemplate,
-  updateTemplateLine,
-  voidTemplateLine,
-} from '@/app/templates/actions';
-import {
-  PROJECT_TYPE_OPTIONS,
-  QTY_SOURCE_LABELS,
-  QTY_SOURCE_OPTIONS,
-} from '@/app/templates/schema';
-import { WorkedExample, type WireTemplateLine } from '@/app/templates/[id]/WorkedExample';
+import { addTemplateLine, setTemplateActive, updateTemplate } from '@/app/templates/actions';
+import { PROJECT_TYPE_OPTIONS, timesPhrase } from '@/app/templates/schema';
+import { TemplateLines, type WireTemplateLine } from '@/app/templates/[id]/TemplateLines';
 import { ActionForm, RowAction } from '@/components/settings/ActionForm';
-import {
-  CheckboxField,
-  FieldGrid,
-  SelectField,
-  TextAreaField,
-  TextField,
-} from '@/components/settings/Fields';
+import { FieldGrid, SelectField, TextAreaField, TextField } from '@/components/settings/Fields';
+import { TemplateLineFields } from '@/components/templates/TemplateLineFields';
 import { Notice } from '@/components/ui/Notice';
-import { buttonClass } from '@/components/ui/Button';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Section } from '@/components/settings/Section';
 import { Pill } from '@/components/ui/Pill';
 import { SheetButton } from '@/components/ui/Sheet';
-import { AmountCell, TableWrap } from '@/components/ui/Table';
-import { formatQty, formatRate } from '@/lib/money/format';
 
 export const dynamic = 'force-dynamic';
 
@@ -70,6 +52,7 @@ export default async function TemplateDetailPage({
 
   const wireLines: WireTemplateLine[] = lines.map(({ line, item }) => ({
     id: line.id,
+    rateItemId: line.rateItemId,
     code: item.code,
     description: item.description,
     unitLabel: item.unitLabel,
@@ -80,9 +63,20 @@ export default async function TemplateDetailPage({
     lineGroup: line.lineGroup,
     sortOrder: line.sortOrder,
     isOptional: line.isOptional,
+    isAllowance: line.isAllowance,
   }));
 
   const nextSortOrder = lines.reduce((max, { line }) => Math.max(max, line.sortOrder), 0) + 10;
+
+  // A quote built from this template bills whatever is on it -- two lines
+  // pointing at the same rate item bill that item twice, and nothing else on
+  // this page would ever say so before somebody sent the quote out. Two lines
+  // of the same item in different groups can be a real thing (a second
+  // flooring line for a different room, priced separately), so this warns
+  // rather than refusing.
+  const countByCode = new Map<string, number>();
+  for (const { item } of lines) countByCode.set(item.code, (countByCode.get(item.code) ?? 0) + 1);
+  const duplicates = [...countByCode.entries()].filter(([, itemCount]) => itemCount > 1);
 
   const readOnlyNote = state.actor
     ? `Your role (${state.actor.role}) cannot edit scope templates.`
@@ -107,11 +101,57 @@ export default async function TemplateDetailPage({
           </>
         }
         title={template.name}
-        description="Every line names a rate item and a rule for its quantity. Editing here never changes a quote already written."
+        description="Every line names a rate item and a rule for its quantity. Editing here never changes a quote already built from it."
         actions={
-          <a href="#add-line" className={buttonClass('primary')}>
-            Add a line
-          </a>
+          // A press, then the form over a blurred page -- the button that
+          // adds a row lives at the top of the page it belongs to, matching
+          // vendors, expenses and the schedule, rather than at the foot of a
+          // table somebody has to scroll past everything to reach.
+          <SheetButton
+            trigger="Add a line"
+            variant="primary"
+            label="Add a line to this template"
+            title="Add a line"
+            subtitle={template.name}
+            discardPrompt="Throw away this line? Nothing has been saved yet."
+          >
+            {items.length === 0 ? (
+              <Notice tone="warning" title="There are no rate items to choose from">
+                A template line has to point at a priced item. Add rate items first.
+              </Notice>
+            ) : (
+              <ActionForm
+                action={addTemplateLine}
+                submitLabel="Add line"
+                disabled={!allowed}
+                disabledNote={readOnlyNote}
+                resetOnSuccess
+              >
+                <input type="hidden" name="scopeTemplateId" value={template.id} />
+                <FieldGrid>
+                  <SelectField
+                    idPrefix="new-line"
+                    name="rateItemId"
+                    label="Rate item"
+                    required
+                    wide
+                    options={items.map((item) => ({
+                      value: item.id,
+                      label: `${item.code} — ${item.description} (${
+                        item.calcMode === 'qty' ? `per ${item.unitLabel}` : item.calcMode
+                      })`,
+                    }))}
+                    disabled={!allowed}
+                  />
+                  <TemplateLineFields
+                    idPrefix="new-line"
+                    nextSortOrder={nextSortOrder}
+                    disabled={!allowed}
+                  />
+                </FieldGrid>
+              </ActionForm>
+            )}
+          </SheetButton>
         }
       />
 
@@ -177,329 +217,27 @@ export default async function TemplateDetailPage({
           </div>
         </Section>
 
-        {/*
-          The quantity source is an enum and not a formula language, on
-          purpose: a user-editable expression stored in a database column is
-          an injection surface and an unbounded support burden.
-        */}
-        <Section
-          title="How a quantity derives"
-          description={
-            <p>
-              Every line computes as <span className="num">source value × multiplier</span>.
-              Read the multiplier as a rate, not a factor: pot lights at{' '}
-              <span className="num">0.0200</span> mean{' '}
-              <span className="font-semibold">one fixture per fifty {areaUnit}</span>, not two
-              percent.
-            </p>
-          }
-        >
-          <WorkedExample lines={wireLines} areaUnit={areaUnit} />
-        </Section>
-
         <Section title="Lines">
-          <TableWrap minWidth="68rem">
-            <thead>
-              <tr>
-                <th scope="col">Item</th>
-                <th scope="col">Group</th>
-                <th scope="col">Quantity from</th>
-                <th scope="col" className="cell-num">
-                  Multiplier
-                </th>
-                <th scope="col" className="cell-num">
-                  Fixed quantity
-                </th>
-                <th scope="col">Flags</th>
-                <th scope="col" className="cell-num">
-                  Order
-                </th>
-                <th scope="col">Change</th>
-              </tr>
-            </thead>
-            <tbody>
-              {lines.length === 0 ? (
-                <tr>
-                  <td data-label="Item" colSpan={8}>
-                    No lines yet. Add the first one below, and the worked example above will
-                    show what it derives.
-                  </td>
-                </tr>
-              ) : null}
+          {duplicates.length > 0 ? (
+            <div className="mb-3">
+              <Notice tone="warning" title="A rate item repeats in this template">
+                {duplicates
+                  .map(([code, itemCount]) => `${code} appears ${timesPhrase(itemCount)}`)
+                  .join('; ')}{' '}
+                — a quote built from here bills it that many times. Might be intended; worth a
+                check before it goes out.
+              </Notice>
+            </div>
+          ) : null}
 
-              {lines.map(({ line, item }) => (
-                <tr key={line.id}>
-                  <td data-label="Item">
-                    {item.description}
-                    <span className="ml-2 num t-small text-subtle">{item.code}</span>
-                    <span className="block t-small text-subtle">
-                      {item.calcMode === 'qty'
-                        ? `per ${item.unitLabel}`
-                        : item.calcMode === 'flat'
-                          ? 'flat price'
-                          : 'percentage of the work'}
-                    </span>
-                  </td>
-                  <td data-label="Group" className="t-small text-muted">
-                    {line.lineGroup}
-                  </td>
-                  <td data-label="Quantity from" className="t-small text-muted">
-                    {QTY_SOURCE_LABELS[line.qtySource] ?? line.qtySource}
-                  </td>
-                  <AmountCell data-label="Multiplier">
-                    {formatRate(line.qtyMultiplierTenThou)}
-                  </AmountCell>
-                  <AmountCell data-label="Fixed quantity">
-                    {line.fixedQtyMilli === null ? '—' : formatQty(line.fixedQtyMilli)}
-                  </AmountCell>
-                  <td data-label="Flags">
-                    <span className="flex flex-wrap gap-1">
-                      {line.isOptional ? <Pill tone="info">Optional</Pill> : null}
-                      {line.isAllowance ? <Pill tone="warning">Allowance</Pill> : null}
-                      {!line.isOptional && !line.isAllowance ? (
-                        <span className="t-small text-subtle">Included, fixed price</span>
-                      ) : null}
-                    </span>
-                  </td>
-                  <AmountCell data-label="Order">{line.sortOrder}</AmountCell>
-                  <td data-label="Change">
-                    {/* A press, then the form over a blurred page -- the same
-                        control the rate list, the cost codes and the reminder
-                        rules already use for "change this row". It was the last
-                        disclosure of its kind on a table row: opening it shoved
-                        every line below it down the screen, and on a template
-                        with a dozen lines that meant the row being edited
-                        walked off the top of the viewport. The title names the
-                        item, because the table behind it is dimmed and the
-                        sheet is now the only thing saying which line this is. */}
-                    <SheetButton
-                      trigger="Change…"
-                      label={`Change ${item.description}`}
-                      title={`Change ${item.description}`}
-                      subtitle={`${item.code} · ${line.lineGroup}`}
-                      discardPrompt="Throw away the changes to this line? Nothing has been saved yet."
-                    >
-                      <div className="flex flex-col gap-4">
-                        <ActionForm
-                          action={updateTemplateLine}
-                          submitLabel="Save line"
-                          disabled={!allowed}
-                          disabledNote={readOnlyNote}
-                        >
-                          <input type="hidden" name="id" value={line.id} />
-                          <input type="hidden" name="scopeTemplateId" value={template.id} />
-                          <input type="hidden" name="rateItemId" value={line.rateItemId} />
-                          <FieldGrid>
-                            <SelectField
-                              idPrefix={`line-${line.id}`}
-                              name="qtySource"
-                              label="Quantity from"
-                              required
-                              defaultValue={line.qtySource}
-                              options={QTY_SOURCE_OPTIONS}
-                              disabled={!allowed}
-                            />
-                            <TextField
-                              idPrefix={`line-${line.id}`}
-                              name="qtyMultiplier"
-                              label="Multiplier"
-                              required
-                              numeric
-                              inputMode="decimal"
-                              maxLength={12}
-                              defaultValue={formatRate(line.qtyMultiplierTenThou)}
-                              disabled={!allowed}
-                              hint="Four decimal places at most. Ignored when the quantity is typed on the quote."
-                            />
-                            <TextField
-                              idPrefix={`line-${line.id}`}
-                              name="fixedQty"
-                              label="Fixed quantity"
-                              numeric
-                              inputMode="decimal"
-                              maxLength={12}
-                              defaultValue={
-                                line.fixedQtyMilli === null
-                                  ? ''
-                                  : formatQty(line.fixedQtyMilli)
-                              }
-                              disabled={!allowed}
-                              hint="Only read when the source is a fixed quantity."
-                            />
-                            <TextField
-                              idPrefix={`line-${line.id}`}
-                              name="lineGroup"
-                              label="Line group"
-                              required
-                              maxLength={100}
-                              defaultValue={line.lineGroup}
-                              disabled={!allowed}
-                              hint="The band this line sits under on the worksheet and the document."
-                            />
-                            <TextField
-                              idPrefix={`line-${line.id}`}
-                              name="sortOrder"
-                              label="Order"
-                              required
-                              numeric
-                              inputMode="numeric"
-                              maxLength={4}
-                              defaultValue={String(line.sortOrder)}
-                              disabled={!allowed}
-                            />
-                            <CheckboxField
-                              idPrefix={`line-${line.id}`}
-                              name="isOptional"
-                              label="Optional — an upgrade the customer may add"
-                              defaultChecked={line.isOptional}
-                              disabled={!allowed}
-                              hint="Starts excluded, so a template cannot silently inflate a quote."
-                            />
-                            <CheckboxField
-                              idPrefix={`line-${line.id}`}
-                              name="isAllowance"
-                              label="Allowance — a placeholder reconciled against actual cost"
-                              defaultChecked={line.isAllowance}
-                              disabled={!allowed}
-                              hint="Overrides the rate item's own allowance flag for this template only."
-                            />
-                          </FieldGrid>
-                        </ActionForm>
-
-                        {/*
-                          The database refuses a delete outright, not just this form: a
-                          watermark-based mirror cannot observe a row that no longer
-                          exists, and the phantom would outlive the record.
-                        */}
-                        <div>
-                          <h3 className="t-small font-semibold">Remove this line</h3>
-                          <p className="mb-2 max-w-prose t-small text-subtle">
-                            Voided with a reason, not deleted — nothing here is ever hard-deleted.
-                          </p>
-                          <RowAction
-                            action={voidTemplateLine}
-                            label="Remove from template"
-                            destructive
-                            disabled={!allowed}
-                            fields={{ id: line.id, scopeTemplateId: template.id, reason: '' }}
-                            confirm="Remove this line from the template? The row stays, voided, with a reason."
-                          />
-                        </div>
-                      </div>
-                    </SheetButton>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </TableWrap>
+          <TemplateLines
+            templateId={template.id}
+            lines={wireLines}
+            areaUnit={areaUnit}
+            allowed={allowed}
+            refusal={readOnlyNote}
+          />
         </Section>
-
-        <div id="add-line" tabIndex={-1} className="scroll-mt-4">
-        <Section
-          title="Add a line"
-          description={
-            <p>
-              A line names a rate item plus how its quantity derives from the measurements.
-            </p>
-          }
-        >
-          {items.length === 0 ? (
-            <Notice tone="warning" title="There are no rate items to choose from">
-              A template line has to point at a priced item. Add rate items first.
-            </Notice>
-          ) : (
-            <ActionForm
-              action={addTemplateLine}
-              submitLabel="Add line"
-              disabled={!allowed}
-              disabledNote={readOnlyNote}
-              resetOnSuccess
-            >
-              <input type="hidden" name="scopeTemplateId" value={template.id} />
-              <FieldGrid>
-                <SelectField
-                  idPrefix="new-line"
-                  name="rateItemId"
-                  label="Rate item"
-                  required
-                  wide
-                  options={items.map((item) => ({
-                    value: item.id,
-                    label: `${item.code} — ${item.description} (${
-                      item.calcMode === 'qty' ? `per ${item.unitLabel}` : item.calcMode
-                    })`,
-                  }))}
-                  disabled={!allowed}
-                />
-                <SelectField
-                  idPrefix="new-line"
-                  name="qtySource"
-                  label="Quantity from"
-                  required
-                  defaultValue="area"
-                  options={QTY_SOURCE_OPTIONS}
-                  disabled={!allowed}
-                />
-                <TextField
-                  idPrefix="new-line"
-                  name="qtyMultiplier"
-                  label="Multiplier"
-                  required
-                  numeric
-                  inputMode="decimal"
-                  maxLength={12}
-                  defaultValue="1"
-                  disabled={!allowed}
-                  hint="1 means one unit per source unit. 0.02 means one per fifty."
-                />
-                <TextField
-                  idPrefix="new-line"
-                  name="fixedQty"
-                  label="Fixed quantity"
-                  numeric
-                  inputMode="decimal"
-                  maxLength={12}
-                  disabled={!allowed}
-                  hint="Required only when the source is a fixed quantity."
-                />
-                <TextField
-                  idPrefix="new-line"
-                  name="lineGroup"
-                  label="Line group"
-                  required
-                  maxLength={100}
-                  disabled={!allowed}
-                  hint="Usually the trade. It bands the worksheet and groups the document."
-                />
-                <TextField
-                  idPrefix="new-line"
-                  name="sortOrder"
-                  label="Order"
-                  required
-                  numeric
-                  inputMode="numeric"
-                  maxLength={4}
-                  defaultValue={String(nextSortOrder)}
-                  disabled={!allowed}
-                  hint="In steps of ten, so a line can be inserted without renumbering."
-                />
-                <CheckboxField
-                  idPrefix="new-line"
-                  name="isOptional"
-                  label="Optional — an upgrade the customer may add"
-                  disabled={!allowed}
-                />
-                <CheckboxField
-                  idPrefix="new-line"
-                  name="isAllowance"
-                  label="Allowance — a placeholder reconciled against actual cost"
-                  disabled={!allowed}
-                />
-              </FieldGrid>
-            </ActionForm>
-          )}
-        </Section>
-        </div>
       </div>
     </div>
   );

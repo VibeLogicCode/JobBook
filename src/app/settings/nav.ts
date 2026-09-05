@@ -20,6 +20,13 @@ import type { NavItem } from '@/components/settings/SettingsNav';
  * work. Reading them the other way round is reading the answer before the
  * question.
  *
+ * Line groups sits right after them, one more taxonomy in the same run: what a
+ * cost code is to the owner's own books, a line group is to the customer's
+ * copy of the quote -- the heading a block of lines prints under. It does not
+ * depend on vendor types or trades and they do not depend on it; it sits here
+ * because a picker somebody hunts for a list looks in the run of lists, not
+ * because the order among these three means anything.
+ *
  * Reminder rules sit last of the lists, immediately before Users, because they
  * are the only setting in this area that WRITES rows on its own. Everything
  * above decides what a document says when somebody makes one; this decides
@@ -72,6 +79,11 @@ export const SETTINGS_SECTIONS: NavItem[] = [
     href: '/settings/trades',
     label: 'Trades',
     summary: 'What kind of subcontractor somebody is. Retiring one never blanks the sub who has it.',
+  },
+  {
+    href: '/settings/line-groups',
+    label: 'Line groups',
+    summary: 'The section heading a quote prints. Retiring one never touches what already printed.',
   },
   {
     href: '/settings/reminder-rules',

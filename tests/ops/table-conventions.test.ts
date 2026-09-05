@@ -31,10 +31,6 @@ const HAND_ROLLED: Record<string, string> = {
     'sets aria-busy on the table while a commit is in flight',
   [path.join('src', 'components', 'worksheet', 'Worksheet.tsx')]:
     'sets aria-busy on the table while a commit is in flight',
-
-  // Structurally identical to the screens that were converted, and next in
-  // line. Left alone here only because they were not in this pass.
-  [path.join('src', 'app', 'templates', '[id]', 'WorkedExample.tsx')]: 'not yet converted',
 };
 
 /* -------------------------------------------------------------------------
