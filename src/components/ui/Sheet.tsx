@@ -257,8 +257,13 @@ export function Sheet({
  *
  * Hidden fields are skipped because they carry the row id, not the person's
  * work, and a submit button's value is not an edit either.
+ *
+ * Exported so a sheet that is NOT opened by `SheetButton` -- the record
+ * editors, which open from `?edit=1` so the URL stays linkable -- can ask the
+ * same question the same way rather than keeping a second, drifting copy of
+ * what counts as a dirty form.
  */
-function fieldSnapshot(root: HTMLElement | null): string {
+export function fieldSnapshot(root: HTMLElement | null): string {
   if (!root) return '';
   const parts: string[] = [];
   for (const element of root.querySelectorAll<

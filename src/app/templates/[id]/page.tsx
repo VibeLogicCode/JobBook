@@ -1,5 +1,4 @@
 import { and, asc, eq } from 'drizzle-orm';
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { db } from '@/db/client';
 import { organization, rateItems, scopeTemplateItems, scopeTemplates } from '@/db/schema';
@@ -30,6 +29,7 @@ import { buttonClass } from '@/components/ui/Button';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Section } from '@/components/settings/Section';
 import { Pill } from '@/components/ui/Pill';
+import { SheetButton } from '@/components/ui/Sheet';
 import { AmountCell, TableWrap } from '@/components/ui/Table';
 import { formatQty, formatRate } from '@/lib/money/format';
 
@@ -92,11 +92,13 @@ export default async function TemplateDetailPage({
     <div className="px-4 py-4 sm:px-6">
       <PageHeader
         className="mb-4"
+        // The list is this template's home, and it is the only screen that can
+        // say so: a template opened from a quote's scope picker, from a
+        // bookmark, or from a link pasted into a message arrives with no
+        // history to go back through.
+        parent={{ href: '/templates', label: 'Scope templates' }}
         eyebrow={
           <>
-            <Link href="/templates" className="text-accent-text underline underline-offset-2">
-              Scope templates
-            </Link>
             {template.isActive ? (
               <Pill tone="positive">Available</Pill>
             ) : (
@@ -270,11 +272,23 @@ export default async function TemplateDetailPage({
                   </td>
                   <AmountCell data-label="Order">{line.sortOrder}</AmountCell>
                   <td data-label="Change">
-                    <details className="min-w-0">
-                      <summary className="min-h-11 cursor-pointer list-none rounded-control border border-line-strong px-3 py-2 t-small">
-                        Change…
-                      </summary>
-                      <div className="mt-3 flex w-full max-w-[38rem] flex-col gap-4 border-t border-line pt-3">
+                    {/* A press, then the form over a blurred page -- the same
+                        control the rate list, the cost codes and the reminder
+                        rules already use for "change this row". It was the last
+                        disclosure of its kind on a table row: opening it shoved
+                        every line below it down the screen, and on a template
+                        with a dozen lines that meant the row being edited
+                        walked off the top of the viewport. The title names the
+                        item, because the table behind it is dimmed and the
+                        sheet is now the only thing saying which line this is. */}
+                    <SheetButton
+                      trigger="Change…"
+                      label={`Change ${item.description}`}
+                      title={`Change ${item.description}`}
+                      subtitle={`${item.code} · ${line.lineGroup}`}
+                      discardPrompt="Throw away the changes to this line? Nothing has been saved yet."
+                    >
+                      <div className="flex flex-col gap-4">
                         <ActionForm
                           action={updateTemplateLine}
                           submitLabel="Save line"
@@ -379,7 +393,7 @@ export default async function TemplateDetailPage({
                           />
                         </div>
                       </div>
-                    </details>
+                    </SheetButton>
                   </td>
                 </tr>
               ))}

@@ -1,11 +1,12 @@
 'use client';
 
 import Link from 'next/link';
-import { useActionState, useState } from 'react';
+import { useActionState, useEffect, useRef, useState } from 'react';
 import { Button, buttonClass } from '@/components/ui/Button';
 import { CheckField, Field, FieldGroup, FormError, SelectField } from '@/components/detail/Fields';
-import type { FormAction } from '@/components/detail/form-state';
+import type { FormAction, FormResult } from '@/components/detail/form-state';
 import { CUSTOMER_TYPES, LEAD_SOURCES } from '@/components/detail/labels';
+import { restoreInto } from '@/lib/forms/restore-values';
 
 export interface CustomerDraft {
   id?: string;
@@ -32,18 +33,18 @@ const options = (labels: Record<string, string>) =>
   Object.entries(labels).map(([value, label]) => ({ value, label }));
 
 /**
- * One form for creating and for editing. The fields, their validation and the
- * shape posted are identical either way, so two components would be two places
- * to forget a column.
+ * The fields of a customer, without a `<form>` around them.
+ *
+ * Split out from `CustomerForm` below so the same fields can be the whole page
+ * (creating one, where there is nothing behind to blur) and the body of a
+ * `Sheet` (editing one, over the record it is about). The fields, their
+ * validation and the shape posted are identical either way, so two field lists
+ * would be two places to forget a column.
  */
-export function CustomerForm({
-  action,
+export function CustomerFields({
   customer,
   defaultProvince,
-  cancelHref,
-  submitLabel,
 }: {
-  action: FormAction;
   customer?: CustomerDraft;
   /**
    * From `organization.province`. The column carries no database default on
@@ -52,21 +53,14 @@ export function CustomerForm({
    * the tenant's own record, and stays editable.
    */
   defaultProvince: string;
-  cancelHref: string;
-  submitLabel: string;
 }) {
-  const [state, formAction, pending] = useActionState(action, null);
   // The exemption number and reason are only asked for once the box is ticked:
   // an exemption with no reason recorded is an audit gap, and two disabled
   // fields under an unticked box are noise.
   const [exempt, setExempt] = useState(customer?.isTaxExempt ?? false);
 
   return (
-    <form action={formAction} className="grid gap-6">
-      {customer?.id ? <input type="hidden" name="id" value={customer.id} /> : null}
-
-      <FormError error={state && !state.ok ? state.error : null} />
-
+    <>
       <FieldGroup legend="Customer">
         <Field
           label="Name"
@@ -209,6 +203,54 @@ export function CustomerForm({
           />
         </div>
       </FieldGroup>
+    </>
+  );
+}
+
+/**
+ * The fields as a page's whole content: creating a customer.
+ *
+ * EDITING one no longer comes through here -- it opens in a `Sheet` over the
+ * record, from `?edit=1`, which is what `EditSheet` is for. This shape is kept
+ * for the CREATE screen, where a modal would be a box drawn over an empty page.
+ */
+export function CustomerForm({
+  action,
+  customer,
+  defaultProvince,
+  cancelHref,
+  submitLabel,
+}: {
+  action: FormAction;
+  customer?: CustomerDraft;
+  defaultProvince: string;
+  cancelHref: string;
+  submitLabel: string;
+}) {
+  const form = useRef<HTMLFormElement>(null);
+  /** What was typed, kept so a refusal can put it back. See `restoreInto`. */
+  const submitted = useRef<FormData | null>(null);
+
+  const [state, formAction, pending] = useActionState(
+    async (previous: FormResult | null, data: FormData) => {
+      submitted.current = data;
+      return action(previous, data);
+    },
+    null,
+  );
+
+  useEffect(() => {
+    const element = form.current;
+    if (element && state && !state.ok) restoreInto(element, submitted.current);
+  }, [state]);
+
+  return (
+    <form ref={form} action={formAction} className="grid gap-6">
+      {customer?.id ? <input type="hidden" name="id" value={customer.id} /> : null}
+
+      <FormError error={state && !state.ok ? state.error : null} />
+
+      <CustomerFields customer={customer} defaultProvince={defaultProvince} />
 
       <div className="flex flex-wrap gap-2">
         <Button type="submit" size="lg" pending={pending} pendingLabel="Saving…">

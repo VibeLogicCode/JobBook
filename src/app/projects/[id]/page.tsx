@@ -11,8 +11,9 @@ import { Pill, statusTone } from '@/components/ui/Pill';
 import { AmountCell, TableWrap } from '@/components/ui/Table';
 import { formatBasisPoints, formatCents } from '@/lib/money/format';
 import { setProjectStage, updateProject } from '@/app/projects/actions';
+import { EditSheet } from '@/components/detail/EditSheet';
 import { DetailList, DetailRow, EmptyState, Panel } from '@/components/detail/Panel';
-import { ProjectForm } from '@/components/detail/ProjectForm';
+import { ProjectFields } from '@/components/detail/ProjectForm';
 import { StageControl } from '@/components/detail/StageControl';
 import { StageTimeline } from '@/components/detail/StageTimeline';
 import { tenantIsoToday } from '@/components/detail/dates';
@@ -137,9 +138,17 @@ export default async function ProjectPage({
         }
         title={project.name}
         actions={
-          active && !editing ? (
+          active ? (
             <>
-              <Link href={`/projects/${project.id}?edit=1`} className={buttonClass('secondary')}>
+              {/* Still a link to `?edit=1`, and still rendered while the sheet
+                  is open: it is the element focus goes back to when the sheet
+                  closes, and a trigger that unmounts on open has nowhere to
+                  return focus to. Behind the blur it is simply page. */}
+              <Link
+                href={`/projects/${project.id}?edit=1`}
+                scroll={false}
+                className={buttonClass('secondary')}
+              >
                 Edit
               </Link>
               {/* Billing is offered only once something has actually been
@@ -231,7 +240,7 @@ export default async function ProjectPage({
               this screen's primary surface. */}
           <div className="min-w-64 sm:ml-auto">
             <Pill tone={stageTone(project.stage)}>{PROJECT_STAGES[project.stage]}</Pill>
-            {active && !editing ? (
+            {active ? (
               <div className="no-print mt-3">
                 <StageControl
                   action={setProjectStage}
@@ -252,71 +261,88 @@ export default async function ProjectPage({
         </Notice>
       ) : null}
 
+      {/* The form OVER the record, not INSTEAD of it. `?edit=1` still decides
+          -- so the URL stays linkable and survives a reload -- but what it now
+          switches on is a sheet, and the panels below stay on screen behind the
+          blur. Pressing Edit used to make the job you came to read disappear.
+
+          `lg` rather than `xl`. Fourteen fields is a lot, but they are short
+          ones -- a postal code, four dates -- and at `xl` the two columns run
+          to 26rem each, which is a street address with a hand's width of empty
+          box after it. `lg` gives the same two readable columns the rate
+          editor settled on, and the DEPTH is handled by the sheet's own scroll
+          with Save pinned under it rather than by making the panel wider. */}
       {editing ? (
-        <Panel title={`Edit ${noun.toLowerCase()}`}>
-          <ProjectForm
-            action={updateProject}
+        <EditSheet
+          action={updateProject}
+          recordId={project.id}
+          closeHref={`/projects/${project.id}`}
+          label={`Edit ${project.name}`}
+          title={`Edit ${noun.toLowerCase()}`}
+          subtitle={`${project.projectNumber} · ${project.name}`}
+          submitLabel={`Save ${noun.toLowerCase()}`}
+          discardPrompt={`Throw away the changes to this ${noun.toLowerCase()}? Nothing has been saved yet.`}
+        >
+          <ProjectFields
             project={project}
             customers={customerList}
             defaultProvince={org?.province ?? ''}
-            cancelHref={`/projects/${project.id}`}
-            submitLabel={`Save ${noun.toLowerCase()}`}
             showRealisedDates
           />
-        </Panel>
-      ) : (
-        <div className="grid gap-4 lg:grid-cols-2">
-          <Panel title="Site">
-            <DetailList>
-              <DetailRow label="Address">
-                {project.siteAddressLine1 || project.siteCity ? (
-                  <span className="grid">
-                    {project.siteAddressLine1 ? <span>{project.siteAddressLine1}</span> : null}
-                    <span>
-                      {[project.siteCity, project.siteProvince].filter(Boolean).join(', ')}
-                      {project.sitePostalCode ? ` ${project.sitePostalCode}` : ''}
-                    </span>
-                  </span>
-                ) : (
-                  <span className="text-subtle">—</span>
-                )}
-              </DetailRow>
-              <DetailRow label="Type of work" value={PROJECT_TYPES[project.projectType]} />
-              <DetailRow
-                label="Contract type"
-                value={project.contractType ? CONTRACT_TYPES[project.contractType] : null}
-              />
-            </DetailList>
-          </Panel>
+        </EditSheet>
+      ) : null}
 
-          <Panel title="Dates">
-            <DetailList>
-              {/* Scheduled and actual are separate columns, which is the only
-                  reason slippage stays measurable rather than being
-                  overwritten by the date the job really started. */}
-              <DetailRow label="Scheduled start" value={project.scheduledStart} numeric />
-              <DetailRow label="Scheduled end" value={project.scheduledEnd} numeric />
-              <DetailRow label="Actual start" value={project.actualStart} numeric />
-              <DetailRow label="Actual end" value={project.actualEnd} numeric />
-              <DetailRow
-                label="Substantial performance"
-                value={project.substantialPerformanceDate}
-                numeric
-              />
-              <DetailRow
-                label="Certificate published"
-                value={project.certificatePublishedDate}
-                numeric
-              />
-            </DetailList>
-            <p className="mt-2 t-small text-subtle">
-              The last two are Construction Act dates: substantial performance starts the holdback
-              release clock, and the statutory clock runs from publication rather than from the date
-              certified.
-            </p>
-          </Panel>
-        </div>
-      )}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Panel title="Site">
+          <DetailList>
+            <DetailRow label="Address">
+              {project.siteAddressLine1 || project.siteCity ? (
+                <span className="grid">
+                  {project.siteAddressLine1 ? <span>{project.siteAddressLine1}</span> : null}
+                  <span>
+                    {[project.siteCity, project.siteProvince].filter(Boolean).join(', ')}
+                    {project.sitePostalCode ? ` ${project.sitePostalCode}` : ''}
+                  </span>
+                </span>
+              ) : (
+                <span className="text-subtle">—</span>
+              )}
+            </DetailRow>
+            <DetailRow label="Type of work" value={PROJECT_TYPES[project.projectType]} />
+            <DetailRow
+              label="Contract type"
+              value={project.contractType ? CONTRACT_TYPES[project.contractType] : null}
+            />
+          </DetailList>
+        </Panel>
+
+        <Panel title="Dates">
+          <DetailList>
+            {/* Scheduled and actual are separate columns, which is the only
+                reason slippage stays measurable rather than being
+                overwritten by the date the job really started. */}
+            <DetailRow label="Scheduled start" value={project.scheduledStart} numeric />
+            <DetailRow label="Scheduled end" value={project.scheduledEnd} numeric />
+            <DetailRow label="Actual start" value={project.actualStart} numeric />
+            <DetailRow label="Actual end" value={project.actualEnd} numeric />
+            <DetailRow
+              label="Substantial performance"
+              value={project.substantialPerformanceDate}
+              numeric
+            />
+            <DetailRow
+              label="Certificate published"
+              value={project.certificatePublishedDate}
+              numeric
+            />
+          </DetailList>
+          <p className="mt-2 t-small text-subtle">
+            The last two are Construction Act dates: substantial performance starts the holdback
+            release clock, and the statutory clock runs from publication rather than from the date
+            certified.
+          </p>
+        </Panel>
+      </div>
 
       {/* Above the quote table, because a job's next action is decided by the
           last conversation about it rather than by the version history -- and

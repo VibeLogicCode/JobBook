@@ -9,7 +9,8 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { Pill, statusTone } from '@/components/ui/Pill';
 import { AmountCell, TableWrap } from '@/components/ui/Table';
 import { updateCustomer, voidCustomer } from '@/app/customers/actions';
-import { CustomerForm } from '@/components/detail/CustomerForm';
+import { CustomerFields } from '@/components/detail/CustomerForm';
+import { EditSheet } from '@/components/detail/EditSheet';
 import { DetailList, DetailRow, EmptyState, Panel } from '@/components/detail/Panel';
 import { VoidControl } from '@/components/detail/VoidControl';
 import { tenantIsoToday } from '@/components/detail/dates';
@@ -125,9 +126,17 @@ export default async function CustomerPage({
           </>
         }
         actions={
-          active && !editing ? (
+          active ? (
             <>
-              <Link href={`/customers/${customer.id}?edit=1`} className={buttonClass('secondary')}>
+              {/* Still a link to `?edit=1`, and still rendered while the sheet
+                  is open: it is the element focus goes back to when the sheet
+                  closes, and a trigger that unmounts on open has nowhere to
+                  return focus to. Behind the blur it is simply page. */}
+              <Link
+                href={`/customers/${customer.id}?edit=1`}
+                scroll={false}
+                className={buttonClass('secondary')}
+              >
                 Edit
               </Link>
               <Link
@@ -152,92 +161,105 @@ export default async function CustomerPage({
         </Notice>
       )}
 
+      {/* The form OVER the record, not INSTEAD of it. `?edit=1` still decides
+          -- so the URL stays linkable and survives a reload -- but what it now
+          switches on is a sheet, and the panels below stay on screen behind the
+          blur.
+
+          `lg`, the same width the job editor and the rate editor take. Seventeen
+          fields is the longest form that opens in a sheet in this product, and
+          the answer to that is the sheet's own scroll with Save pinned under it
+          -- not a wider panel, which would only turn a city name into a 26rem
+          box. */}
       {editing ? (
-        <Panel title="Edit customer">
-          <CustomerForm
-            action={updateCustomer}
-            customer={customer}
-            defaultProvince={org?.province ?? ''}
-            cancelHref={`/customers/${customer.id}`}
-            submitLabel="Save customer"
-          />
-        </Panel>
-      ) : (
-        <div className="grid gap-4 lg:grid-cols-2">
-          <Panel title="Contact">
-            <DetailList>
-              <DetailRow label="Email">
-                {customer.email ? (
-                  <a className="text-accent-text hover:underline" href={`mailto:${customer.email}`}>
-                    {customer.email}
-                  </a>
-                ) : (
-                  <span className="text-subtle">—</span>
-                )}
-              </DetailRow>
-              <DetailRow label="Phone" numeric>
-                {customer.phone ? (
-                  <a className="text-accent-text hover:underline" href={`tel:${customer.phone}`}>
-                    {customer.phone}
-                  </a>
-                ) : (
-                  <span className="text-subtle">—</span>
-                )}
-              </DetailRow>
-              <DetailRow label="Address">
-                {customer.addressLine1
-                  || customer.city
-                  || customer.province
-                  || customer.postalCode ? (
-                    <span className="grid">
-                      {customer.addressLine1 ? <span>{customer.addressLine1}</span> : null}
-                      {customer.addressLine2 ? <span>{customer.addressLine2}</span> : null}
-                      <span>
-                        {[customer.city, customer.province].filter(Boolean).join(', ')}
-                        {customer.postalCode ? ` ${customer.postalCode}` : ''}
-                      </span>
+        <EditSheet
+          action={updateCustomer}
+          recordId={customer.id}
+          closeHref={`/customers/${customer.id}`}
+          label={`Edit ${customer.name}`}
+          title="Edit customer"
+          subtitle={customer.companyName ? `${customer.name} · ${customer.companyName}` : customer.name}
+          submitLabel="Save customer"
+          discardPrompt="Throw away the changes to this customer? Nothing has been saved yet."
+        >
+          <CustomerFields customer={customer} defaultProvince={org?.province ?? ''} />
+        </EditSheet>
+      ) : null}
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Panel title="Contact">
+          <DetailList>
+            <DetailRow label="Email">
+              {customer.email ? (
+                <a className="text-accent-text hover:underline" href={`mailto:${customer.email}`}>
+                  {customer.email}
+                </a>
+              ) : (
+                <span className="text-subtle">—</span>
+              )}
+            </DetailRow>
+            <DetailRow label="Phone" numeric>
+              {customer.phone ? (
+                <a className="text-accent-text hover:underline" href={`tel:${customer.phone}`}>
+                  {customer.phone}
+                </a>
+              ) : (
+                <span className="text-subtle">—</span>
+              )}
+            </DetailRow>
+            <DetailRow label="Address">
+              {customer.addressLine1
+                || customer.city
+                || customer.province
+                || customer.postalCode ? (
+                  <span className="grid">
+                    {customer.addressLine1 ? <span>{customer.addressLine1}</span> : null}
+                    {customer.addressLine2 ? <span>{customer.addressLine2}</span> : null}
+                    <span>
+                      {[customer.city, customer.province].filter(Boolean).join(', ')}
+                      {customer.postalCode ? ` ${customer.postalCode}` : ''}
                     </span>
-                  ) : (
-                    <span className="text-subtle">—</span>
-                  )}
-              </DetailRow>
-            </DetailList>
-          </Panel>
-
-          <Panel title="Second contact">
-            {customer.altContactName || customer.altContactEmail || customer.altContactPhone ? (
-              <DetailList>
-                <DetailRow label="Name" value={customer.altContactName} />
-                <DetailRow label="Email" value={customer.altContactEmail} />
-                <DetailRow label="Phone" value={customer.altContactPhone} numeric />
-              </DetailList>
-            ) : (
-              <EmptyState>
-                No second contact. Add a spouse, property manager or site contact under Edit, so a
-                call about site access does not depend on one phone being answered.
-              </EmptyState>
-            )}
-          </Panel>
-
-          <Panel title="Tax">
-            <DetailList>
-              <DetailRow label="Status">
-                {customer.isTaxExempt ? (
-                  <Pill tone="warning">Exempt</Pill>
+                  </span>
                 ) : (
-                  <span>Taxable at the rates in force</span>
+                  <span className="text-subtle">—</span>
                 )}
-              </DetailRow>
-              {customer.isTaxExempt ? (
-                <>
-                  <DetailRow label="Exemption number" value={customer.taxExemptNumber} numeric />
-                  <DetailRow label="Reason" value={customer.taxExemptReason} />
-                </>
-              ) : null}
+            </DetailRow>
+          </DetailList>
+        </Panel>
+
+        <Panel title="Second contact">
+          {customer.altContactName || customer.altContactEmail || customer.altContactPhone ? (
+            <DetailList>
+              <DetailRow label="Name" value={customer.altContactName} />
+              <DetailRow label="Email" value={customer.altContactEmail} />
+              <DetailRow label="Phone" value={customer.altContactPhone} numeric />
             </DetailList>
-          </Panel>
-        </div>
-      )}
+          ) : (
+            <EmptyState>
+              No second contact. Add a spouse, property manager or site contact under Edit, so a
+              call about site access does not depend on one phone being answered.
+            </EmptyState>
+          )}
+        </Panel>
+
+        <Panel title="Tax">
+          <DetailList>
+            <DetailRow label="Status">
+              {customer.isTaxExempt ? (
+                <Pill tone="warning">Exempt</Pill>
+              ) : (
+                <span>Taxable at the rates in force</span>
+              )}
+            </DetailRow>
+            {customer.isTaxExempt ? (
+              <>
+                <DetailRow label="Exemption number" value={customer.taxExemptNumber} numeric />
+                <DetailRow label="Reason" value={customer.taxExemptReason} />
+              </>
+            ) : null}
+          </DetailList>
+        </Panel>
+      </div>
 
       {/* High on the page rather than under the tables, because the phase turns
           on whether this gets written down at all. A quote sent and never
@@ -373,7 +395,7 @@ export default async function CustomerPage({
         )}
       </Panel>
 
-      {active && !editing ? (
+      {active ? (
         <Panel title="Void this customer" className="no-print">
           <VoidControl
             action={voidCustomer}

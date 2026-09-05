@@ -1,11 +1,12 @@
 'use client';
 
 import Link from 'next/link';
-import { useActionState } from 'react';
+import { useActionState, useEffect, useRef } from 'react';
 import { Button, buttonClass } from '@/components/ui/Button';
 import { Field, FieldGroup, FormError, SelectField } from '@/components/detail/Fields';
-import type { FormAction } from '@/components/detail/form-state';
+import type { FormAction, FormResult } from '@/components/detail/form-state';
 import { CONTRACT_TYPES, PROJECT_TYPES } from '@/components/detail/labels';
+import { restoreInto } from '@/lib/forms/restore-values';
 
 export interface ProjectDraft {
   id?: string;
@@ -29,24 +30,25 @@ const options = (labels: Record<string, string>) =>
   Object.entries(labels).map(([value, label]) => ({ value, label }));
 
 /**
- * One form for creating and for editing an opportunity, which is the same row
- * that later becomes a job.
+ * The fields of an opportunity, without a `<form>` around them.
+ *
+ * Split out from `ProjectForm` below so the same fields can be the whole page
+ * (starting a new one, where there is nothing behind to blur) and the body of a
+ * `Sheet` (editing an existing one, over the record it is about). Two field
+ * lists would be two places to forget a column, which is the same reason
+ * creating and editing shared one component to begin with.
  *
  * Stage is deliberately absent. It has its own control on the detail screen,
  * because every stage change writes a row of history through a trigger, and a
  * stage buried among fifteen other fields gets moved by accident on the way to
  * fixing a postal code.
  */
-export function ProjectForm({
-  action,
+export function ProjectFields({
   project,
   customers,
   defaultProvince,
-  cancelHref,
-  submitLabel,
   showRealisedDates = false,
 }: {
-  action: FormAction;
   project?: ProjectDraft;
   customers: { id: string; name: string; companyName: string | null }[];
   /**
@@ -54,19 +56,11 @@ export function ProjectForm({
    * purpose: a default there would hardcode one tenant's region.
    */
   defaultProvince: string;
-  cancelHref: string;
-  submitLabel: string;
   /** Only once the job exists: nothing has actually happened to a new one. */
   showRealisedDates?: boolean;
 }) {
-  const [state, formAction, pending] = useActionState(action, null);
-
   return (
-    <form action={formAction} className="grid gap-6">
-      {project?.id ? <input type="hidden" name="id" value={project.id} /> : null}
-
-      <FormError error={state && !state.ok ? state.error : null} />
-
+    <>
       <FieldGroup legend="Work">
         <SelectField
           label="Customer"
@@ -180,6 +174,63 @@ export function ProjectForm({
           />
         </FieldGroup>
       ) : null}
+    </>
+  );
+}
+
+/**
+ * The fields as a page's whole content: starting an opportunity.
+ *
+ * EDITING one no longer comes through here -- it opens in a `Sheet` over the
+ * job, from `?edit=1`, which is what `EditSheet` is for. This shape is kept for
+ * the CREATE screen, where a modal would be a box drawn over an empty page.
+ */
+export function ProjectForm({
+  action,
+  project,
+  customers,
+  defaultProvince,
+  cancelHref,
+  submitLabel,
+  showRealisedDates = false,
+}: {
+  action: FormAction;
+  project?: ProjectDraft;
+  customers: { id: string; name: string; companyName: string | null }[];
+  defaultProvince: string;
+  cancelHref: string;
+  submitLabel: string;
+  showRealisedDates?: boolean;
+}) {
+  const form = useRef<HTMLFormElement>(null);
+  /** What was typed, kept so a refusal can put it back. See `restoreInto`. */
+  const submitted = useRef<FormData | null>(null);
+
+  const [state, formAction, pending] = useActionState(
+    async (previous: FormResult | null, data: FormData) => {
+      submitted.current = data;
+      return action(previous, data);
+    },
+    null,
+  );
+
+  useEffect(() => {
+    const element = form.current;
+    if (element && state && !state.ok) restoreInto(element, submitted.current);
+  }, [state]);
+
+  return (
+    <form ref={form} action={formAction} className="grid gap-6">
+      {project?.id ? <input type="hidden" name="id" value={project.id} /> : null}
+
+      <FormError error={state && !state.ok ? state.error : null} />
+
+      <ProjectFields
+        project={project}
+        customers={customers}
+        defaultProvince={defaultProvince}
+        showRealisedDates={showRealisedDates}
+      />
 
       <div className="flex flex-wrap gap-2">
         <Button type="submit" size="lg" pending={pending} pendingLabel="Saving…">

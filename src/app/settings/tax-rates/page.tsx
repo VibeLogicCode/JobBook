@@ -14,6 +14,7 @@ import { CheckboxField, FieldGrid, TextField } from '@/components/settings/Field
 import { Notice } from '@/components/ui/Notice';
 import { Section } from '@/components/settings/Section';
 import { Pill } from '@/components/ui/Pill';
+import { SheetButton } from '@/components/ui/Sheet';
 import { TableWrap } from '@/components/ui/Table';
 import { tenantToday } from '@/lib/quote/dates';
 import { selectRatesInForce } from '@/lib/quote/tax';
@@ -186,11 +187,22 @@ export default async function TaxRatesPage() {
                     </span>
                   </td>
                   <td data-label="Change">
-                    <details className="min-w-0">
-                      <summary className="min-h-11 cursor-pointer list-none rounded-control border border-line-strong px-3 py-2 t-small">
-                        Change…
-                      </summary>
-                      <div className="mt-3 flex w-full max-w-[38rem] flex-col gap-4 border-t border-line pt-3">
+                    {/* A press, then the form over a blurred page -- the same
+                        control the rate list, the cost codes and the reminder
+                        rules already use for "change this row". A disclosure
+                        here pushed every later rate down the screen the moment
+                        it opened, and this one holds three separate forms, so
+                        it pushed them a long way. The title names the tax,
+                        because the table behind it is dimmed and the sheet is
+                        now the only thing saying which row is being changed. */}
+                    <SheetButton
+                      trigger="Change…"
+                      label={`Change ${row.label}`}
+                      title={`Change ${row.label}`}
+                      subtitle={`${formatPercent(row.rateTenThou)}% from ${row.effectiveFrom}`}
+                      discardPrompt="Throw away the changes to this rate? Nothing has been saved yet."
+                    >
+                      <div className="flex flex-col gap-4">
                         <div>
                           <h3 className="t-small font-semibold">Change the rate</h3>
                           <p className="mb-2 max-w-prose t-small text-subtle">
@@ -326,7 +338,7 @@ export default async function TaxRatesPage() {
                           />
                         </div>
                       </div>
-                    </details>
+                    </SheetButton>
                   </td>
                 </tr>
               );
