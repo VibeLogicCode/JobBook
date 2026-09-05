@@ -12,16 +12,13 @@ export default async function ContactSettingsPage() {
   const context = await loadSettings('organization.edit');
   const org = context.org;
 
+  // The customer table carries no province default of its own — a default
+  // in the schema would be a guess about a country.
   return (
     <Section
       title="Contact"
       description={
-        <p>
-          The block printed under the letterhead on every quote, and the address a customer
-          sends a signed acceptance back to. The province set here is also what a new
-          customer record starts from — the customer table carries no default of its own,
-          because a default province in the schema would be a guess about a country.
-        </p>
+        <p>Prints under the letterhead. The province here also defaults new customer records.</p>
       }
     >
       <ActionForm
@@ -50,7 +47,8 @@ export default async function ContactSettingsPage() {
             label="Province or state"
             maxLength={100}
             defaultValue={org?.province}
-            hint="Written as it should print. Nothing validates it against a list — a list is a country assumption."
+            // A list would be a country assumption.
+            hint="Written as it should print — not validated against a list."
           />
           <TextField
             name="postalCode"

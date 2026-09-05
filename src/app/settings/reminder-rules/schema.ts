@@ -78,18 +78,12 @@ const ANCHORS: Record<ReminderTrigger, string> = {
 
 /** What the rule is for, shown beside the trigger when one is being chosen. */
 export const TRIGGER_NOTES: Record<ReminderTrigger, string> = {
-  quote_sent:
-    'Every active quote that has been sent. This is the chase — a quote sent and never followed up is indistinguishable from one that was declined.',
-  quote_expiring:
-    'Quotes whose validity date has not yet passed. A quote that expired months ago produces nothing here; chasing that one is the sent-quote rule’s job.',
-  stage_entered:
-    'The stage a job is in NOW, from the stage history. It does not fire again for a stage the job passed through and has since left.',
-  no_activity:
-    'Customers with live work and nothing logged against them lately. The only rule that scans rather than reacting, and the only one held back until its day arrives — it asserts something about the past and is false until then.',
-  site_visit_scheduled:
-    'Jobs at the site-visit stage with a date on them, and only visits still ahead.',
-  project_won:
-    'A job that has just moved to won. Winning is the one transition that always has a next action behind it.',
+  quote_sent: 'Every sent quote. Catches one going quiet before it reads as a decline.',
+  quote_expiring: 'Not-yet-expired quotes only. An old expired one is the sent-quote rule’s job.',
+  stage_entered: 'The stage a job is in now. Does not refire for a stage it has since left.',
+  no_activity: 'Customers with live work and no recent contact logged.',
+  site_visit_scheduled: 'Jobs at the site-visit stage with a date on them, and only visits still ahead.',
+  project_won: 'A job that has just moved to won.',
 };
 
 export const TRIGGER_OPTIONS = (

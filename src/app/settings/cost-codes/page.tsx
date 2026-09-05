@@ -144,22 +144,17 @@ export default async function CostCodesPage() {
 
   return (
     <div className="flex flex-col gap-4">
+      {/*
+       * A rate item, a quote line, an invoice line, and job costing all group
+       * actual spend against the same list — that's what turns year end into
+       * an export rather than a search through a year of paper. Keep the list
+       * short enough that whoever is coding a receipt at the end of a long
+       * day can pick the right one without reading forty options.
+       */}
       <Section
         title="Cost codes"
         description={
-          <>
-            <p>
-              How money is categorised. A rate item carries one, every quote line and
-              invoice line keeps the one it was written with, and job costing groups actual
-              spend — receipts, purchase orders, labour — against the same list. That is what
-              turns year end into an export rather than a search through a year of paper.
-            </p>
-            <p className="mt-2">
-              Two levels: a division, and the sections inside it. Keep the list short enough
-              that whoever is coding a receipt at the end of a long day can pick the right
-              one without reading forty options.
-            </p>
-          </>
+          <p>How spend is categorised. Two levels: a division, and the sections inside it.</p>
         }
       >
         {state.actor ? null : (
@@ -170,15 +165,12 @@ export default async function CostCodesPage() {
 
         <Notice tone="info" title="A code is a bucket, and a bucket is never reused">
           <p>
-            Renaming a code relabels the bucket: every line already filed under it reads the
-            new name, because a line points at this row rather than copying it. That is the
-            right move for a wording fix.
+            Renaming relabels the bucket — every line filed under it reads the new name.
+            Right for a wording fix.
           </p>
           <p className="mt-2">
-            It is the wrong move for a code that now means a different trade. Retire that one
-            and add the new trade under its own code — otherwise last year&rsquo;s spend
-            reports itself as this year&rsquo;s category, and nothing on the screen would ever
-            say so.
+            Wrong for a code that now means a different trade — retire it and add a new one,
+            or last year&rsquo;s spend reports as this year&rsquo;s category.
           </p>
         </Notice>
 
@@ -272,9 +264,7 @@ export default async function CostCodesPage() {
                         <div>
                           <h3 className="t-small font-semibold">Edit this code</h3>
                           <p className="mb-2 max-w-prose t-small text-subtle">
-                            A rename reaches everything filed here, past work included. If the
-                            trade itself has changed, retire this code instead and add the new
-                            one below.
+                            A rename reaches everything filed here, past work included.
                           </p>
                           <ActionForm
                             action={updateCostCode}
@@ -298,7 +288,7 @@ export default async function CostCodesPage() {
                                 maxLength={60}
                                 defaultValue={row.code}
                                 disabled={!allowed || isVoid}
-                                hint="Unique across the list, stored in upper case. Changing it does not orphan anything — lines point at the row, not the text."
+                                hint="Unique, stored upper case. Renaming doesn't orphan anything already filed."
                               />
                               <TextField
                                 idPrefix={`edit-${row.id}`}
@@ -320,7 +310,7 @@ export default async function CostCodesPage() {
                                 disabled={!allowed || isVoid || sections > 0}
                                 hint={
                                   sections > 0
-                                    ? 'This code has sections filed under it, so it is a division. Move those first if it has to become a section.'
+                                    ? "Has sections under it, so it's a division — move those first to change that."
                                     : 'Two levels only. A section cannot hold sections of its own.'
                                 }
                               />
@@ -332,7 +322,7 @@ export default async function CostCodesPage() {
                                 options={CATEGORY_OPTIONS}
                                 blankLabel="Not categorised"
                                 disabled={!allowed || isVoid}
-                                hint="What kind of spend lands here. It is what a year-end export groups by above the code itself."
+                                hint="What a year-end export groups by, above the code itself."
                               />
                               <TextField
                                 idPrefix={`edit-${row.id}`}
@@ -354,14 +344,9 @@ export default async function CostCodesPage() {
                             {row.isActive ? 'Retire' : 'Bring back'}
                           </h3>
                           <p className="mb-2 max-w-prose t-small text-subtle">
-                            Retiring stops the code being offered on new work — a trade you no
-                            longer run, a number a new standard superseded. It is not a
-                            deletion and not a void: the row stays, its code stays taken, and
-                            every rate item, quote line and invoice line already filed under it
-                            goes on naming it.
-                            {sections > 0
-                              ? ' The sections under it are not retired with it; retire each one you also want off the list.'
-                              : ''}
+                            Stops it being offered on new work. Everything already filed under
+                            it is unaffected.
+                            {sections > 0 ? ' Sections under it are not retired with it.' : ''}
                           </p>
                           <RowAction
                             action={setCostCodeActive}
@@ -388,10 +373,8 @@ export default async function CostCodesPage() {
                           <div>
                             <h3 className="t-small font-semibold">Void it</h3>
                             <p className="mb-2 max-w-prose t-small text-subtle">
-                              For a row that should never have existed — a code typed twice, a
-                              division added under the wrong number. It is not how you take a
-                              trade out of circulation; that is Retire, above. Voiding does not
-                              free the code, so a corrected division needs a code of its own.
+                              For a row that never should have existed. Use Retire for a trade
+                              you no longer run — voiding keeps the code reserved.
                             </p>
                             {documentUses > 0 ? (
                               <Notice tone="warning">
@@ -419,7 +402,7 @@ export default async function CostCodesPage() {
                                   maxLength={300}
                                   disabled={!mayVoid}
                                   wide
-                                  hint="Recorded on the row. A void with no reason teaches nobody anything a year later."
+                                  hint="Kept on the record permanently."
                                 />
                               </ActionForm>
                             )}
@@ -437,13 +420,7 @@ export default async function CostCodesPage() {
 
       <Section
         title="Add a cost code"
-        description={
-          <p>
-            A division on its own, or a section inside one. Nothing here is offered to a
-            quote until it exists, so the list is worth building before the first job rather
-            than during one.
-          </p>
-        }
+        description={<p>A division on its own, or a section inside one.</p>}
       >
         <ActionForm
           action={createCostCode}
@@ -460,7 +437,9 @@ export default async function CostCodesPage() {
               required
               maxLength={60}
               disabled={!allowed}
-              hint="Letters, digits and . - _ / only, stored in upper case. A comma or a pipe inside a code breaks the price-list importer, which splits a pasted line on exactly those."
+              // A comma or a pipe breaks the price-list importer, which
+              // splits a pasted line on exactly those.
+              hint="Letters, digits and . - _ / only, in upper case."
             />
             <TextField
               idPrefix="new-cost-code"
@@ -478,7 +457,7 @@ export default async function CostCodesPage() {
               options={parentOptions()}
               blankLabel="Nothing — this is a division"
               disabled={!allowed}
-              hint="Leave it a division unless one division has already grown too broad to code a receipt against."
+              hint="Leave it a division unless one has grown too broad to code against."
             />
             <SelectField
               idPrefix="new-cost-code"
@@ -487,7 +466,7 @@ export default async function CostCodesPage() {
               options={CATEGORY_OPTIONS}
               blankLabel="Not categorised"
               disabled={!allowed}
-              hint="What kind of spend lands here. Chosen from a list rather than typed, so a year-end export does not report Labour and labour as two things."
+              hint="Chosen from a list, so an export never reports Labour and labour as two things."
             />
             <TextField
               idPrefix="new-cost-code"

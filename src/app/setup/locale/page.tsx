@@ -64,24 +64,22 @@ export default async function LocaleStepPage() {
       <ActionForm action={saveLocaleStep} submitLabel="Save locale">
         <Notice tone="warning" title="Why the timezone is asked before the first quote exists">
           <p>
-            This application runs in a container whose clock is UTC. Three things it decides are
-            calendar <em>dates</em> rather than timestamps, and each is computed in your local
-            day instead:
+            The container&rsquo;s clock is UTC. Each of these is computed in your local day
+            instead:
           </p>
           <ul className="mt-2 ml-5 list-disc">
             <li>
-              <span className="font-semibold">The date a quote carries.</span> A quote written
-              in the evening gets <em>tomorrow&apos;s</em> date in a UTC container — dating a
-              document a day after the conversation that produced it.
+              <span className="font-semibold">The date a quote carries.</span> Written in the
+              evening, it could get <em>tomorrow&apos;s</em> date in a UTC container.
             </li>
             <li>
               <span className="font-semibold">The day it expires.</span> Validity counts forward
               from the quote date, so an error in one moves the other.
             </li>
             <li>
-              <span className="font-semibold">Fiscal period boundaries.</span> A year end falls
-              on a local calendar day. Computed in UTC, a transaction on the last evening of the
-              year lands in the next one — and the document series rolls over with it.
+              <span className="font-semibold">Fiscal period boundaries.</span> Computed in UTC,
+              a transaction late in the year could land in the next one — and the document
+              series rolls over with it.
             </li>
           </ul>
           <p className="mt-2">
@@ -101,7 +99,7 @@ export default async function LocaleStepPage() {
             maxLength={3}
             defaultValue={org?.currency}
             placeholder="ISO 4217 code"
-            hint="Three letters. The money formatter takes the symbol from it, so no currency mark is written into the product."
+            hint="Three-letter ISO 4217 code."
           />
           <TextField
             name="locale"
@@ -121,7 +119,7 @@ export default async function LocaleStepPage() {
               { value: 'sqft', label: 'Square feet (sqft)' },
               { value: 'sqm', label: 'Square metres (sqm)' },
             ]}
-            hint="What an area quantity is labelled on a worksheet and a document. It relabels; it does not convert."
+            hint="Labels an area quantity — it relabels, and does not convert existing values."
           />
           <SelectField
             name="timezone"
@@ -129,7 +127,7 @@ export default async function LocaleStepPage() {
             required
             defaultValue={org?.timezone}
             options={timeZoneOptions(stored)}
-            hint="An IANA zone name, not an offset: an offset cannot know when the clocks change."
+            hint="An IANA zone name, not an offset — offsets can't track clock changes."
           />
         </FieldGrid>
       </ActionForm>

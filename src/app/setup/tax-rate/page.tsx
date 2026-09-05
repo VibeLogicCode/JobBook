@@ -46,19 +46,18 @@ export default async function TaxRateStepPage() {
   return (
     <StepPanel slug="tax-rate" gate={gate}>
       <ActionForm action={saveTaxRateStep} submitLabel="Save tax rate">
+        {/* Closing the old row and inserting a new one is what an audit asks
+            for, and what a filing period straddling a change needs in order
+            to split. */}
         <Notice tone="warning" title="Why the date on this form matters more than it looks">
           <p>
-            Rates are <em>versioned</em>, never edited. When this one changes, the row is closed
-            on the day before its replacement starts and a new row is inserted — so the rate
-            that applied on any past date stays answerable years later, which is what an audit
-            asks and what a filing period straddling a change needs in order to split.
+            Rates are <em>versioned</em>, never edited — so what applied on any past date stays
+            answerable years later.
           </p>
           <p className="mt-2">
-            That makes the date below the day this rate <em>actually took effect</em>, not the
-            day you are typing. Back-dating is allowed and is how a rate older than this
-            deployment is recorded. A quote is dated in your local day and picks up whichever
-            rate was in force on that date; it then keeps its own snapshot of it forever, so a
-            document already sent can never be altered by anything entered here.
+            The date below is the day this rate <em>actually took effect</em>, not the day
+            you&apos;re typing — back-dating is allowed. A quote keeps its own snapshot forever,
+            so nothing entered here can alter a document already sent.
           </p>
         </Notice>
 
@@ -88,7 +87,9 @@ export default async function TaxRateStepPage() {
             suffix="%"
             maxLength={8}
             defaultValue={existing ? formatPercent(existing.rateTenThou) : ''}
-            hint="Two decimal places at most, which is what the stored scale holds exactly. It is refused rather than rounded: a rate quietly altered in the third decimal reprices every future quote."
+            // Refused rather than rounded: a rate quietly altered in the
+            // third decimal reprices every future quote.
+            hint="Two decimal places at most — refused, not rounded."
           />
           <TextField
             name="effectiveFrom"
@@ -122,14 +123,13 @@ export default async function TaxRateStepPage() {
             label="Applies on the subtotal plus taxes already added"
             defaultChecked={existing?.isCompound ?? false}
             wide
-            hint="Leave this off unless your jurisdiction genuinely charges one tax on top of another. Where it does, it applies once."
+            hint="Leave off unless your jurisdiction charges one tax on top of another."
           />
         </FieldGrid>
 
         <Notice tone="info" title="One rate now; more later">
-          A jurisdiction that bills two lines — a federal and a provincial tax together —
-          takes a second row, added under Settings once you are through here. This step asks
-          for one so the first quote can be priced.
+          A jurisdiction that bills two lines takes a second row, added later under Settings.
+          This step asks for one so the first quote can be priced.
         </Notice>
       </ActionForm>
     </StepPanel>

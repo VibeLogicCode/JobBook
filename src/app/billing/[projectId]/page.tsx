@@ -322,10 +322,7 @@ export default async function BillingPage({
                 </>
               ) : previewProblem ? null : (
                 <p className="max-w-prose t-small text-muted">
-                  Enter how complete the work is and price the draw. Progress billing is cumulative:
-                  the invoice bills the contract at that percentage and subtracts everything already
-                  billed, so a percentage below what has gone out already produces a corrective draw
-                  with a negative amount.
+                  Billing is cumulative — a lower percent than before makes a negative draw.
                 </p>
               )}
             </div>
@@ -387,9 +384,7 @@ export default async function BillingPage({
           delete the application role does not hold. */}
       {invoices.some((invoice) => invoice.recordStatus === 'void') ? (
         <p className="max-w-prose t-small text-muted">
-          Voided invoices stay on this list with the reason they were voided. They contribute
-          nothing to the figures above, so voiding one gives the work it billed back to the next
-          draw.
+          Voided invoices stay listed and no longer count toward billed totals.
         </p>
       ) : null}
 

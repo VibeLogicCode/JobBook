@@ -9,6 +9,7 @@ import {
   TextAreaField,
   TextField,
 } from '@/components/settings/Fields';
+import { Reveal } from '@/components/ui/Reveal';
 
 /**
  * Editing one scheduled task — the sheet's contents, and the ONE copy of them.
@@ -59,9 +60,9 @@ export interface EditableTask {
  * The four fields that describe a task rather than schedule it.
  *
  * Shared by adding a task and changing one, which is why they are a component
- * and not a fragment repeated twice: the hint under "Waits on" is a paragraph
- * of the product's reasoning, and two copies of it drift the first time
- * somebody improves one.
+ * and not a fragment repeated twice: the "Waits on" hint and its `Reveal` are
+ * product reasoning, and two copies of them drift the first time somebody
+ * improves one.
  */
 export function TaskFields({
   idPrefix,
@@ -96,7 +97,7 @@ export function TaskFields({
         maxLength={120}
         defaultValue={task?.trade}
         disabled={disabled}
-        hint="Which trade this needs. Naming the actual subcontractor comes with assignments; this is the half that says who to go looking for."
+        hint="Which trade this needs — the subcontractor is named with assignments, not here."
       />
       <SelectField
         idPrefix={idPrefix}
@@ -115,8 +116,14 @@ export function TaskFields({
         options={predecessorOptions}
         blankLabel="Nothing — this date stands on its own"
         disabled={disabled}
-        hint="A task that waits on another moves when that one moves. A task that waits on nothing NEVER moves on its own — not because it sits between two tasks that did, and not because anything looked like it was in the way."
+        hint="A task that waits on another moves when that one moves."
       />
+      <div className="sm:col-span-2">
+        <Reveal label="Why a task in the middle might not move">
+          A task that waits on nothing never moves on its own — not because it sits between two
+          tasks that did, and not because anything looked like it was in the way.
+        </Reveal>
+      </div>
     </>
   );
 }
@@ -163,9 +170,7 @@ export function TaskEditor({
       <div>
         <h3 className="t-small font-semibold">Move the dates</h3>
         <p className="mb-2 max-w-prose t-small text-subtle">
-          Everything waiting behind this task moves with it, by the same number of days. A task
-          that waits on nothing stays where it is, even if it sits in the middle. You will be
-          shown exactly which tasks move before anything is written.
+          Everything waiting behind this task moves with it, by the same number of days.
         </p>
         {/* Deliberately NOT keyed on the row's dates. The revalidation that
             follows a successful move would change that key, remount the form,
@@ -193,10 +198,7 @@ export function TaskEditor({
 
       <div>
         <h3 className="t-small font-semibold">Everything else</h3>
-        <p className="mb-2 max-w-prose t-small text-subtle">
-          What it is called, what it waits on, and what actually happened. The planned dates are
-          not here on purpose — they move above, where the consequence is shown first.
-        </p>
+        <p className="mb-2 max-w-prose t-small text-subtle">Planned dates are above, not here.</p>
         <ActionForm
           action={updateTask}
           submitLabel="Save this task"
@@ -230,7 +232,7 @@ export function TaskEditor({
               type="date"
               defaultValue={task.actualStart ?? ''}
               disabled={disabled}
-              hint="A fact, never computed. Recording one also takes this task out of the auto-push: once work has begun, moving its plan would erase the difference between what was planned and what happened, which is the measurement that makes the next quote better."
+              hint="A fact, never computed."
             />
             <TextField
               idPrefix={`edit-${task.id}`}
@@ -241,6 +243,12 @@ export function TaskEditor({
               disabled={disabled}
             />
           </FieldGrid>
+          {/* The planned/actual gap this preserves is also the measurement that
+              makes the next quote's estimates better. */}
+          <Reveal label="Why recording a start changes the schedule">
+            Recording a start takes this task out of the auto-push: once work has begun, moving
+            its plan would erase the difference between what was planned and what happened.
+          </Reveal>
           <TextAreaField
             idPrefix={`edit-${task.id}`}
             name="notes"
@@ -263,10 +271,7 @@ export function TaskEditor({
         <div>
           <h3 className="t-small font-semibold">Void it</h3>
           <p className="mb-2 max-w-prose t-small text-subtle">
-            For a task that should never have been on the schedule. It is not how you record work
-            you decided against — that is a status and a note. Voiding is refused while anything
-            still waits on this task, because a task waiting on a voided row is a dependency no
-            screen would show.
+            Not for work you decided against — that&rsquo;s a status and a note.
           </p>
           <ActionForm
             action={voidTask}
@@ -284,7 +289,7 @@ export function TaskEditor({
               maxLength={300}
               disabled={!mayVoid}
               wide
-              hint="Recorded on the row. A void with no reason teaches nobody anything a year later."
+              hint="Kept on the record permanently."
             />
           </ActionForm>
         </div>

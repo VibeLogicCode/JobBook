@@ -72,8 +72,7 @@ export async function LogoField({
             </>
           ) : (
             <p className="t-small text-subtle">
-              None yet. Documents print the company name in place of an image until one is
-              uploaded.
+              None yet — documents print the company name until one is uploaded.
             </p>
           )}
         </div>
@@ -91,19 +90,21 @@ export async function LogoField({
             aria-describedby="logo-hint"
             className={`field ${allowed ? '' : 'opacity-60'}`}
           />
+          {/*
+           * The file is identified by its contents rather than its name, so
+           * renaming something .png will not get it past this. SVG is
+           * refused deliberately: it can carry script, and one served from
+           * this application's own origin would run with the same rights as
+           * the application — a cross-site scripting vector on every page
+           * that shows the logo.
+           */}
           <p id="logo-hint" className="t-small text-subtle">
-            PNG or JPEG, up to <span className="num">{formatBytes(LOGO_MAX_BYTES)}</span>. The
-            file is identified by its contents rather than its name, so renaming something
-            .png will not get it past this. SVG is refused deliberately: an SVG can carry
-            script, and one served from this application&apos;s own origin would run with the
-            same rights as the application — a cross-site scripting vector on every page that
-            shows the logo.
+            PNG or JPEG, up to <span className="num">{formatBytes(LOGO_MAX_BYTES)}</span>.
           </p>
           {logo ? (
             <p className="t-small text-subtle">
-              Uploading a replacement voids the file above rather than deleting it. Nothing in
-              this product is ever deleted, and a quote already sent still has to render the
-              logo it was printed with.
+              A replacement doesn&apos;t delete the old file — an already-sent quote still
+              renders with its own.
             </p>
           ) : null}
         </div>

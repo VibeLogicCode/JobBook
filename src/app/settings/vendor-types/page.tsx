@@ -20,6 +20,7 @@ import {
 import { Section } from '@/components/settings/Section';
 import { Notice } from '@/components/ui/Notice';
 import { Pill } from '@/components/ui/Pill';
+import { Reveal } from '@/components/ui/Reveal';
 import { SheetButton } from '@/components/ui/Sheet';
 import { AmountCell, TableWrap } from '@/components/ui/Table';
 
@@ -77,23 +78,15 @@ export default async function VendorTypesPage() {
 
   return (
     <div className="flex flex-col gap-4">
+      {/*
+       * Add whatever kinds this company actually pays — materials, labour,
+       * equipment, drawings. Keep the list short enough that whoever is
+       * adding a vendor on site can pick the right one without reading
+       * twenty options.
+       */}
       <Section
         title="Vendor types"
-        description={
-          <>
-            <p>
-              What kind of counterparty somebody is: where you buy materials, who you hire to
-              do work, who you rent a machine from, who you pay for a drawing. Every vendor
-              carries one, and the vendor form asks for a trade only when the type says the
-              vendor performs work.
-            </p>
-            <p className="mt-2">
-              Add whatever kinds this company actually pays. Keep the list short enough that
-              whoever is adding a vendor on site can pick the right one without reading
-              twenty options.
-            </p>
-          </>
-        }
+        description={<p>Only vendors whose type performs work are asked for a trade.</p>}
       >
         {state.actor ? null : (
           <div className="mb-3">
@@ -103,17 +96,12 @@ export default async function VendorTypesPage() {
 
         <Notice tone="info" title="The name is yours. What follows from it is not.">
           <p>
-            Whether a type&rsquo;s vendors count as subcontractors is chosen once, when the
-            type is added, and cannot be edited afterwards. Three things and nothing else
-            hang off it: they receive a T5018 statement of contract payments, their WSIB
-            clearance is checked before they are paid, and they appear when work is assigned
-            on a schedule.
+            Fixed when the type is added. It decides T5018 slips, WSIB clearance checks, and
+            schedule assignment.
           </p>
           <p className="mt-2">
-            If that answer were editable, renaming a row would quietly restate who this
-            company owes a slip and a clearance check to, and nothing on any vendor&rsquo;s
-            record would say so. Rename freely; if the answer itself is wrong, retire that
-            type and add the right one, then move the vendors across on their own screen.
+            Rename freely — that doesn&rsquo;t change it. If the answer itself is wrong,
+            retire this type and add the right one.
           </p>
         </Notice>
 
@@ -183,9 +171,7 @@ export default async function VendorTypesPage() {
                         <div>
                           <h3 className="t-small font-semibold">Edit this type</h3>
                           <p className="mb-2 max-w-prose t-small text-subtle">
-                            A rename reaches every vendor filed under this type. It does not
-                            change what the type means for a filing — that answer is fixed
-                            below.
+                            A rename reaches every vendor filed under this type.
                           </p>
                           <ActionForm
                             action={updateVendorType}
@@ -209,7 +195,7 @@ export default async function VendorTypesPage() {
                                 maxLength={120}
                                 defaultValue={row.name}
                                 disabled={!allowed || isVoid}
-                                hint="What you call this kind of counterparty. Vendors point at the row, not at the text, so nothing is orphaned by a rename."
+                                hint="Vendors point at the row, not the text — nothing is orphaned by a rename."
                               />
                               <TextField
                                 idPrefix={`edit-${row.id}`}
@@ -231,7 +217,7 @@ export default async function VendorTypesPage() {
                                 label="Counts as a subcontractor"
                                 value={row.isSubcontractor ? 'Yes' : 'No'}
                                 wide
-                                hint="Fixed when the type was added and not editable. It decides who receives a T5018 slip, whose WSIB clearance is checked before payment, and who may be assigned work on a schedule — so a wording change must never be able to restate it. If this answer is wrong, retire this type and add the right one."
+                                hint="Fixed when added. Decides T5018, WSIB checks, and schedule eligibility."
                               />
                             </FieldGrid>
                           </ActionForm>
@@ -242,10 +228,8 @@ export default async function VendorTypesPage() {
                             {row.isActive ? 'Retire' : 'Bring back'}
                           </h3>
                           <p className="mb-2 max-w-prose t-small text-subtle">
-                            Retiring stops the type being offered on new vendors — a kind of
-                            counterparty this company no longer deals with. It is not a
-                            deletion and not a void: the row stays, its name stays taken, and
-                            every vendor already filed under it keeps it, standing included.
+                            Stops it being offered on new vendors. Existing vendors keep it,
+                            unaffected.
                           </p>
                           <RowAction
                             action={setVendorTypeActive}
@@ -272,11 +256,8 @@ export default async function VendorTypesPage() {
                           <div>
                             <h3 className="t-small font-semibold">Void it</h3>
                             <p className="mb-2 max-w-prose t-small text-subtle">
-                              For a row that should never have existed — a name typed twice,
-                              or a type added with the wrong answer above before anybody was
-                              put on it. It is not how you take a kind of counterparty out of
-                              circulation; that is Retire. Voiding does not free the name, so
-                              a corrected type needs a name of its own.
+                              For a row that never should have existed. Use Retire instead for
+                              one you simply stopped using — voiding keeps the name reserved.
                             </p>
                             {uses > 0 ? (
                               <Notice tone="warning">
@@ -303,7 +284,7 @@ export default async function VendorTypesPage() {
                                   maxLength={300}
                                   disabled={!mayVoid}
                                   wide
-                                  hint="Recorded on the row. A void with no reason teaches nobody anything a year later."
+                                  hint="Kept on the record permanently."
                                 />
                               </ActionForm>
                             )}
@@ -321,12 +302,7 @@ export default async function VendorTypesPage() {
 
       <Section
         title="Add a vendor type"
-        description={
-          <p>
-            One decision on this form cannot be revisited, and it is marked. Everything else
-            is a label you can change whenever the wording stops fitting.
-          </p>
-        }
+        description={<p>One decision below can&rsquo;t be revisited — it&rsquo;s marked.</p>}
       >
         <ActionForm
           action={createVendorType}
@@ -362,8 +338,16 @@ export default async function VendorTypesPage() {
               label="Vendors of this type are subcontractors"
               disabled={!allowed}
               wide
-              hint="Tick it for somebody who performs work, not for somewhere you buy materials or hire a machine. Three things follow and nothing else sets them: they receive a T5018 slip, their WSIB clearance is checked before they are paid, and they appear when work is assigned on a schedule. They are also the only vendors asked which trade they are. This answer is fixed once the type exists — a type set wrongly is retired and replaced, not edited."
+              hint="Tick for someone who performs work, not a materials or equipment supplier."
             />
+            <div className="sm:col-span-2 -mt-2">
+              <Reveal label="What this decides, and why it's fixed">
+                Three things follow and nothing else: a T5018 slip, a WSIB clearance check
+                before payment, and eligibility for scheduled work. They are also the only
+                vendors asked which trade they are. Fixed once the type exists — a type set
+                wrongly is retired and replaced, not edited.
+              </Reveal>
+            </div>
           </FieldGrid>
         </ActionForm>
       </Section>

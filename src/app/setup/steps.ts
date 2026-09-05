@@ -18,7 +18,7 @@ export const SETUP_STEPS = [
     title: 'Company',
     summary: 'The names on every document, and who signs them.',
     /** Shown on the step itself, above the fields. */
-    why: 'Nothing about the company is built into the product, so this is where it comes from.',
+    why: 'Nothing about the company is built into the product.',
   },
   {
     slug: 'contact',
@@ -30,19 +30,19 @@ export const SETUP_STEPS = [
     slug: 'locale',
     title: 'Locale',
     summary: 'Currency, language, timezone and area unit.',
-    why: 'The timezone decides what date a quote carries, so it is set before the first one exists.',
+    why: 'The timezone decides what date a quote carries.',
   },
   {
     slug: 'financial',
     title: 'Financial',
     summary: 'Tax registration, fiscal year, holdback, payment terms, margin.',
-    why: 'Retrofitting a fiscal year end means re-asking the owner, so it is asked once, now.',
+    why: 'Retrofitting a fiscal year end means re-asking the owner.',
   },
   {
     slug: 'tax-rate',
     title: 'Tax rate',
     summary: 'The first rate, and the date it took effect.',
-    why: 'Rates are versioned by effective date rather than edited, so that date is a priced fact.',
+    why: 'Rates are versioned by effective date rather than edited.',
   },
   {
     slug: 'first-user',
@@ -65,7 +65,8 @@ export const SETUP_STEPS = [
     slug: 'environment',
     title: 'Environment',
     summary: 'What the deployment already has, and what it is missing.',
-    why: 'Read-only. This step collects nothing, because a credential in a form is a credential in every backup.',
+    // A credential in a form is a credential in every backup.
+    why: 'Read-only. This step collects nothing.',
   },
   {
     slug: 'done',

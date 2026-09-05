@@ -114,8 +114,7 @@ export function BulkGrid({
             ))}
           </select>
           <p id="batch-projectId-hint" className="t-small text-subtle">
-            One job for the batch. A shoebox is sorted by job before it is typed, and one picker
-            is faster than eight.
+            One job for the whole batch.
           </p>
         </div>
 
@@ -137,8 +136,7 @@ export function BulkGrid({
               ))}
             </select>
             <p id="batch-taxRateId-hint" className="t-small text-subtle">
-              One tax for the batch, treated as recoverable. A receipt carrying two taxes, or one
-              you cannot claim, is entered singly.
+              One tax for the batch, always recoverable. Enter singly if a receipt differs.
             </p>
           </div>
         ) : null}

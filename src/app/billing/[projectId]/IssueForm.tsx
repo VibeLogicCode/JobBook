@@ -58,7 +58,7 @@ export function IssueForm({
         label="Mark it sent"
         name="markSent"
         value="1"
-        hint="Leave it off to keep the invoice as a draft. Paid and part-paid are never set by hand — they come from the payments against it."
+        hint="Leave off to keep it a draft — paid/part-paid come from payments, not here."
       />
 
       <div>

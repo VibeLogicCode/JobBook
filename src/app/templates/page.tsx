@@ -44,7 +44,7 @@ export default async function TemplatesPage() {
       <PageHeader
         className="mb-4"
         title="Scope templates"
-        description="A template is a line set plus the rule for each quantity. Choose one on a quote, enter the measurements, and the whole scope generates — then adjust it. It is the difference between quoting from a list and quoting from memory."
+        description="A template is a line set plus the rule for each quantity — choose one, enter the measurements, and the scope generates."
         actions={
           // The form that does this is the second panel down, which on a
           // tenant with a dozen templates is below the fold. The action is
@@ -148,8 +148,7 @@ export default async function TemplatesPage() {
           title="Create a template"
           description={
             <p>
-              Name it after the job it prices, because that is what the owner picks from on a
-              quote. The project type is what filters the list down.
+              Name it after the job it prices. Project type filters the list on a quote.
             </p>
           }
         >

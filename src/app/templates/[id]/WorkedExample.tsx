@@ -128,8 +128,7 @@ export function WorkedExample({
       </div>
 
       <p className="max-w-prose t-small text-muted">
-        Change a measurement above and every derivation below follows it. This is exactly what
-        a quote built from this template would contain at that scope — nothing here is saved.
+        Change a measurement above and every derivation below updates. Nothing here is saved.
       </p>
 
       <div className="overflow-x-auto rounded-panel border border-line">

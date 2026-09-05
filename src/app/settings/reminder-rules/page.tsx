@@ -27,6 +27,7 @@ import { FieldGrid, ReadOnlyField, SelectField, TextField } from '@/components/s
 import { Section } from '@/components/settings/Section';
 import { Notice } from '@/components/ui/Notice';
 import { Pill } from '@/components/ui/Pill';
+import { Reveal } from '@/components/ui/Reveal';
 import { SheetButton } from '@/components/ui/Sheet';
 import { AmountCell, TableWrap } from '@/components/ui/Table';
 import type { ReminderTrigger } from '@/lib/reminders/types';
@@ -78,8 +79,7 @@ function placeholderHint(trigger: ReminderTrigger) {
           <span className="font-semibold">{`{${field}}`}</span> ({FIELD_NOTES[field]})
         </span>
       ))}
-      . Anything else is refused when you save, rather than printed as itself at three in the
-      morning.
+      . Anything else is refused when you save.
     </>
   );
 }
@@ -119,23 +119,15 @@ export default async function ReminderRulesPage() {
 
   return (
     <div className="flex flex-col gap-4">
+      {/*
+       * These are ordinary rows, not built-in behaviour, deliberately: a rule
+       * that fires uselessly is something the owner switches off himself, at
+       * the moment he notices it, rather than something needing a developer.
+       */}
       <Section
         title="Reminder rules"
         description={
-          <>
-            <p>
-              What the system decides to remind you about, and when. Every hour it looks at your
-              quotes, jobs and customers, applies the rules below, and writes at most one open
-              reminder per rule per record — so a rule cannot pile up twenty copies of itself while
-              you are on site.
-            </p>
-            <p className="mt-2">
-              These are ordinary rows, not built-in behaviour. That is the whole point: a rule that
-              fires uselessly is something you switch off yourself, at the moment you notice it,
-              rather than something that needs a developer. A list you have stopped trusting is
-              worse than no list at all.
-            </p>
-          </>
+          <p>Runs hourly; at most one open reminder per rule per record.</p>
         }
       >
         {state.actor ? null : (
@@ -146,16 +138,12 @@ export default async function ReminderRulesPage() {
 
         <Notice tone="info" title="Switching a rule off does not undo what it has already done">
           <p>
-            Off stops a rule firing again, from the next hourly evaluation onward. It does not
-            delete, hide or withdraw the reminders it has already produced: those were true on the
-            day they appeared, and a screen that swept them up when a rule went quiet would lose
-            work without saying so. Deal with them on the reminders screen.
+            Off stops it firing from the next hourly run — it does not delete or hide the
+            reminders already produced. Deal with those on the reminders screen.
           </p>
           <p className="mt-2">
-            Editing a rule is the same story pointed forwards. A reminder&rsquo;s wording is written
-            once, on the day it is created, and is never re-rendered from the rule afterwards — so
-            retitling a rule changes what it says next week and changes nothing already on your
-            list.
+            Editing a rule works the same way, forward only: a reminder&rsquo;s wording is set
+            once, when it is created, so a later edit changes nothing already on your list.
           </p>
         </Notice>
 
@@ -241,8 +229,7 @@ export default async function ReminderRulesPage() {
                         <div>
                           <h3 className="t-small font-semibold">Edit this rule</h3>
                           <p className="mb-2 max-w-prose t-small text-subtle">
-                            Changes apply from the next hourly evaluation. Reminders this rule has
-                            already produced keep the wording they were written with.
+                            Changes apply from the next hourly evaluation.
                           </p>
                           <ActionForm
                             action={updateReminderRule}
@@ -268,11 +255,17 @@ export default async function ReminderRulesPage() {
                                 disabled={!allowed || isVoid}
                                 hint="What this rule is called on this screen. It is never printed on a reminder."
                               />
-                              <ReadOnlyField
-                                label="Watches for"
-                                value={TRIGGER_LABELS[row.trigger]}
-                                hint="Fixed once a rule exists. A rule pointed at a different event is a different rule — and it would inherit this one's open reminders, which quietly suppress it until each is dealt with. Switch this one off and add the one you meant."
-                              />
+                              <div className="flex min-w-0 flex-col gap-1 self-start">
+                                <ReadOnlyField
+                                  label="Watches for"
+                                  value={TRIGGER_LABELS[row.trigger]}
+                                />
+                                <Reveal label="Why this can't change">
+                                  A rule pointed at a different event would inherit this row&rsquo;s
+                                  open reminders, which quietly suppress it until each is dealt
+                                  with. Switch this one off and add the one you meant instead.
+                                </Reveal>
+                              </div>
                               <TextField
                                 idPrefix={`edit-${row.id}`}
                                 name="offsetAmount"
@@ -305,7 +298,7 @@ export default async function ReminderRulesPage() {
                                   options={STAGE_OPTIONS}
                                   blankLabel="Choose a stage"
                                   disabled={!allowed || isVoid}
-                                  hint="Required. A rule with no stage set watches nothing at all rather than everything, because a reminder on every stage change would bury the list."
+                                  hint="Required — a rule with no stage set watches nothing."
                                 />
                               ) : null}
                               <SelectField
@@ -316,7 +309,7 @@ export default async function ReminderRulesPage() {
                                 defaultValue={row.reminderKind}
                                 options={KIND_OPTIONS}
                                 disabled={!allowed || isVoid}
-                                hint="How the reminder is labelled on the list. It changes nothing about when the rule fires."
+                                hint="Labels it on the list. Does not change when it fires."
                               />
                               <TextField
                                 idPrefix={`edit-${row.id}`}
@@ -339,8 +332,8 @@ export default async function ReminderRulesPage() {
                           </h3>
                           <p className="mb-2 max-w-prose t-small text-subtle">
                             {row.isActive
-                              ? 'Stops this rule producing anything from the next evaluation onward. It is not a deletion and not a void: the row stays, and every reminder it has already made stays open on the reminders screen, because those were true when they appeared.'
-                              : 'Puts this rule back into the hourly evaluation. It picks up from today rather than backfilling — nothing it would have written while it was off is created retrospectively.'}
+                              ? 'Stops it firing. The row stays, and its existing reminders stay open.'
+                              : 'Resumes it from today — nothing missed while it was off is backfilled.'}
                           </p>
                           <RowAction
                             action={setReminderRuleActive}
@@ -376,9 +369,8 @@ export default async function ReminderRulesPage() {
                           <div>
                             <h3 className="t-small font-semibold">Void it</h3>
                             <p className="mb-2 max-w-prose t-small text-subtle">
-                              For a rule that should never have existed — one added twice, or
-                              written against the wrong event before it ever fired. It is not how a
-                              noisy rule is taken out of circulation; that is the switch above.
+                              For a rule that never should have existed — switch off a noisy one
+                              instead.
                             </p>
                             {producedCount > 0 ? (
                               <Notice tone="warning">
@@ -408,7 +400,7 @@ export default async function ReminderRulesPage() {
                                   maxLength={300}
                                   disabled={!mayVoid}
                                   wide
-                                  hint="Recorded on the row. A void with no reason teaches nobody anything a year later."
+                                  hint="Kept on the record permanently."
                                 />
                               </ActionForm>
                             )}
@@ -426,13 +418,7 @@ export default async function ReminderRulesPage() {
 
       <Section
         title="What each event means"
-        description={
-          <p>
-            The six events a rule can watch, and what the system is actually looking at when it
-            evaluates one. Worth reading before adding a rule: most of the noise a reminder list
-            produces comes from a rule watching a broader event than its author thought.
-          </p>
-        }
+        description={<p>What each of the six events actually watches.</p>}
       >
         <dl className="grid gap-3">
           {TRIGGER_OPTIONS.map((option) => (
@@ -448,13 +434,7 @@ export default async function ReminderRulesPage() {
 
       <Section
         title="Add a rule"
-        description={
-          <p>
-            A new rule starts switched on and is considered at the next hourly evaluation. What it
-            watches is chosen here and cannot be changed afterwards — a rule pointed at a different
-            event is a different rule.
-          </p>
-        }
+        description={<p>Starts switched on. What it watches is fixed once chosen.</p>}
       >
         <ActionForm
           action={createReminderRule}
@@ -494,7 +474,7 @@ export default async function ReminderRulesPage() {
               defaultValue="3"
               disabled={!allowed}
               suffix="days"
-              hint="Zero means due on the day of the event itself. A year is the ceiling — further out than that is a reminder nobody recognises when it lands."
+              hint="Zero means due the same day. A year is the ceiling."
             />
             <SelectField
               idPrefix="new-rule"
@@ -504,7 +484,7 @@ export default async function ReminderRulesPage() {
               defaultValue="after"
               options={DIRECTION_OPTIONS}
               disabled={!allowed}
-              hint="Before, for a deadline you want warning of. After, for a silence you want chasing."
+              hint="Before a deadline; after a silence."
             />
             <SelectField
               idPrefix="new-rule"
@@ -513,7 +493,7 @@ export default async function ReminderRulesPage() {
               options={STAGE_OPTIONS}
               blankLabel="Not a stage rule"
               disabled={!allowed}
-              hint="Only for “A job entered a stage”, and required for it. Leave it alone for every other event — a stage set against the wrong event is refused rather than quietly dropped."
+              hint="Only for “A job entered a stage” — required there, ignored elsewhere."
             />
             <SelectField
               idPrefix="new-rule"
@@ -523,7 +503,6 @@ export default async function ReminderRulesPage() {
               defaultValue="follow_up"
               options={KIND_OPTIONS}
               disabled={!allowed}
-              hint="How it is labelled on the reminders list."
             />
             <TextField
               idPrefix="new-rule"
@@ -533,7 +512,7 @@ export default async function ReminderRulesPage() {
               maxLength={200}
               disabled={!allowed}
               wide
-              hint="One sentence, with placeholders filled in from the record. Which placeholders depends on the event: a customer-silence rule knows a name and a date and nothing else, so it refuses {project}. A misspelt placeholder is refused here rather than printed as itself at three in the morning."
+              hint="One sentence; which placeholders work depends on the event chosen, above."
             />
           </FieldGrid>
         </ActionForm>

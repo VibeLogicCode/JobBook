@@ -96,8 +96,8 @@ export function MoveDates({
           disabled={disabled}
           hint={
             isMilestone
-              ? 'This is a milestone, so it is a single day — give it the same date as the start.'
-              : 'Counted inclusively, in calendar days. Weekends count: a crew working Saturday is ordinary here.'
+              ? 'Milestones are a single day — use the same date as the start.'
+              : 'Inclusive, calendar days — weekends count.'
           }
         />
       </FieldGrid>

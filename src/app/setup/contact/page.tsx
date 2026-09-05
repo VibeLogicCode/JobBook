@@ -56,7 +56,7 @@ export default async function ContactStepPage() {
             maxLength={20}
             defaultValue={org?.postalCode}
             placeholder="As your post office writes it"
-            hint="Not pattern-checked. A pattern written for one postal system rejects real addresses in another."
+            hint="Not pattern-checked — a fixed pattern would reject real addresses elsewhere."
           />
           <TextField
             name="country"

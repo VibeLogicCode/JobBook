@@ -11,6 +11,7 @@ import {
   TextField,
 } from '@/components/settings/Fields';
 import { Notice } from '@/components/ui/Notice';
+import { Reveal } from '@/components/ui/Reveal';
 import { StepPanel } from '@/components/setup/StepPanel';
 
 export const dynamic = 'force-dynamic';
@@ -70,7 +71,7 @@ export default async function FinancialStepPage() {
             maxLength={50}
             defaultValue={org?.taxRegistrationLabel}
             placeholder="What your jurisdiction calls it"
-            hint="The words that print in front of the number. A product printing a fixed label is wrong the first time it leaves the region it was written in."
+            hint="Printed before the number. Word it as your jurisdiction requires."
           />
           <TextField
             name="businessNumber"
@@ -99,7 +100,7 @@ export default async function FinancialStepPage() {
             defaultValue={org?.fiscalYearEndMonth ? String(org.fiscalYearEndMonth) : ''}
             blankLabel="Not set"
             options={monthOptions(org?.locale ?? 'en')}
-            hint="Not assumed to be the end of December. Plenty of companies close in another month."
+            hint="Not assumed to be December."
           />
           <TextField
             name="fiscalYearEndDay"
@@ -109,15 +110,16 @@ export default async function FinancialStepPage() {
             maxLength={2}
             defaultValue={org?.fiscalYearEndDay ? String(org.fiscalYearEndDay) : ''}
             placeholder="Day of that month"
-            hint="Set it with the month, or leave both blank. The 29th of February is accepted — leap years exist."
+            hint="Set it with the month, or leave both blank. 29 February is accepted."
           />
 
+          {/* An amount withheld from each payment and released later. Stored
+              per quote rather than company-wide, so a job that withholds
+              nothing prints no holdback block at all. */}
           <div className="sm:col-span-2">
             <h3 className="t-heading mt-2">Holdback</h3>
             <p className="mt-1 max-w-prose t-small text-muted">
-              An amount withheld from each payment and released later. What you enter here is
-              only the <em>default</em>: it is stored per quote, so a job that withholds nothing
-              prints no holdback block at all. Leave it blank if none of your work involves one.
+              Default only — actual holdback is set per quote. Leave blank if not needed.
             </p>
           </div>
 
@@ -133,7 +135,7 @@ export default async function FinancialStepPage() {
                 ? ''
                 : formatPercent(org.defaultHoldbackPctTenThou)
             }
-            hint="Blank means no holdback is proposed. Two decimal places at most, because that is what the stored scale holds exactly."
+            hint="Blank means no holdback is proposed. Two decimal places at most."
           />
           <TextField
             name="holdbackLabel"
@@ -141,7 +143,6 @@ export default async function FinancialStepPage() {
             maxLength={100}
             defaultValue={org?.holdbackLabel}
             placeholder="What the block is headed"
-            hint="Every jurisdiction names this differently, so it is yours to word."
           />
           <TextField
             name="holdbackReleaseDays"
@@ -158,8 +159,15 @@ export default async function FinancialStepPage() {
             name="taxDeferredOnHoldback"
             label="Tax on the holdback is deferred until it is released"
             defaultChecked={org?.taxDeferredOnHoldback ?? true}
-            hint="Where a holdback is retained under legislation or a written contract, tax on the held-back amount may not be payable until it is paid out. Turn it off for a jurisdiction with no such deferral."
+            wide
           />
+          <div className="sm:col-span-2 -mt-2">
+            <Reveal label="When this doesn't apply">
+              Where a holdback is retained under legislation or a written contract, tax on the
+              amount held back may not be payable until it is paid out. Turn this off for a
+              jurisdiction with no such deferral.
+            </Reveal>
+          </div>
           <TextAreaField
             name="holdbackTermsText"
             label="Holdback terms"
@@ -198,7 +206,7 @@ export default async function FinancialStepPage() {
                 ? ''
                 : formatPercent(BigInt(org.targetMarginBp))
             }
-            hint="Margin, not markup — a share of the price, not of the cost. It sets the bands on the worksheet gauge, so a quote drifting toward a loss is visible before it is sent."
+            hint="Margin, not markup — a share of price, not of cost."
           />
           <TextField
             name="insuranceStatement"
@@ -214,15 +222,15 @@ export default async function FinancialStepPage() {
             rows={4}
             defaultValue={org?.paymentTermsText}
             placeholder="Deposit and draw structure"
-            hint="A quote can override it per job, because a deposit that suits a bathroom does not suit a custom home."
+            hint="A quote can override this per job."
           />
         </FieldGrid>
 
+        {/* Rates vary too much for one fixed number: some jurisdictions bill
+            a single harmonized line, others a federal and a provincial line
+            together, and one has no sales tax at all. */}
         <Notice tone="info" title="The tax rate is the next step, not this one">
-          Rates are effective-dated rows of their own rather than a percentage on this record,
-          because one percentage is wrong outside the region it was written for — some
-          jurisdictions bill a single harmonized line, others a federal and a provincial line
-          together, and one of them has no sales tax at all.
+          Rates are effective-dated rows of their own, not a percentage here.
         </Notice>
       </ActionForm>
     </StepPanel>

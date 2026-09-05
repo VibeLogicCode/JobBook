@@ -46,10 +46,7 @@ export function Timeline({
   if (entries.length === 0) {
     return (
       <EmptyState>
-        Nothing logged yet. A call, an email or a site visit written down here is what the
-        follow-up rules read — a customer with no contact for fourteen days is what puts a
-        reminder on the screen, and a record with nothing on it looks the same as one nobody has
-        spoken to.
+        Nothing logged yet. Log a call, email or visit — the follow-up rules read this.
       </EmptyState>
     );
   }

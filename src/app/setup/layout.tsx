@@ -13,6 +13,10 @@ export const dynamic = 'force-dynamic';
  * unambiguous.
  */
 export default function SetupLayout({ children }: { children: React.ReactNode }) {
+  // Nothing about the company is built into the product — the names, the
+  // address, the tax rate, the holdback and the words on every document are
+  // all configuration, which is why there are nine steps and not a welcome
+  // screen.
   return (
     <div className="px-4 py-4 sm:px-6">
       <PageHeader
@@ -20,11 +24,8 @@ export default function SetupLayout({ children }: { children: React.ReactNode })
         title="Set this deployment up"
         description={
           <>
-            This runs once. Nothing about your company is built into the product — the names,
-            the address, the tax rate, the holdback and the words on every document are all
-            configuration, which is why there are nine steps and not a welcome screen. Each one
-            saves as you finish it, so a closed laptop costs you the step you were on and
-            nothing before it.
+            This runs once. Each step saves as you finish it — a closed laptop costs you only
+            the step you were on.
           </>
         }
       />

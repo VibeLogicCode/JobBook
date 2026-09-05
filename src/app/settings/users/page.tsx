@@ -68,15 +68,12 @@ export default async function UsersPage({
 
   return (
     <div className="flex flex-col gap-4">
+      {/* A provider can be reconfigured by somebody who has never seen this
+          application, so a role is never read from what it happens to say. */}
       <Section
         title="Users"
         description={
-          <p>
-            Who has an account, and what their role permits. A role is decided here and
-            checked by the application on every request — never read from whatever the
-            identity provider happens to say, because a provider can be reconfigured by
-            somebody who has never seen this application.
-          </p>
+          <p>Who has an account, and what their role permits — never read from the identity provider.</p>
         }
       >
         {mode === 'access' ? (
@@ -96,9 +93,9 @@ export default async function UsersPage({
         {mode === 'sso' ? (
           providers.length > 0 ? (
             <Notice tone="info" title="This installation signs people in itself">
-              Configured providers: {providers.map((p) => PROVIDER_LABELS[p]).join(', ')}. A
-              provider absent from that list has no credentials in this deployment&apos;s
-              environment, so it is not offered — a method that cannot work is a support call.
+              Configured providers: {providers.map((p) => PROVIDER_LABELS[p]).join(', ')}. Others
+              have no credentials in this deployment&apos;s environment, so they aren&apos;t
+              offered.
             </Notice>
           ) : (
             <Notice tone="warning" title="No sign-in provider is configured">
@@ -109,12 +106,11 @@ export default async function UsersPage({
         ) : null}
 
         {mode === 'local' ? (
+          // For a LAN or a laptop under test.
           <Notice tone="warning" title="No sign-in is enforced">
             Every request on this deployment arrives as{' '}
             <span className="num">{localUserEmail() ?? 'an unnamed local user'}</span>. Roles
-            below still apply — the named identity is looked up in this table exactly as a
-            signed-in one would be — but there is no password, no provider and no session.
-            This mode is for a LAN or a laptop under test.
+            below still apply, but there is no password, no provider and no session.
           </Notice>
         ) : null}
 
@@ -270,11 +266,9 @@ export default async function UsersPage({
               <li>An admin cannot change an owner’s account. Owner rows are read-only to them.</li>
               <li>An admin cannot grant the owner role, to anyone, including themselves.</li>
               <li>Nobody changes their own role — an owner included. A second owner does it.</li>
-              <li>
-                The last active owner cannot be demoted or deactivated. It is the only rule
-                whose failure leaves no route back in through the interface, so the database
-                refuses it too.
-              </li>
+              {/* The only rule whose failure leaves no route back in through
+                  the interface, so the database refuses it too. */}
+              <li>The last active owner cannot be demoted or deactivated.</li>
             </ul>
           </Notice>
         </div>
@@ -283,12 +277,7 @@ export default async function UsersPage({
       <Section
         title="Add a user"
         description={
-          <p>
-            Name, email, role — and, where this installation signs people in itself, which
-            provider they use. Nothing is emailed: the application sends no mail. Tell the
-            person the address; when they sign in with an account whose verified email
-            matches, the row above changes from &ldquo;not yet signed in&rdquo; to linked.
-          </p>
+          <p>Nothing is emailed — tell the person the address; they link on first sign-in.</p>
         }
       >
         <ActionForm
@@ -321,7 +310,7 @@ export default async function UsersPage({
               required
               maxLength={200}
               disabled={!allowed}
-              hint="The address this account is keyed on. It must match the verified email their provider reports."
+              hint="Must match the verified email their provider reports."
             />
             <SelectField
               idPrefix="new-user"
@@ -354,7 +343,7 @@ export default async function UsersPage({
                   label: PROVIDER_LABELS[provider],
                 }))}
                 disabled={!allowed || providers.length === 0}
-                hint="Only the providers this installation has credentials for appear. Left unset, the person cannot sign in until it is chosen."
+                hint="Only providers with credentials appear. Left unset, they can't sign in yet."
               />
             ) : null}
           </FieldGrid>
@@ -369,12 +358,9 @@ export default async function UsersPage({
           sign-in implementation that owns those pieces, not with this screen.
         */}
         <Notice tone="warning" title="Not available on this screen yet">
-          A person&apos;s sign-in method can be set when their account is created, but changing
-          it afterwards — along with resetting a provider link and signing someone out
-          everywhere — is part of the sign-in implementation being built alongside this
-          screen. Those three actions void the existing link and revoke every session in one
-          transaction, and doing half of that from here would leave someone signed in with a
-          method they no longer have.
+          Can be set when the account is created. Changing it afterwards isn&apos;t available
+          yet — that&apos;s part of the sign-in implementation being built alongside this
+          screen.
         </Notice>
       </Section>
     </div>

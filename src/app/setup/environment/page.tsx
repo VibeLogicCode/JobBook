@@ -43,17 +43,14 @@ export default async function EnvironmentStepPage() {
           <p>
             {summary.passing} passing
             {summary.off > 0 ? `, ${summary.off} deliberately switched off` : ''}
-            {summary.failing > 0 ? `, ${summary.failing} failing` : ''}. Nothing on this page is
-            collected — every fix below is an environment variable or a mounted file, because a
-            credential entered into a form would be written to a database that is mirrored
-            offsite and dumped into every backup.
+            {summary.failing > 0 ? `, ${summary.failing} failing` : ''}. Nothing here is
+            collected — every fix is an environment variable or a mounted file.
           </p>
           {summary.failing > 0 ? (
             <p className="mt-2">
-              You can finish setup with items still failing, and some of them are decisions you
-              are entitled to make differently. A wizard that refused would be routed around
-              with SQL, which is the thing first-run setup exists to remove. What is failing
-              stays visible on the dashboard until it is not.
+              You can finish setup with items still failing — some are decisions you&apos;re
+              entitled to make differently. What&apos;s failing stays visible on the dashboard
+              until it isn&apos;t.
             </p>
           ) : null}
         </Notice>

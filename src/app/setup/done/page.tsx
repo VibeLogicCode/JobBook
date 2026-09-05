@@ -142,26 +142,27 @@ export default async function DoneStepPage() {
 
         {summary.failing > 0 ? (
           <Notice tone="warning" title={`${summary.failing} environment check${summary.failing === 1 ? '' : 's'} still failing`}>
-            Quoting works regardless — none of them is a field on a document. What they decide
-            is whether documents can be rendered, and whether this company&apos;s records
-            survive the machine they are on. The report stays on the step before this one until
-            setup is finished, and on the dashboard afterwards.
+            Quoting works regardless — none of them is a field on a document. They decide
+            whether documents render, and whether this company&apos;s records survive the
+            machine they&apos;re on. See the report on the previous step, or the dashboard
+            afterwards.
           </Notice>
         ) : null}
 
+        {/* Deliberate: the only thing these forms could do to a company that
+            already exists is replace it wholesale, and a legal name or a tax
+            registration replaced by mistake is wrong on documents already in
+            a customer's inbox. */}
         <Notice tone="info" title="Finishing closes this wizard permanently">
           <p>
-            After this, <span className="num">/setup</span> redirects into the application and
-            these forms cannot be reached again on this deployment. That is deliberate: the
-            only thing they could do to a company that already exists is replace it wholesale,
-            and a legal name or a tax registration replaced by mistake is wrong on documents
-            already in a customer&apos;s inbox.
+            After this, <span className="num">/setup</span> redirects into the application —
+            these forms can&apos;t be reached again on this deployment.
           </p>
           <p className="mt-2">
-            Every field above stays editable under <Link className="underline" href="/settings">Settings</Link>,
-            one field at a time, owner role only. A tax rate is the exception: changing one
-            inserts a new effective-dated row rather than overwriting it, so what was correct
-            before stays answerable.
+            Every field above stays editable under{' '}
+            <Link className="underline" href="/settings">Settings</Link>, owner role only. A
+            tax rate is the exception: changing one adds a new effective-dated row instead of
+            overwriting it.
           </p>
         </Notice>
       </ActionForm>

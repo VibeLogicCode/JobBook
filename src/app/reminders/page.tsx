@@ -57,7 +57,7 @@ export default async function RemindersPage({
       <PageHeader
         className="mb-4"
         title="Reminders"
-        description="Written by the hourly evaluator from your rules, not by hand. This is where they get completed, deferred, moved out or dismissed."
+        description="From your rules, not typed by hand. Complete, defer, move or dismiss them here."
       />
 
       <FilterBar
@@ -101,13 +101,11 @@ export default async function RemindersPage({
               // whole job is to tell him what is outstanding reads as a query
               // that failed, and the recovery from that is to stop looking.
               <>
-                Nothing to chase. Every reminder is either done or still ahead of its date — the
-                hourly evaluator adds one the moment a quote, a site visit or a won job needs
-                following up.{' '}
+                Nothing to chase. Everything is done or not due yet.{' '}
                 <Link href="/quotes" className="text-accent-text hover:underline">
                   Quotes
                 </Link>{' '}
-                is where the follow-ups come from.
+                is where follow-ups come from.
               </>
             }
           />

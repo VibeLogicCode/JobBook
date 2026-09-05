@@ -326,8 +326,7 @@ function ListView({
 
       {rows.length === 0 ? (
         <p className="max-w-prose t-small text-subtle">
-          Nobody is on this task yet. A trade on the task says who to go looking for; this says who
-          is actually coming.
+          Nobody yet — the trade says who to look for; this says who&rsquo;s actually coming.
         </p>
       ) : (
         <ul className="flex flex-col gap-2">
@@ -618,8 +617,7 @@ function RemoveView({
           Take {row.name} off {taskName}
         </h3>
         <p className="max-w-prose t-small text-subtle">
-          The row stays, with the date and your reason on it. That is what frees them up on the day
-          without pretending they were never asked.
+          The row stays, with the date and your reason on it.
         </p>
       </div>
 
@@ -633,7 +631,7 @@ function RemoveView({
           maxLength={300}
           disabled={disabled || pending}
           wide
-          hint="Kept on the row."
+          hint="Kept on the record permanently."
         />
       </form>
     </div>

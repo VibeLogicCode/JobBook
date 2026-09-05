@@ -25,6 +25,7 @@ import { FilterBar, NoMatches } from '@/components/ui/FilterBar';
 import { Notice } from '@/components/ui/Notice';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Pill } from '@/components/ui/Pill';
+import { Reveal } from '@/components/ui/Reveal';
 import { SheetButton } from '@/components/ui/Sheet';
 import { TableWrap } from '@/components/ui/Table';
 import { normalizeSearch, searchCondition } from '@/lib/list/search';
@@ -244,7 +245,6 @@ export default async function VendorsPage({
             maxLength={200}
             defaultValue={row?.name}
             disabled={disabled}
-            hint="What you call them. One counterparty is one row — if they are already on the list under another spelling, edit that one rather than adding a second."
           />
           <TextField
             idPrefix={prefix}
@@ -253,7 +253,7 @@ export default async function VendorsPage({
             maxLength={200}
             defaultValue={row?.legalName}
             disabled={disabled}
-            hint="The name on the cheque, if it differs. This is the one a T5018 slip carries."
+            hint="The name on the cheque, if it differs. The T5018 uses this name."
           />
           {/*
             The owner's ask, in one tree: a supplier is not asked which trade
@@ -287,7 +287,7 @@ export default async function VendorsPage({
               options={typeOptions(row)}
               blankLabel="Choose one"
               disabled={disabled}
-              hint="What kind of counterparty this is. Some types mean the vendor performs work: those receive a T5018 slip, have their WSIB clearance checked before they are paid, appear when work is assigned, and are the only ones asked which trade they are. Maintained under Settings, Vendor types."
+              hint="Decides T5018 filing, WSIB clearance checks, and assignment eligibility."
             />
             <div className="revealed-field min-w-0 self-start">
               <SelectField
@@ -298,7 +298,7 @@ export default async function VendorsPage({
                 options={tradeOptions(row)}
                 blankLabel="Choose one"
                 disabled={disabled}
-                hint="What kind of subcontractor this is — how you would describe them when looking for one. Not the same as the cost code below. Maintained under Settings, Trades."
+                hint="Not the same as the cost code below."
               />
             </div>
           </div>
@@ -310,7 +310,7 @@ export default async function VendorsPage({
             options={costCodeOptions(row)}
             blankLabel="None — code each receipt as it arrives"
             disabled={disabled}
-            hint="Proposed on an expense, never imposed. Changing it later does not recode anything already recorded."
+            hint="Proposed on new expenses only; won't recode anything already recorded."
           />
           <TextField
             idPrefix={prefix}
@@ -348,8 +348,13 @@ export default async function VendorsPage({
             defaultValue={row?.paymentTermsDays === null ? '' : String(row?.paymentTermsDays ?? '')}
             disabled={disabled}
             suffix="days"
-            hint="Net days. Leave it blank if nothing was agreed; 0 is cash on delivery, which is a different fact."
+            hint="Net days. Blank means none agreed; 0 means cash on delivery — different facts."
           />
+          {/*
+            Ask for the business number the day a subcontractor is hired.
+            Chasing it in February from somebody who finished in August is how
+            a T5018 filing gets late.
+          */}
           <TextField
             idPrefix={prefix}
             name="businessNumber"
@@ -357,7 +362,7 @@ export default async function VendorsPage({
             maxLength={60}
             defaultValue={row?.businessNumber}
             disabled={disabled}
-            hint="The CRA business number, and the T5018 requirement. Ask for it the day they are hired — chasing it in February from somebody who finished in August is how a filing gets late."
+            hint="The CRA business number, for the T5018."
           />
           <TextField
             idPrefix={prefix}
@@ -366,8 +371,14 @@ export default async function VendorsPage({
             maxLength={60}
             defaultValue={row?.taxRegistrationNumber}
             disabled={disabled}
-            hint="A different number from the one beside it. This is what an input tax credit on a receipt over $30 is evidenced against; a supplier who is not registered has none, and charges no tax."
+            hint="Different from the business number above."
           />
+          <div className="sm:col-span-2">
+            <Reveal label="What this number is for">
+              Evidence for an input tax credit on a receipt over $30; a supplier who isn&apos;t
+              registered charges no tax.
+            </Reveal>
+          </div>
           <TextField
             idPrefix={prefix}
             name="addressLine1"
@@ -428,7 +439,7 @@ export default async function VendorsPage({
       <PageHeader
         className="mb-4"
         title="Vendors"
-        description="Everyone you pay: the suppliers you buy from and the subcontractors you hire. Every expense and every scheduled task will point at a row here, so one counterparty being one row is the whole value of the list."
+        description="Everyone you pay: the suppliers you buy from and the subcontractors you hire."
         actions={
           <SheetButton
             trigger="Add vendor"
@@ -626,10 +637,9 @@ export default async function VendorsPage({
                         <div>
                           <h3 className="t-small font-semibold">Edit this vendor</h3>
                           <p className="mb-2 max-w-prose t-small text-subtle">
-                            A change reaches everything already recorded against them, past
-                            work included — which is right for a new phone number and wrong
-                            for a different company. If this row now points at somebody else,
-                            retire it and add the new counterparty below.
+                            Changes reach every past record too — right for a new phone number,
+                            wrong for a different company. If this is really somebody else,
+                            retire this row and add the new counterparty below.
                           </p>
                           <ActionForm
                             action={updateVendor}
@@ -648,16 +658,20 @@ export default async function VendorsPage({
                           </ActionForm>
                         </div>
 
+                        {/*
+                          Retire and void used to be two full paragraphs and two
+                          headings -- most of why this sheet scrolled. They are one
+                          decision, stop using this vendor, with two answers: might
+                          you use them again (retire, reversible) or should the row
+                          never have existed (void, permanent, and does not free the
+                          name). Read as one section.
+                        */}
                         <div>
-                          <h3 className="t-small font-semibold">
-                            {row.isActive ? 'Retire' : 'Bring back'}
-                          </h3>
+                          <h3 className="t-small font-semibold">Stop using this vendor</h3>
                           <p className="mb-2 max-w-prose t-small text-subtle">
-                            Retiring stops them being offered on new work — a supplier that
-                            closed, a sub you no longer use. It is not a deletion and not a
-                            void: the row stays, the name stays taken, and every expense,
-                            payment and assignment already recorded against them goes on
-                            naming them.
+                            Retire keeps the row and every record against it — for a supplier
+                            that closed or a sub you no longer use. Void is only for a row that
+                            should never have existed, and does not free the name.
                           </p>
                           <RowAction
                             action={setVendorActive}
@@ -671,24 +685,12 @@ export default async function VendorsPage({
                                 : undefined
                             }
                           />
-                        </div>
 
-                        {isVoid ? (
-                          <div>
-                            <h3 className="t-small font-semibold">Voided</h3>
-                            <p className="max-w-prose t-small text-subtle">
-                              {row.voidReason ?? 'No reason was recorded.'}
+                          {isVoid ? (
+                            <p className="mt-3 max-w-prose t-small text-subtle">
+                              Voided: {row.voidReason ?? 'No reason was recorded.'}
                             </p>
-                          </div>
-                        ) : (
-                          <div>
-                            <h3 className="t-small font-semibold">Void it</h3>
-                            <p className="mb-2 max-w-prose t-small text-subtle">
-                              For a row that should never have existed — a name typed twice, a
-                              vendor added against the wrong company. It is not how you stop
-                              using somebody; that is Retire, above. Voiding does not free the
-                              name, so a corrected record needs a name of its own.
-                            </p>
+                          ) : (
                             <ActionForm
                               action={voidVendor}
                               submitLabel="Void this vendor"
@@ -705,13 +707,13 @@ export default async function VendorsPage({
                                 label="Reason"
                                 required
                                 maxLength={300}
+                                hint="Kept on the record permanently."
                                 disabled={!mayVoid}
                                 wide
-                                hint="Recorded on the row. A void with no reason teaches nobody anything a year later."
                               />
                             </ActionForm>
-                          </div>
-                        )}
+                          )}
+                        </div>
                       </div>
                     </SheetButton>
                   </td>
@@ -724,9 +726,8 @@ export default async function VendorsPage({
 
       {subcontractors > 0 ? (
         <p className="mt-3 max-w-prose t-small text-subtle">
-          {subcontractors} of these {subcontractors === 1 ? 'is a subcontractor' : 'are subcontractors'}.
-          A T5018 is filed for each of them, and each needs current WSIB clearance before they
-          are paid — which is the gate this list is being built for.
+          {subcontractors} of these {subcontractors === 1 ? 'is a subcontractor' : 'are subcontractors'}
+          — each needs a T5018 filed and current WSIB clearance before being paid.
         </p>
       ) : null}
     </div>

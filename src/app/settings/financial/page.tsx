@@ -12,6 +12,7 @@ import {
   TextField,
 } from '@/components/settings/Fields';
 import { Notice } from '@/components/ui/Notice';
+import { Reveal } from '@/components/ui/Reveal';
 import { Section } from '@/components/settings/Section';
 import { formatBasisPoints, formatRate } from '@/lib/money/format';
 import { RATE_SCALE, divRoundHalfUp } from '@/lib/money/scale';
@@ -59,17 +60,13 @@ export default async function FinancialSettingsPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <Section
-        title="Tax registration"
-        description={
-          <p>
-            Both the number and what it is <em>called</em> are configuration. A jurisdiction
-            decides whether a document says one thing or another above the same field, and a
-            product that printed a fixed label would be wrong the first time it left the
-            region it was written in.
-          </p>
-        }
-      >
+      {/*
+       * Both the number and its label are configuration, not just the number:
+       * a jurisdiction decides whether a document says one thing or another
+       * above the same field, and a fixed label would be wrong the first time
+       * this left the region it was written in.
+       */}
+      <Section title="Tax registration">
         <ActionForm
           action={saveFinancial}
           submitLabel="Save financial and legal settings"
@@ -83,14 +80,14 @@ export default async function FinancialSettingsPage() {
               maxLength={50}
               defaultValue={org?.taxRegistrationNumber}
               numeric
-              hint="Printed beside the tax line on every document. Snapshotted onto each quote as it is issued."
+              hint="Printed on every document. Snapshotted onto each quote when issued."
             />
             <TextField
               name="taxRegistrationLabel"
               label="Tax registration label"
               maxLength={50}
               defaultValue={org?.taxRegistrationLabel}
-              hint="The words that print in front of the number. Type them exactly as your jurisdiction names them."
+              hint="Printed before the number. Word it as your jurisdiction requires."
             />
             <TextField
               name="businessNumber"
@@ -118,7 +115,7 @@ export default async function FinancialSettingsPage() {
               defaultValue={org?.fiscalYearEndMonth ? String(org.fiscalYearEndMonth) : ''}
               blankLabel="Not set"
               options={monthOptions(org?.locale ?? 'en')}
-              hint="Not assumed to be the end of December. Plenty of companies close in another month."
+              hint="Not assumed to be December."
             />
             <TextField
               name="fiscalYearEndDay"
@@ -127,17 +124,20 @@ export default async function FinancialSettingsPage() {
               numeric
               maxLength={2}
               defaultValue={org?.fiscalYearEndDay ? String(org.fiscalYearEndDay) : ''}
-              hint="Set with the month, or leave both blank. 29 February is accepted — leap years exist."
+              hint="Set with the month, or leave both blank. 29 February is accepted."
             />
 
+            {/*
+             * Only a default, not a company-wide rate: it is stored per quote,
+             * so a job that withholds nothing prints no holdback block. A
+             * single shared percentage would put a withholding line on every
+             * residential quote, where most homeowners never expect one.
+             */}
             <div className="sm:col-span-2">
               <h3 className="t-heading mt-2">Holdback</h3>
               <p className="mt-1 max-w-prose t-small text-muted">
-                A statutory or contractual amount withheld from each payment and released
-                later. The percentage here is only the <em>default</em>: it is stored per
-                quote, so a job that withholds nothing prints no holdback block at all.
-                Applying one company-wide percentage would put a withholding invitation on
-                every residential quote, where most homeowners neither expect nor ask for one.
+                Withheld from each payment, released later. This is only the default —
+                the actual holdback is set per quote.
               </p>
             </div>
 
@@ -161,7 +161,7 @@ export default async function FinancialSettingsPage() {
               label="Holdback label"
               maxLength={100}
               defaultValue={org?.holdbackLabel}
-              hint="What the block is headed on a document. Every jurisdiction names this differently."
+              hint="What the block is headed on a document."
             />
             <TextField
               name="holdbackReleaseDays"
@@ -178,8 +178,15 @@ export default async function FinancialSettingsPage() {
               name="taxDeferredOnHoldback"
               label="Tax on the holdback is deferred until it is released"
               defaultChecked={org?.taxDeferredOnHoldback ?? true}
-              hint="Where a holdback is retained under legislation or a written contract, tax on the held-back amount may not be payable until it is paid out. Turn it off for a jurisdiction with no such deferral."
+              wide
             />
+            <div className="sm:col-span-2 -mt-2">
+              <Reveal label="When this doesn't apply">
+                Where a holdback is retained under legislation or a written contract, tax on the
+                amount held back may not be payable until it is paid out. Turn this off for a
+                jurisdiction with no such deferral.
+              </Reveal>
+            </div>
             <TextAreaField
               name="holdbackTermsText"
               label="Holdback terms"
@@ -213,28 +220,30 @@ export default async function FinancialSettingsPage() {
               defaultValue={org?.insuranceStatement}
               hint="One line about cover and registration, printed on a quote. Yours to word."
             />
+            {/* A quote can override this per job: a deposit that suits a
+                bathroom does not suit a custom home. */}
             <TextAreaField
               name="paymentTermsText"
               label="Payment terms"
               rows={4}
               defaultValue={org?.paymentTermsText}
-              hint="Deposit and draw structure. A quote can override it per job, because a deposit that suits a bathroom does not suit a custom home."
+              hint="Deposit and draw structure. A quote can override this per job."
             />
 
+            {/*
+             * The allowance is the tax authority's and moves most years — the
+             * value here is a starting point, not an authority; confirm it
+             * against what's published before relying on it.
+             *
+             * Changing it sets what the next trip costs only. Every trip
+             * already logged stored the rate it was driven at, the same way a
+             * quote line keeps the price it was quoted at — a rate resolved
+             * at display time would silently restate every trip ever logged.
+             */}
             <div className="sm:col-span-2">
               <h3 className="t-heading mt-2">Mileage</h3>
               <p className="mt-1 max-w-prose t-small text-muted">
-                What a kilometre driven on a job costs. It is configuration rather than a figure
-                written into the product, because the allowance is your tax authority&apos;s and
-                it moves most years — the value below is a starting point, not an authority.
-                Confirm it against whatever is published for the year before you rely on it.
-              </p>
-              <p className="mt-1 max-w-prose t-small text-muted">
-                Changing it sets what the <em>next</em> trip costs. Every trip already logged
-                stored the rate it was driven at on its own entry and is not touched, for the
-                same reason a quote line keeps the price it was quoted at: a trip taken this year
-                has to go on costing what this year cost, and a rate resolved at display time
-                would silently restate every trip ever logged the first January after a change.
+                Set by your tax authority. Applies to trips going forward only.
               </p>
             </div>
 
@@ -252,7 +261,7 @@ export default async function FinancialSettingsPage() {
                   ? ''
                   : formatRate(org.mileageRatePerKmTenThou)
               }
-              hint="Four decimal places. Mileage is a cost only — it moves the margin on a job and never appears on anything a customer is sent."
+              hint="Four decimal places. Never appears on anything sent to a customer."
             />
 
             <div className="sm:col-span-2">
@@ -271,12 +280,12 @@ export default async function FinancialSettingsPage() {
                   ? ''
                   : formatPercent(BigInt(org.targetMarginBp))
               }
-              hint="Stored in basis points. It sets the bands on the worksheet margin gauge, so a quote drifting toward a loss is visible before it is sent."
+              hint="Sets the bands on the worksheet margin gauge."
             />
             <ReadOnlyField
               label="The same figure as a markup"
               value={markup ? <span className="num">{markup}</span> : '—'}
-              hint="Margin is a share of the price; markup is a share of the cost. They are different numbers on the same job."
+              hint="Margin is a share of price; markup a share of cost — different numbers."
             />
           </FieldGrid>
         </ActionForm>

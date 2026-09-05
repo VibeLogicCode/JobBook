@@ -33,7 +33,7 @@ export default async function CompanyStepPage() {
             maxLength={200}
             defaultValue={org?.legalName}
             placeholder="Registered entity name"
-            hint="The registered entity, including any suffix. Contracts and tax documents use this one."
+            hint="The registered entity, including any suffix."
           />
           <TextField
             name="displayName"
@@ -66,7 +66,7 @@ export default async function CompanyStepPage() {
             maxLength={200}
             defaultValue={org?.ownerName}
             placeholder="Who signs a quote"
-            hint="Signs the quote. This is a name on a document, not an account — the account is step 6."
+            hint="Signs the quote — a document name, not an account (that's step 6)."
           />
           <TextField
             name="ownerTitle"
@@ -74,14 +74,13 @@ export default async function CompanyStepPage() {
             maxLength={100}
             defaultValue={org?.ownerTitle}
             placeholder="Title under the signature"
-            hint="Printed under the signature. A company decides its own words for this."
+            hint="Printed under the signature."
           />
         </FieldGrid>
 
         <Notice tone="info" title="The logo comes later">
-          Branding is a file upload, and uploads need the file store, which is not part of this
-          wizard. The brand colour and both image slots are on the identity screen under
-          Settings once you are through here — nothing about them blocks quoting.
+          Uploads need the file store, which isn&apos;t part of this wizard. Set the brand
+          colour and logo later under Settings — nothing here blocks quoting.
         </Notice>
       </ActionForm>
     </StepPanel>

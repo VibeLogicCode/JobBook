@@ -114,7 +114,7 @@ export default async function RatesPage() {
       <PageHeader
         className="mb-4"
         title="Rates"
-        description="One list per deployment. Editing a rate never moves a quote already written — every line snapshots its rates when it is created."
+        description="One list per deployment. Editing a rate never moves a quote already written."
       />
 
       <div className="flex flex-col gap-4">
@@ -207,9 +207,8 @@ export default async function RatesPage() {
                           <div>
                             <h3 className="t-small font-semibold">Edit this item</h3>
                             <p className="mb-2 max-w-prose t-small text-subtle">
-                              Changes apply to quotes written from here on. Nothing already
-                              quoted moves: a quote line carries its own copy of the
-                              description, the cost code and both rates.
+                              Applies to quotes written from here on — a quote line keeps its
+                              own copy of everything.
                             </p>
                             <ActionForm
                               action={updateRateItem}
@@ -296,7 +295,7 @@ export default async function RatesPage() {
                                   disabled={!allowed || isVoid}
                                   hint={
                                     costCodeNote
-                                      ? `This item is coded to a ${costCodeNote} cost code. It keeps reading it until you choose another.`
+                                      ? `Coded to a ${costCodeNote} cost code; stays until you pick another.`
                                       : undefined
                                   }
                                 />
@@ -313,7 +312,7 @@ export default async function RatesPage() {
                                       : formatQty(item.defaultQtyMilli)
                                   }
                                   disabled={!allowed || isVoid}
-                                  hint="Filled in when the item is added to a quote. Leave it blank to type one each time."
+                                  hint="Filled in when added to a quote; blank to type one each time."
                                 />
                                 <TextField
                                   idPrefix={`edit-${item.id}`}
@@ -350,9 +349,8 @@ export default async function RatesPage() {
                               {item.isActive ? 'Retire' : 'Bring back'}
                             </h3>
                             <p className="mb-2 max-w-prose t-small text-subtle">
-                              Retiring stops the item being offered on new quotes. It is not a
-                              deletion and not a void: the row stays, its code stays taken, and
-                              every quote and template already naming it goes on resolving.
+                              Stops the item being offered on new quotes. The row and its code
+                              stay, and every quote and template naming it keeps resolving.
                             </p>
                             <RowAction
                               action={setRateItemActive}
@@ -379,10 +377,9 @@ export default async function RatesPage() {
                             <div>
                               <h3 className="t-small font-semibold">Void it</h3>
                               <p className="mb-2 max-w-prose t-small text-subtle">
-                                For a row that should never have existed — a bad import line, a
-                                duplicate typed twice. It is not how you take an item out of
-                                circulation; that is Retire, above. Voiding does not free the
-                                code, so a corrected line needs a code of its own.
+                                For a row that should never have existed — a bad import, a
+                                duplicate. Not how you retire an item, and it does not free the
+                                code either.
                               </p>
                               <ActionForm
                                 action={voidRateItem}
@@ -400,9 +397,9 @@ export default async function RatesPage() {
                                   label="Reason"
                                   required
                                   maxLength={300}
+                                  hint="Kept on the record permanently."
                                   disabled={!mayVoid}
                                   wide
-                                  hint="Recorded on the row. A void with no reason teaches nobody anything a year later."
                                 />
                               </ActionForm>
                             </div>
@@ -421,8 +418,7 @@ export default async function RatesPage() {
           title="Add a rate item"
           description={
             <p>
-              One line, by hand — the usual way a new item arrives, after a supplier quotes a
-              price. A whole list at once goes through the importer below.
+              One line, by hand. A whole list at once goes through the importer below.
             </p>
           }
         >
@@ -441,7 +437,7 @@ export default async function RatesPage() {
                 required
                 maxLength={60}
                 disabled={!allowed}
-                hint="Unique across the one list. It is how the item is found and how an import decides a row is already here."
+                hint="Unique across the one list."
               />
               <TextField
                 idPrefix="new-rate"
@@ -460,7 +456,7 @@ export default async function RatesPage() {
                 defaultValue="qty"
                 options={CALC_MODE_OPTIONS}
                 disabled={!allowed}
-                hint="By quantity multiplies the rate; a flat amount ignores quantity; a percentage applies to another figure."
+                hint="Quantity multiplies; flat ignores quantity; percent applies to another figure."
               />
               <TextField
                 idPrefix="new-rate"
@@ -478,7 +474,7 @@ export default async function RatesPage() {
                 inputMode="decimal"
                 maxLength={20}
                 disabled={!allowed}
-                hint="What it costs you, to four decimals. Left blank it records as zero, and the margin will read 100%."
+                hint="To four decimals. Blank records as zero, and the margin will read 100%."
               />
               <TextField
                 idPrefix="new-rate"
@@ -507,7 +503,7 @@ export default async function RatesPage() {
                 inputMode="decimal"
                 maxLength={20}
                 disabled={!allowed}
-                hint="Optional. Never negative — a reduction is a negative price on a positive quantity."
+                hint="Optional, never negative — a reduction is typed as a negative price."
               />
               <TextField
                 idPrefix="new-rate"
@@ -542,9 +538,8 @@ export default async function RatesPage() {
           title="Import a price list"
           description={
             <p>
-              A fresh install starts with an empty list, and typing sixty items before the first
-              quote is where an owner stops. Paste the list or choose the file, say which column
-              is which, and read what will happen before anything is written.
+              Paste the list or choose a file, say which column is which, and review what will
+              happen before anything is written.
             </p>
           }
         >

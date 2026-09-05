@@ -37,16 +37,12 @@ export default async function DocumentSettingsPage() {
     }
   }
 
+  // Every string on a generated document comes from the organization
+  // record — there is no template with a company name in it.
   return (
     <Section
       title="Documents"
-      description={
-        <p>
-          Text that prints on a quote, and how long one stands. Every string on a generated
-          document comes from the organization record — there is no template with a company
-          name in it.
-        </p>
-      }
+      description={<p>Text that prints on a quote, and how long one stands.</p>}
     >
       <ActionForm
         action={saveDocuments}
@@ -69,7 +65,7 @@ export default async function DocumentSettingsPage() {
           <ReadOnlyField
             label="A quote written today would stand until"
             value={expiryExample ? <span className="num">{expiryExample}</span> : '—'}
-            hint="Computed in your timezone. Expiry is never stored as a status — a stored one is wrong the moment the clock passes it."
+            hint="Computed in your timezone — expiry isn't stored, only calculated live."
           />
           <TextAreaField
             name="quoteTermsText"
@@ -83,7 +79,7 @@ export default async function DocumentSettingsPage() {
             label="Document footer"
             rows={3}
             defaultValue={org?.documentFooterText}
-            hint="The line at the foot of every page. Usually the company name and a way to reach it."
+            hint="The line at the foot of every page."
           />
         </FieldGrid>
       </ActionForm>

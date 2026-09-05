@@ -195,7 +195,7 @@ function LogActivitySheet({
           name="body"
           rows={4}
           maxLength={20_000}
-          hint="Paste an email here rather than describing it — this is the record of the conversation."
+          hint="Paste the email here rather than describing it — the record of the conversation."
         />
 
         <Field
@@ -206,7 +206,7 @@ function LogActivitySheet({
           max={1440}
           step={1}
           numeric
-          hint="Optional. Only worth filling in for a call or a visit you may have to account for."
+          hint="Optional — mainly for a call or visit you may need to account for."
         />
       </form>
     </Sheet>

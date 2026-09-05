@@ -65,10 +65,8 @@ export default async function FirstUserStepPage() {
       <ActionForm action={saveFirstUserStep} submitLabel="Save owner account">
         {mode === 'local' ? (
           <Notice tone="warning" title="This deployment enforces no sign-in">
-            Every request arrives as one address named in the environment, with no password, no
-            provider and no session — a LAN or a laptop under test. The role below still
-            applies: authorization is a lookup against this table on every request, and local
-            mode is not exempt from it.{' '}
+            Every request arrives as one address named in the environment — no password, no
+            provider, no session. The role below still applies.{' '}
             {verifiedEmail ? (
               <>
                 Requests are currently arriving as <span className="num">{verifiedEmail}</span>,
@@ -78,21 +76,20 @@ export default async function FirstUserStepPage() {
           </Notice>
         ) : null}
 
+        {/* Restricting a person to one identity provider is a rule in the
+            Access policy, not a per-account setting. */}
         {mode === 'access' ? (
           <Notice tone="info" title="Sign-in is decided at the edge">
-            Cloudflare Access authenticates before a request reaches this application, so there
-            is no sign-in method to choose here — restricting a person to one identity provider
-            is a rule in the Access policy. The address below must match what Access asserts,
-            or this account cannot sign in.
+            Cloudflare Access authenticates before a request reaches this application — there
+            is no sign-in method to choose here. The address below must match what Access
+            asserts, or this account cannot sign in.
           </Notice>
         ) : null}
 
         {mode === 'sso' && providers.length === 0 ? (
           <Notice tone="negative" title="No sign-in provider is configured">
-            This deployment is set to sign people in itself, but no provider credentials are
-            present in its environment. This account will exist and will not be able to sign
-            in until an installer adds them — the environment check on the next step names the
-            variables.
+            This account will exist but won&apos;t be able to sign in until an installer adds
+            provider credentials — the environment check on the next step names the variables.
           </Notice>
         ) : null}
 
@@ -115,12 +112,14 @@ export default async function FirstUserStepPage() {
             maxLength={200}
             defaultValue={existing?.email ?? verifiedEmail ?? ''}
             placeholder="The address they sign in with"
-            hint="The row's identity, and the field that is unique. After a first successful sign-in, authentication keys on the provider's stable subject instead, because an email address changes."
+            // After a first successful sign-in, authentication keys on the
+            // provider's stable subject instead, because an email changes.
+            hint="The row's unique identity — after first sign-in, authentication keys on the provider's subject instead."
           />
           <ReadOnlyField
             label="Role"
             value="Owner"
-            hint="Not a choice. The first account has to be able to grant every other role, and a deployment whose only account is not an owner has no way back in through the interface."
+            hint="Not a choice — the first account has to be able to grant every other role."
           />
           {mode === 'sso' && providers.length > 0 ? (
             <SelectField
@@ -132,7 +131,7 @@ export default async function FirstUserStepPage() {
                 value: provider,
                 label: PROVIDER_LABELS[provider] ?? provider,
               }))}
-              hint="Which provider this person signs in through. Only the providers with credentials in this deployment's environment are offered — a method that cannot work is a support call. Leaving it unchosen means this account cannot sign in yet."
+              hint="Only providers with credentials in this deployment appear. Left unset, this account can't sign in yet."
             />
           ) : (
             <ReadOnlyField
@@ -144,7 +143,7 @@ export default async function FirstUserStepPage() {
                     ? 'None — the environment names the user'
                     : 'Unavailable until sign-in is configured'
               }
-              hint="Per-user sign-in methods only mean something where this application does the signing in itself."
+              hint="Only meaningful where this application signs people in itself."
             />
           )}
         </FieldGrid>

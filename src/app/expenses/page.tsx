@@ -35,6 +35,7 @@ import { Money } from '@/components/ui/Money';
 import { Notice } from '@/components/ui/Notice';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Pill } from '@/components/ui/Pill';
+import { Reveal } from '@/components/ui/Reveal';
 import { SheetButton } from '@/components/ui/Sheet';
 import { AmountCell, TableWrap } from '@/components/ui/Table';
 import { isInlineType } from '@/lib/files/sniff';
@@ -316,7 +317,7 @@ export default async function ExpensesPage({
             options={projectOptions}
             blankLabel="Choose the job"
             disabled={!allowed}
-            hint="Required. An expense with no job never reaches job costing, which is the whole reason for recording it."
+            hint="Needed for job costing to pick this up."
           />
           <TextField
             idPrefix="new-expense"
@@ -326,7 +327,10 @@ export default async function ExpensesPage({
             required
             defaultValue={today}
             disabled={!allowed}
-            hint="The date on the receipt, not today. Six weeks of paper typed in one evening otherwise lands in one filing period."
+            // A form default of today is easy to mistake for the right
+            // answer. Six weeks of paper typed in one evening, all dated
+            // today, otherwise lands in one filing period instead of six.
+            hint="The date on the receipt, not today."
           />
           <SelectField
             idPrefix="new-expense"
@@ -336,7 +340,7 @@ export default async function ExpensesPage({
             options={vendorOptions}
             blankLabel="Nobody on the list"
             disabled={!allowed}
-            hint="Who was paid. If they are not on the list, add them under Vendors — one counterparty is one row, and a typed name is how a T5018 total ends up split three ways."
+            hint="Who was paid. Add them under Vendors first if they aren't listed."
           />
           <SelectField
             idPrefix="new-expense"
@@ -346,7 +350,7 @@ export default async function ExpensesPage({
             options={codeOptions}
             blankLabel="Not coded yet"
             disabled={!allowed}
-            hint="How the spend is categorised. Blank is allowed and can be set later, but uncoded spend shows as its own group on the job."
+            hint="Optional — uncoded spend shows as its own group on the job."
           />
           <TextField
             idPrefix="new-expense"
@@ -356,7 +360,6 @@ export default async function ExpensesPage({
             maxLength={500}
             disabled={!allowed}
             wide
-            hint="What was bought. A figure with no words beside it is unreadable a year later, which is exactly when somebody reads it."
           />
           <TextField
             idPrefix="new-expense"
@@ -366,7 +369,7 @@ export default async function ExpensesPage({
             inputMode="decimal"
             maxLength={20}
             disabled={!allowed}
-            hint="Before tax, as printed. A return or a credit is typed as a negative — (45.00) or -45.00 both read that way."
+            hint="Before tax, as printed. Negative for a return — (45.00) or -45.00 both work."
           />
           <TextField
             idPrefix="new-expense"
@@ -387,16 +390,14 @@ export default async function ExpensesPage({
             }))}
             blankLabel="Not said"
             disabled={!allowed}
-            hint="How the money left, which is a different question from how the spend is coded. On account means it has not left yet — that is the row the payables view will read."
+            hint="How the money left. On account means it hasn't left yet."
           />
 
           <div className="sm:col-span-2">
             <h3 className="t-heading mt-2">Tax</h3>
             <p className="mt-1 max-w-prose t-small text-muted">
-              Typed from the receipt rather than calculated from the subtotal: the paper is the
-              evidence, and where the two disagree it is the paper that a claim rests on. Each
-              tax is recorded separately because an input tax credit is claimed per tax, not per
-              receipt.
+              Typed from the receipt, not calculated — the paper is the evidence. Each tax is
+              recorded separately; an ITC is claimed per tax.
             </p>
           </div>
 
@@ -430,7 +431,7 @@ export default async function ExpensesPage({
               label={`This ${row.label} is recoverable`}
               defaultChecked
               disabled={!allowed}
-              hint="Untick it for spend that was never a business input. It decides whether this tax counts toward what the company claims back."
+              hint="Off for spend that wasn't a business input — affects what you can claim back."
             />
           ))}
 
@@ -444,14 +445,24 @@ export default async function ExpensesPage({
             label="Tax number on the receipt"
             maxLength={60}
             disabled={!allowed}
-            hint="Copied from the paper, on purpose — not looked up from the vendor record. A registration can change or lapse, and a credit over $30 is evidenced by what the receipt said on the day."
+            hint="Copied from the paper, not the vendor record — it can change or lapse."
           />
+          <div className="sm:col-span-2">
+            <Reveal label="Why this is copied rather than looked up">
+              Evidence for an input tax credit over $30 rests on what the receipt said that day.
+            </Reveal>
+          </div>
+          {/*
+            Off by default: a cost somebody has to remember to bill is a
+            smaller problem than an invoice that grew a line nobody decided
+            on.
+          */}
           <CheckboxField
             idPrefix="new-expense"
             name="isBillable"
             label="Bill this on to the customer"
             disabled={!allowed}
-            hint="For cost-plus and time-and-material work, and for spend against an allowance. Off by default: a cost you have to remember to bill is a smaller problem than an invoice that grew a line nobody decided on."
+            hint="For cost-plus, time-and-material work, or spend against an allowance."
           />
 
           <div className="flex min-w-0 flex-col gap-1 sm:col-span-2">
@@ -462,7 +473,13 @@ export default async function ExpensesPage({
                 of it. `capture` is deliberately gone: it sends a phone straight
                 to the camera, which is the wrong door for the supplier PDF
                 sitting in the mail app. The camera is still one tap inside the
-                picker. */}
+                picker.
+
+                The file is identified by its contents rather than its name --
+                renaming something .jpg will not get it past the `accept` list
+                -- and a PDF downloads instead of opening inline, deliberately:
+                a PDF can carry script, and one displayed inside this
+                application would be running inside it. */}
             <input
               id="new-expense-receipt"
               name="receipt"
@@ -473,12 +490,9 @@ export default async function ExpensesPage({
               className={`field ${allowed ? '' : 'opacity-60'}`}
             />
             <p id="new-expense-receipt-hint" className="t-small text-subtle">
-              A photograph of the paper or the supplier&apos;s own PDF, up to{' '}
-              <span className="num">{formatBytes(RECEIPT_MAX_BYTES)}</span>. On a phone the picker
-              offers the camera. The file is identified by its contents rather than its name, so
-              renaming something .jpg will not get it past this. A photograph is shown on the entry;
-              a PDF downloads instead of opening here, deliberately — a PDF can carry script, and
-              one displayed inside this application would be running inside it.
+              A photo or the supplier&apos;s PDF, up to{' '}
+              <span className="num">{formatBytes(RECEIPT_MAX_BYTES)}</span>. PDFs download
+              instead of opening here.
             </p>
           </div>
 
@@ -569,7 +583,7 @@ export default async function ExpensesPage({
             maxLength={500}
             disabled={!allowed}
             wide
-            hint="Site visit, material run, inspection. The purpose is what makes the allowance defensible if it is ever asked about."
+            hint="Site visit, material run, inspection."
           />
           <TextAreaField
             idPrefix="new-mileage"
@@ -621,7 +635,7 @@ export default async function ExpensesPage({
       <PageHeader
         className="mb-4"
         title="Expenses"
-        description="What each job actually cost: the receipts, the subcontractors, and the driving. Every dollar recorded here lands against a job and a cost code on the day it was spent, so a year end is an export rather than an archaeology project."
+        description="What each job actually cost: the receipts, the subcontractors, and the driving."
         actions={
           <>
             <SheetButton
@@ -750,9 +764,7 @@ export default async function ExpensesPage({
             </tbody>
           </TableWrap>
           <p className="mt-2 max-w-prose t-small text-subtle">
-            Cost only. What this job was quoted, and what remains against it, arrives with the
-            job-costing view — this is the half of that answer the expenses can give on their
-            own.
+            Cost only — what this job was quoted and what remains lives in job costing.
           </p>
         </div>
       ) : null}
@@ -870,10 +882,7 @@ export default async function ExpensesPage({
                                   ? '—'
                                   : formatRatePerKm(row.ratePerKmTenThou, money)}
                               </span>{' '}
-                              per kilometre, which is the rate stored on this entry rather than
-                              the one configured today. It is what the rate was when the trip was
-                              driven, and it stays that way whatever the allowance does next
-                              January.
+                              per kilometre — the rate stored on this entry, not today&apos;s rate.
                             </p>
                           </div>
                         ) : (
@@ -911,28 +920,24 @@ export default async function ExpensesPage({
                                   </a>
                                 )}
                                 <p className="mt-1 max-w-prose t-small text-subtle">
-                                  Served as the type its bytes actually are, never the one the
-                                  uploader named it.
+                                  Served as the type its bytes actually are, never the name it
+                                  was uploaded under.
                                   {isInlineType(row.receiptMimeType ?? '')
                                     ? ''
-                                    : ' A PDF is handed to the browser as a download rather than opened' +
-                                      ' in this page, because a PDF can carry script and one displayed' +
-                                      ' here would run with this application’s rights.'}
+                                    : ' PDFs download rather than open here.'}
                                 </p>
                               </>
                             ) : (
                               <p className="max-w-prose t-small text-subtle">
-                                No photograph was attached. A credit on a purchase over $30 has to
-                                be evidenced against the supplier&apos;s registration on the
-                                paper, so it is worth photographing before the till roll fades.
+                                No photograph attached. A credit over $30 needs the supplier&apos;s
+                                registration on the receipt.
                               </p>
                             )}
                             {row.vendorTaxNumberCaptured ? (
                               <p className="mt-1 t-small text-subtle">
                                 Tax number as printed:{' '}
                                 <span className="num">{row.vendorTaxNumberCaptured}</span>. Copied
-                                from the paper rather than read off the vendor record, because
-                                that is what the claim rests on.
+                                from the paper, not the vendor record.
                               </p>
                             ) : null}
                           </div>
@@ -949,10 +954,8 @@ export default async function ExpensesPage({
                           <div>
                             <h3 className="t-small font-semibold">Void it</h3>
                             <p className="mb-2 max-w-prose t-small text-subtle">
-                              The only correction there is. Nothing here is deleted, so a wrong
-                              figure or a receipt coded to the wrong job is voided with a reason
-                              and entered again. The row leaves the job&apos;s cost and its tax
-                              claim together, in one write.
+                              Nothing here is deleted — a wrong figure or the wrong job is voided
+                              with a reason and entered again.
                             </p>
                             <ActionForm
                               action={voidExpense}
@@ -971,9 +974,9 @@ export default async function ExpensesPage({
                                 label="Reason"
                                 required
                                 maxLength={300}
+                                hint="Kept on the record permanently."
                                 disabled={!mayVoid}
                                 wide
-                                hint="Recorded on the row. A void with no reason teaches nobody anything a year later."
                               />
                             </ActionForm>
                           </div>

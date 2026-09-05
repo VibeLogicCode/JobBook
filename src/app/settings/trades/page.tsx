@@ -67,21 +67,15 @@ export default async function TradesPage() {
 
   return (
     <div className="flex flex-col gap-4">
+      {/*
+       * Every vendor whose type counts as a subcontractor carries one, and
+       * it's what the schedule and the vendor list use to say who to go
+       * looking for.
+       */}
       <Section
         title="Trades"
         description={
-          <>
-            <p>
-              What sort of subcontractor somebody is. Every vendor whose type counts as a
-              subcontractor carries one, and it is what the schedule and the vendor list use
-              to say who to go looking for.
-            </p>
-            <p className="mt-2">
-              Not the same thing as a cost code. A trade is how you find somebody; a cost
-              code is how their invoice is categorised, and one electrician&rsquo;s work
-              lands on two of those.
-            </p>
-          </>
+          <p>Not the same as a cost code — a trade finds somebody; a cost code categorises the invoice.</p>
         }
       >
         {state.actor ? null : (
@@ -91,17 +85,10 @@ export default async function TradesPage() {
         )}
 
         <Notice tone="info" title="Retiring a trade does not blank the sub who has it">
-          <p>
-            Retiring stops a trade being offered when somebody new is added. Everybody
-            already on it keeps it and goes on showing it, because a vendor points at this
-            row rather than copying its text — which is the whole reason this is a list and
-            not a text box.
-          </p>
+          <p>Stops it being offered on new vendors — everyone already on it keeps it.</p>
           <p className="mt-2">
-            Renaming works the same way and relabels everybody at once. That is right for a
-            spelling fix and wrong for a row that now means a different trade: retire that
-            one and add the new trade under its own name, or last year&rsquo;s roofer reads
-            as this year&rsquo;s sider with nothing on the screen to say so.
+            Renaming relabels everyone at once — right for a spelling fix, wrong for a trade
+            that&rsquo;s actually changed; retire and add a new one instead.
           </p>
         </Notice>
 
@@ -165,9 +152,7 @@ export default async function TradesPage() {
                         <div>
                           <h3 className="t-small font-semibold">Edit this trade</h3>
                           <p className="mb-2 max-w-prose t-small text-subtle">
-                            A rename reaches every subcontractor filed under it. If the row
-                            now means a different trade, retire this one and add the new
-                            trade instead.
+                            A rename reaches every subcontractor filed under it.
                           </p>
                           <ActionForm
                             action={updateTrade}
@@ -191,7 +176,7 @@ export default async function TradesPage() {
                                 maxLength={120}
                                 defaultValue={row.name}
                                 disabled={!allowed || isVoid}
-                                hint="What you would call this trade out loud. Vendors point at the row, not at the text, so nothing is orphaned by a rename."
+                                hint="Vendors point at the row, not the text — nothing is orphaned by a rename."
                               />
                               <TextField
                                 idPrefix={`edit-${row.id}`}
@@ -202,7 +187,7 @@ export default async function TradesPage() {
                                 maxLength={6}
                                 defaultValue={String(row.sortOrder)}
                                 disabled={!allowed || isVoid}
-                                hint="Where it sits in the picker. The shipped list runs in build order rather than alphabetically; equal numbers fall back to the name."
+                                hint="Where it sits in the picker. Equal numbers fall back to the name."
                               />
                             </FieldGrid>
                           </ActionForm>
@@ -213,10 +198,8 @@ export default async function TradesPage() {
                             {row.isActive ? 'Retire' : 'Bring back'}
                           </h3>
                           <p className="mb-2 max-w-prose t-small text-subtle">
-                            Retiring stops the trade being offered when a subcontractor is
-                            added — work this company no longer puts out. It is not a
-                            deletion and not a void: the row stays, its name stays taken, and
-                            everybody already carrying it goes on showing it.
+                            Stops it being offered on new subcontractors. Everyone already
+                            carrying it is unaffected.
                           </p>
                           <RowAction
                             action={setTradeActive}
@@ -243,11 +226,8 @@ export default async function TradesPage() {
                           <div>
                             <h3 className="t-small font-semibold">Void it</h3>
                             <p className="mb-2 max-w-prose t-small text-subtle">
-                              For a row that should never have existed — a name typed twice,
-                              a trade added under a spelling nobody uses. It is not how you
-                              take a trade out of circulation; that is Retire, above. Voiding
-                              does not free the name, so a corrected trade needs a name of
-                              its own.
+                              For a row that never should have existed. Use Retire for a
+                              trade you no longer hire — voiding keeps the name reserved.
                             </p>
                             {uses > 0 ? (
                               <Notice tone="warning">
@@ -275,7 +255,7 @@ export default async function TradesPage() {
                                   maxLength={300}
                                   disabled={!mayVoid}
                                   wide
-                                  hint="Recorded on the row. A void with no reason teaches nobody anything a year later."
+                                  hint="Kept on the record permanently."
                                 />
                               </ActionForm>
                             )}
@@ -293,12 +273,7 @@ export default async function TradesPage() {
 
       <Section
         title="Add a trade"
-        description={
-          <p>
-            Nothing is offered on a vendor until it exists here, so the list is worth
-            building before the first sub is hired rather than during it.
-          </p>
-        }
+        description={<p>Nothing is offered on a vendor until it exists here.</p>}
       >
         <ActionForm
           action={createTrade}

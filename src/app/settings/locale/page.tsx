@@ -86,11 +86,7 @@ export default async function LocaleSettingsPage() {
       <Section
         title="Locale"
         description={
-          <p>
-            How figures print, and which calendar day the application thinks it is. The
-            timezone is the one setting here that changes stored data rather than just its
-            presentation.
-          </p>
+          <p>How figures print, and today&rsquo;s date; timezone alone changes stored data.</p>
         }
       >
         <ActionForm
@@ -107,7 +103,7 @@ export default async function LocaleSettingsPage() {
               maxLength={3}
               defaultValue={org?.currency}
               placeholder="ISO code"
-              hint="Three-letter ISO 4217 code. The money formatter takes the symbol from it, so no currency mark is written into the product."
+              hint="Three-letter ISO 4217 code."
             />
             <ReadOnlyField
               label="How money will print"
@@ -132,7 +128,7 @@ export default async function LocaleSettingsPage() {
                 { value: 'sqft', label: 'Square feet (sqft)' },
                 { value: 'sqm', label: 'Square metres (sqm)' },
               ]}
-              hint="What an area quantity is labelled on a worksheet and a document. It relabels; it does not convert."
+              hint="Labels an area quantity — it relabels, and does not convert existing values."
             />
             <SelectField
               name="timezone"
@@ -141,7 +137,7 @@ export default async function LocaleSettingsPage() {
               wide
               defaultValue={org?.timezone}
               options={timeZoneOptions(org?.timezone ?? null)}
-              hint="An IANA zone name, not an offset: an offset cannot know when the clocks change."
+              hint="An IANA zone name, not an offset — offsets can't track clock changes."
             />
           </FieldGrid>
         </ActionForm>
@@ -150,24 +146,21 @@ export default async function LocaleSettingsPage() {
       <Section title="Why the timezone matters">
         <div className="flex flex-col gap-3">
           <p className="max-w-prose t-small text-muted">
-            The application runs in a container whose clock is UTC. Every date it decides is
-            computed in <em>your</em> local day instead, because these three are dates and not
-            timestamps:
+            The container&rsquo;s clock is UTC. Every date below is computed in{' '}
+            <em>your</em> local day instead:
           </p>
           <ul className="ml-5 max-w-prose list-disc t-small text-muted">
             <li>
-              <span className="font-semibold">The date a quote carries.</span> A quote written
-              at 8pm gets tomorrow&apos;s date in a UTC container — dating a document a day
-              after the conversation that produced it.
+              <span className="font-semibold">The date a quote carries.</span> Written at 8pm,
+              it could get tomorrow&apos;s date in a UTC container.
             </li>
             <li>
               <span className="font-semibold">The day it expires.</span> Validity counts
               forward from the quote date, so an error in one moves the other.
             </li>
             <li>
-              <span className="font-semibold">Fiscal period boundaries.</span> A year end falls
-              on a local calendar day. Computed in UTC, a transaction on the last evening of
-              the year lands in the next one.
+              <span className="font-semibold">Fiscal period boundaries.</span> Computed in UTC,
+              a transaction late in the year could land in the next one.
             </li>
           </ul>
 
@@ -203,8 +196,7 @@ export default async function LocaleSettingsPage() {
 
           {tenantDate !== utcDate ? (
             <Notice tone="info" title="The two dates differ right now">
-              This is the exact moment the setting earns itself: a quote created now is dated{' '}
-              <span className="num">{tenantDate}</span>, not{' '}
+              A quote created right now is dated <span className="num">{tenantDate}</span>, not{' '}
               <span className="num">{utcDate}</span>.
             </Notice>
           ) : null}

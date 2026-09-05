@@ -17,7 +17,7 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
       <PageHeader
         className="mb-4"
         title="Settings"
-        description="Everything a customer document says about your company is here. Nothing about it is built into the product, which is why this screen is long."
+        description="Everything a customer document says about your company is here."
       />
 
       <div className="flex flex-col gap-4 sm:flex-row sm:gap-6">

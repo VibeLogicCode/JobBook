@@ -91,41 +91,37 @@ const ATTACHMENT_LABEL: Record<string, string> = {
 };
 
 const READINESS: Record<SyncReadiness, { tone: Tone; label: string; detail: string }> = {
+  // A dump restored from a mirroring tenant should not push this company's
+  // records to a site it has no credential for — the gate is an environment
+  // variable rather than a row here so nothing on this page can override it.
   'environment-off': {
     tone: 'neutral',
     label: 'Off in the container',
     detail:
-      'SHAREPOINT_SYNC_ENABLED is not on, which is the default on a fresh install and a ' +
-      'legitimate choice: not every company wants its records in a Microsoft tenant, and some ' +
-      'have no Microsoft 365 at all. The gate is an environment variable and not a row in this ' +
-      'database, so nothing on this page can override it — which is what stops a dump restored ' +
-      'from a mirroring tenant pushing this company’s records to a site it has no credential for.',
+      'The default on a fresh install, and a legitimate choice — not every company wants its ' +
+      'records in a Microsoft tenant.',
   },
   'not-requested': {
     tone: 'neutral',
     label: 'Not switched on',
-    detail:
-      'The container permits the mirror and nobody has asked for it. Absence is the off state ' +
-      'throughout this product: no default switches a feature on for somebody who never asked.',
+    detail: 'The container permits the mirror; nobody has asked for it yet.',
   },
   'credential-missing': {
     tone: 'warning',
     label: 'No credential',
     detail:
-      'The mirror is switched on and the environment does not supply the whole app-only ' +
-      'credential, so nothing can authenticate. The variables are listed below.',
+      "Switched on, but the environment doesn't supply the whole credential — variables listed " +
+      'below.',
   },
   'site-missing': {
     tone: 'warning',
     label: 'No site',
-    detail: 'The mirror is switched on and credentialed, and there is no site address to write to.',
+    detail: "Switched on and credentialed, but there's no site address to write to.",
   },
   ready: {
     tone: 'positive',
     label: 'Configured',
-    detail:
-      'Everything this screen can check is in place. Nothing is running: the sync job itself is ' +
-      'not built.',
+    detail: "Everything checkable is in place. Nothing is running yet — the sync job isn't built.",
   },
 };
 
@@ -180,16 +176,12 @@ export default async function SyncSettingsPage() {
       {MIRROR_IS_BUILT ? null : (
         <Notice tone="warning" title="The mirror is not built yet">
           <p>
-            Everything on this page is real: the settings are stored, the permission is checked,
-            and the state below is read from the database. What does not exist yet is the part
-            that talks to SharePoint — the Graph client, the provisioning generator and the
-            scheduled job. They are being written once the schema has settled.
+            Everything here is real except the part that talks to SharePoint — the Graph client,
+            provisioning and the scheduled job aren&apos;t built yet.
           </p>
           <p className="mt-2">
-            So switching the mirror on here changes a stored setting and starts nothing. No list
-            is created, no row is sent, and the verdicts below will read{' '}
-            <span className="font-semibold">Never run</span> forever until the job lands. This
-            notice is here so nobody switches it on and waits for data that will never arrive.
+            Switching it on changes a stored setting and starts nothing: the verdicts below will
+            read <span className="font-semibold">Never run</span> until the job lands.
           </p>
         </Notice>
       )}
@@ -215,29 +207,24 @@ export default async function SyncSettingsPage() {
         </Notice>
       )}
 
+      {/* SharePoint holds a structured, queryable replica of this database,
+          with matching tables and column names. */}
       <Section
         title="What the mirror is, and what it is not"
         description={
-          <p>
-            SharePoint holds a structured, queryable replica of this database, with matching
-            tables and column names. Read this section before switching it on: what it is for is
-            narrower than it looks, and one of the things people expect from it is a thing it
-            cannot do.
-          </p>
+          <p>Read this before switching it on — what it does is narrower than it looks.</p>
         }
       >
         <div className="flex flex-col gap-3">
           <Notice tone="info" title="One way, and Postgres is authoritative">
             <p>
-              Rows travel from this database to SharePoint and never back. Postgres is
-              authoritative for every field, so the SharePoint lists are read-only to people:
-              provisioning grants everyone Read at the site level and Contribute to the sync
-              identity alone.
+              Rows travel from this database to SharePoint and never back — the lists are
+              read-only to people (Read at the site level; only the sync identity gets
+              Contribute).
             </p>
             <p className="mt-2">
-              The reason is worse than “an edit would be overwritten”. An unchanged row is never
-              resent, so an edit made in SharePoint is <em>not</em> overwritten — it persists and
-              diverges silently, and the mirror quietly stops matching the database. A wrong
+              Worse than being overwritten: an unchanged row is never resent, so an edit made in
+              SharePoint is <em>not</em> overwritten — it persists and diverges silently. A wrong
               figure that survives is worse than one that gets corrected.
             </p>
           </Notice>
@@ -245,9 +232,8 @@ export default async function SyncSettingsPage() {
           <Notice tone="neutral" title="What it is for">
             <ul className="list-disc pl-5">
               <li>
-                <span className="font-semibold">Reading.</span> If this machine dies on a Friday,
-                the quotes, customers and projects are still openable in a familiar interface
-                rather than locked inside a database file.
+                <span className="font-semibold">Reading.</span> If this machine dies, records
+                are still openable in a familiar interface rather than locked in a database file.
               </li>
               <li>
                 <span className="font-semibold">Reporting.</span> Power BI Desktop and Excel both
@@ -264,13 +250,13 @@ export default async function SyncSettingsPage() {
             </ul>
           </Notice>
 
+          {/* Numbers round-trip through IEEE doubles, a Text column caps at
+              255 characters and a Note column at roughly 64k, and a Choice
+              column rejects any value not already in its member list. */}
           <Notice tone="negative" title="It is not a restore path">
             <p>
-              Recovery is from the encrypted database dump, never from these lists. The mirror is
-              the wrong artifact for a rebuild and always will be: numbers round-trip through
-              IEEE doubles, a Text column caps at 255 characters and a Note column at roughly
-              64k, and a Choice column rejects any value not already in its member list. The dump
-              is byte-exact and has the same recovery point.
+              Recovery is always from the encrypted database dump, never from these lists — the
+              mirror can&apos;t round-trip every value exactly, and the dump is byte-exact.
             </p>
             <p className="mt-2">
               Read the lists, report from them, hand them to an accountant. Do not rebuild from
@@ -280,25 +266,24 @@ export default async function SyncSettingsPage() {
 
           <Notice tone="warning" title="With the mirror off, one copy fewer">
             <p>
-              Switching it off is a legitimate decision, and it is not a silent one. With the
-              mirror off, SharePoint leaves the backup picture entirely; if no USB destination is
-              configured either, this company’s tax records exist on exactly one disk. The
-              environment report below says which of those is true today.
+              Legitimate, but not silent: with it off, and no USB destination configured either,
+              this company&rsquo;s tax records exist on exactly one disk. The environment report
+              below says which is true today.
             </p>
           </Notice>
         </div>
       </Section>
 
+      {/* Deliberately not in the same place: a database row is mirrored to
+          SharePoint and lands in every backup, and a flag that travels with
+          a restored dump would switch the mirror on for a company that
+          never asked. */}
       <Section
         title="On and off"
         description={
           <p>
-            Two switches have to agree, and they are deliberately not in the same place. This one
-            is the owner’s request and is stored in the database. The other is{' '}
-            <span className="num">SHAREPOINT_SYNC_ENABLED</span> in the container, which lives
-            beside the credentials it gates — because a database row is mirrored to SharePoint and
-            lands in every backup, and a flag that travels with a restored dump would switch the
-            mirror on for a company that never asked.
+            Two switches have to agree — this one is the owner&rsquo;s request, stored here. The
+            other is <span className="num">SHAREPOINT_SYNC_ENABLED</span> in the container.
           </p>
         }
       >
@@ -321,31 +306,28 @@ export default async function SyncSettingsPage() {
               defaultChecked={config.enabled}
               disabled={!allowed}
               wide
-              hint="Switching this on resets the list cursors so the first run pushes every row — safe to repeat, because every write is an idempotent upsert. Switching it off leaves whatever is already in SharePoint in place; it stops updating and is not torn down."
+              // Safe to repeat: every write is an idempotent upsert.
+              hint="Turning this on pushes every row again. Turning it off leaves SharePoint as it is — nothing is torn down."
             />
           </FieldGrid>
         </ActionForm>
       </Section>
 
+      {/* The same check first-run setup runs, reading the same variable
+          names, so the two screens cannot disagree about whether this
+          deployment is configured. */}
       <Section
         title="Environment"
         description={
-          <p>
-            Read-only. Every value here is an environment variable or a mounted file, and not one
-            of them is a field on this page. The verdict is the same check first-run setup runs,
-            reading the same variable names, so the two screens cannot disagree about whether
-            this deployment is configured.
-          </p>
+          <p>Read-only — every value here is an environment variable or a mounted file, not a field on this page.</p>
         }
       >
         <EnvironmentReport checks={sharePointCheck} />
 
         <p className="mt-4 mb-2 max-w-prose t-small text-muted">
-          The check above stops at the first thing missing, so this table lists all five
-          variables at once — whether each is set, never what is in it. The certificate is a
-          Docker secret; the commonest failure by a wide margin is that it was never mounted into
-          the container, and from outside that looks exactly like a sync that has quietly
-          stopped.
+          Lists all five at once — whether each is set, never what&rsquo;s in it. The commonest
+          failure is the certificate never being mounted into the container, which looks just
+          like a sync that quietly stopped.
         </p>
 
         <TableWrap minWidth="46rem">
@@ -391,10 +373,9 @@ export default async function SyncSettingsPage() {
         title="Site and list names"
         description={
           <p>
-            The site the lists are created in, and an optional prefix on every list name for a
-            site that already holds lists of its own. Provisioning is run by hand against the
-            tenant from a workstation, using the owner’s own credentials; this application never
-            creates a site.
+            The site the lists are created in, and an optional prefix for a site with lists of
+            its own already. This application never creates the site itself — provisioning is
+            run by hand.
           </p>
         }
       >
@@ -415,7 +396,8 @@ export default async function SyncSettingsPage() {
               defaultValue={config.siteUrl}
               disabled={!allowed}
               placeholder="https://example.sharepoint.com/sites/site-name"
-              hint="The full https address of the site collection. No query string and no fragment: every Graph request path is built from this string. Leave it blank to clear it — a mirror with nowhere to write is off in practice."
+              // Every Graph request path is built from this string.
+              hint="Full https address, no query string or fragment. Blank clears it — a mirror with nowhere to write is off in practice."
             />
             <TextField
               idPrefix="site"
@@ -424,27 +406,26 @@ export default async function SyncSettingsPage() {
               maxLength={16}
               defaultValue={config.listPrefix}
               disabled={!allowed}
-              hint="Letters and digits, starting with a letter. Blank means the lists are named exactly as the tables. A SharePoint list's internal name derives from its title, so punctuation is refused here rather than mangled there."
+              // A SharePoint list's internal name derives from its title, so
+              // punctuation is refused here rather than mangled there.
+              hint="Letters and digits, starting with a letter. Blank names lists exactly as the tables."
             />
           </FieldGrid>
         </ActionForm>
       </Section>
 
+      {/* Forced rather than chosen: Microsoft Graph cannot read or write
+          SharePoint list item attachments at all, and libraries are the
+          better storage model anyway, with metadata columns, versioning and
+          folders. */}
       <Section
         title="Document libraries"
         description={
           <>
-            <p>
-              Attachments go into document libraries, never into list attachments. That is forced
-              rather than chosen: Microsoft Graph cannot read or write SharePoint list item
-              attachments at all — there is no such relationship on a list item in the v1.0 API —
-              and libraries are the better storage model anyway, with metadata columns, versioning
-              and folders.
-            </p>
+            <p>Attachments go into document libraries, never list attachments.</p>
             <p className="mt-2">
-              Renaming one here does not rename it in SharePoint. Re-run provisioning, which is
-              idempotent; the old library stays behind with its contents, because nothing in this
-              product is deleted.
+              Renaming here doesn&rsquo;t rename it in SharePoint — re-run provisioning; the old
+              library stays behind with its contents.
             </p>
           </>
         }
@@ -472,12 +453,11 @@ export default async function SyncSettingsPage() {
           </FieldGrid>
         </ActionForm>
 
+        {/* Local disk is authoritative in any case, rather than filing those
+            files somewhere an accountant would then find them. */}
         <p className="mt-4 mb-2 max-w-prose t-small text-muted">
-          Which library a file lands in follows from what it is attached to. Two kinds have no
-          destination: the design names six libraries and none of them is for a customer
-          attachment or for the company’s own logo. Those files stay on local disk, which is
-          authoritative in any case, rather than being filed somewhere an accountant would then
-          find them.
+          Two kinds have no destination — customer attachments and the company&rsquo;s own logo
+          stay on local disk only.
         </p>
 
         <TableWrap minWidth="40rem">
@@ -520,10 +500,8 @@ export default async function SyncSettingsPage() {
         title="Schedule"
         description={
           <p>
-            The interval is the recovery point objective. Since the mirror is one of the copies a
-            hardware failure is measured against, a four-hour interval means losing up to four
-            hours of quoting work; hourly costs almost nothing, because a working day changes
-            tens of rows.
+            The interval is the recovery point objective — a four-hour interval risks losing up
+            to four hours of work; hourly costs almost nothing.
           </p>
         }
       >
@@ -545,7 +523,10 @@ export default async function SyncSettingsPage() {
               maxLength={4}
               defaultValue={String(config.intervalMinutes)}
               disabled={!allowed}
-              hint={`Between ${MIN_INTERVAL_MINUTES} and ${MAX_INTERVAL_MINUTES}. The default is ${DEFAULT_INTERVAL_MINUTES}. The floor is the five-minute safety lag: a run cannot see a row younger than that, so a shorter interval schedules work with nothing to do.`}
+              // The floor is the five-minute safety lag: a run cannot see a
+              // row younger than that, so a shorter interval schedules work
+              // with nothing to do.
+              hint={`Between ${MIN_INTERVAL_MINUTES} and ${MAX_INTERVAL_MINUTES}. Default ${DEFAULT_INTERVAL_MINUTES}.`}
             />
             <TextField
               idPrefix="schedule"
@@ -558,36 +539,32 @@ export default async function SyncSettingsPage() {
               maxLength={3}
               defaultValue={String(config.stalenessHours)}
               disabled={!allowed}
-              hint={`How long without a success before a list is reported stale. Between ${MIN_STALENESS_HOURS} and ${MAX_STALENESS_HOURS}; the default is ${DEFAULT_STALENESS_HOURS}, which is twice the default interval. Staleness is computed from the last success and this number, never stored.`}
+              // Computed from the last success and this number on every
+              // read, never stored.
+              hint={`How long without a success before a list reports stale. Between ${MIN_STALENESS_HOURS} and ${MAX_STALENESS_HOURS}; default ${DEFAULT_STALENESS_HOURS}.`}
             />
           </FieldGrid>
         </ActionForm>
 
         {config.stalenessHours < twiceTheInterval ? (
           <Notice tone="warning">
-            The threshold is shorter than twice the interval, so a single missed run reports as
-            stale. That is allowed — it is a deliberately twitchy setting on a link that should
-            never miss — but it is worth knowing before the first banner.
+            Shorter than twice the interval, so a single missed run reports as stale. Allowed,
+            but worth knowing before the first banner.
           </Notice>
         ) : null}
       </Section>
 
+      {/* No stored staleness flag, because a stored verdict is wrong the
+          moment the clock passes it. */}
       <Section
         title="What each list has done"
         description={
           <>
-            <p>
-              One row per mirrored table, whether or not the sync has ever touched it. The
-              verdict is computed here and now from the last success and the threshold above —
-              there is no stored staleness flag, because a stored verdict is wrong the moment the
-              clock passes it.
-            </p>
+            <p>One row per mirrored table. The verdict is computed live from the threshold above.</p>
             <p className="mt-2">
               Read as at <span className="num">{stamp(report.observedAt)}</span>. The cursor is a
-              pair — a timestamp and a row id — and not a single watermark: a bulk insert stamps
-              many rows with one timestamp, and advancing past “the highest in this batch” would
-              drop the rest of that group. A forty-line quote losing lines 21 to 40 is the failure
-              that pair prevents.
+              timestamp-and-row-id pair, not a single watermark — so a bulk insert can&rsquo;t
+              lose rows past the last one it batched.
             </p>
           </>
         }
@@ -670,10 +647,11 @@ export default async function SyncSettingsPage() {
           </tbody>
         </TableWrap>
 
+        {/* The first three are machine state, including the two tables this
+            screen reads; the change log has no timestamp to sync on, will be
+            the largest table in the database, and is already in every dump. */}
         <p className="mt-4 max-w-prose t-small text-subtle">
-          {NOT_MIRRORED_TABLES.join(', ')} are deliberately absent. The first three are machine
-          state — including the two tables this screen reads — and the change log has no
-          timestamp to sync on, will be the largest table in the database, and is already in
+          {NOT_MIRRORED_TABLES.join(', ')} are deliberately absent — machine state, or already in
           every dump.
         </p>
       </Section>

@@ -107,7 +107,7 @@ export default async function TemplateDetailPage({
           </>
         }
         title={template.name}
-        description="Every line names a rate item and a rule for its quantity. Nothing here reaches a quote already written: a quote line copies its description, rates and cost code at the moment it is created, so this screen is a starting point and never a live reference."
+        description="Every line names a rate item and a rule for its quantity. Editing here never changes a quote already written."
         actions={
           <a href="#add-line" className={buttonClass('primary')}>
             Add a line
@@ -159,8 +159,8 @@ export default async function TemplateDetailPage({
               {template.isActive ? 'Retire this template' : 'Bring this template back'}
             </h3>
             <p className="mb-2 max-w-prose t-small text-subtle">
-              Nothing is deleted. A quote records which template it came from, and that
-              reference has to keep resolving years later.
+              Nothing is deleted. A quote's reference to this template must keep resolving
+              years later.
             </p>
             <RowAction
               action={setTemplateActive}
@@ -177,30 +177,21 @@ export default async function TemplateDetailPage({
           </div>
         </Section>
 
+        {/*
+          The quantity source is an enum and not a formula language, on
+          purpose: a user-editable expression stored in a database column is
+          an injection surface and an unbounded support burden.
+        */}
         <Section
           title="How a quantity derives"
           description={
-            <>
-              <p>
-                Every line computes as <span className="num">source value × multiplier</span>.
-                Six sources cover the cases: the area, the washroom, kitchen or bedroom count, a
-                fixed number, or a value the estimator types on the quote.
-              </p>
-              <p className="mt-2">
-                The multiplier is where it stops being obvious, so read it as a rate rather than
-                a factor: drywall at <span className="num">1.0000</span> is one unit per unit of
-                area, while pot lights at <span className="num">0.0200</span> mean{' '}
-                <span className="font-semibold">
-                  area × 0.02 — one fixture per fifty {areaUnit}
-                </span>
-                . A washroom rough-in at <span className="num">1.0000</span> is one per washroom.
-              </p>
-              <p className="mt-2">
-                It is an enum and not a formula language on purpose: a user-editable expression
-                stored in a database column is an injection surface and an unbounded support
-                burden.
-              </p>
-            </>
+            <p>
+              Every line computes as <span className="num">source value × multiplier</span>.
+              Read the multiplier as a rate, not a factor: pot lights at{' '}
+              <span className="num">0.0200</span> mean{' '}
+              <span className="font-semibold">one fixture per fifty {areaUnit}</span>, not two
+              percent.
+            </p>
           }
         >
           <WorkedExample lines={wireLines} areaUnit={areaUnit} />
@@ -362,7 +353,7 @@ export default async function TemplateDetailPage({
                               label="Optional — an upgrade the customer may add"
                               defaultChecked={line.isOptional}
                               disabled={!allowed}
-                              hint="An optional line starts excluded, so a template cannot silently inflate a quote."
+                              hint="Starts excluded, so a template cannot silently inflate a quote."
                             />
                             <CheckboxField
                               idPrefix={`line-${line.id}`}
@@ -370,18 +361,20 @@ export default async function TemplateDetailPage({
                               label="Allowance — a placeholder reconciled against actual cost"
                               defaultChecked={line.isAllowance}
                               disabled={!allowed}
-                              hint="Overrides the rate item's own flag, so one item can be a fixed price in one template and an allowance in another."
+                              hint="Overrides the rate item's own allowance flag for this template only."
                             />
                           </FieldGrid>
                         </ActionForm>
 
+                        {/*
+                          The database refuses a delete outright, not just this form: a
+                          watermark-based mirror cannot observe a row that no longer
+                          exists, and the phantom would outlive the record.
+                        */}
                         <div>
                           <h3 className="t-small font-semibold">Remove this line</h3>
                           <p className="mb-2 max-w-prose t-small text-subtle">
-                            The row is voided with a reason, not deleted. The database
-                            refuses a delete outright — a watermark-based mirror cannot
-                            observe a row that no longer exists, and the phantom would
-                            outlive the record.
+                            Voided with a reason, not deleted — nothing here is ever hard-deleted.
                           </p>
                           <RowAction
                             action={voidTemplateLine}
@@ -406,8 +399,7 @@ export default async function TemplateDetailPage({
           title="Add a line"
           description={
             <p>
-              A line names a rate item — the priced list is the single source of both cost and
-              sell — plus how its quantity derives from the measurements.
+              A line names a rate item plus how its quantity derives from the measurements.
             </p>
           }
         >
@@ -489,7 +481,7 @@ export default async function TemplateDetailPage({
                   maxLength={4}
                   defaultValue={String(nextSortOrder)}
                   disabled={!allowed}
-                  hint="Left in steps of ten, so a line can be inserted between two without renumbering."
+                  hint="In steps of ten, so a line can be inserted without renumbering."
                 />
                 <CheckboxField
                   idPrefix="new-line"

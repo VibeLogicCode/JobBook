@@ -477,7 +477,7 @@ export default async function SchedulePage({
           </span>
         }
         title="Schedule"
-        description="The order the work happens in. A task can wait on one other task; when that one moves, everything waiting behind it moves with it — and you are shown what that is before anything is written."
+        description="A task can wait on one other task; move it and everything behind shifts too."
         actions={
           <SheetButton
             trigger="Add task"
@@ -519,7 +519,7 @@ export default async function SchedulePage({
                   required
                   defaultValue={today}
                   disabled={!allowed}
-                  hint="Counted inclusively: the same date twice is a one-day task. Calendar days, weekends included — a crew working Saturday is ordinary here."
+                  hint="Inclusive — same date twice is one day. Weekends count."
                 />
                 <CheckboxField
                   idPrefix="new-task"
@@ -527,7 +527,7 @@ export default async function SchedulePage({
                   label="This is a milestone, not a span of work"
                   disabled={!allowed}
                   wide
-                  hint="A permit, an inspection, a delivery — a single day rather than a stretch. The finish date is set to the start date."
+                  hint="A permit, inspection or delivery — one day, not a span. Finish date matches start."
                 />
               </FieldGrid>
               <TextAreaField

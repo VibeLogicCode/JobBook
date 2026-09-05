@@ -26,8 +26,7 @@ export default async function SettingsIndexPage() {
           context.actor ? (
             <p>
               Signed in as {context.actor.displayName} ({context.actor.email}), role{' '}
-              <span className="font-semibold">{context.actor.role}</span>. What you can change
-              below follows from that role, and every action checks it again on the server.
+              <span className="font-semibold">{context.actor.role}</span>.
             </p>
           ) : (
             <p>Nothing here can be changed until this request carries an identity.</p>
@@ -74,8 +73,7 @@ export default async function SettingsIndexPage() {
             >
               <span className="font-semibold">Vendors and subcontractors</span>
               <span className="t-small text-muted">
-                Everyone you pay. Marking somebody a subcontractor is what decides who gets a
-                T5018 and whose WSIB clearance is checked.
+                Everyone you pay. The subcontractor flag decides T5018 and WSIB checks.
               </span>
             </Link>
           </li>

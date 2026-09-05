@@ -77,16 +77,16 @@ export default async function TaxRatesPage() {
 
   return (
     <div className="flex flex-col gap-4">
+      {/*
+       * A single percentage is wrong outside the region it was written for:
+       * some jurisdictions bill one harmonized line, others a federal and a
+       * provincial line together, and one has no sales tax at all.
+       */}
       <Section
         title="Tax rates"
         description={
           <>
-            <p>
-              A table rather than a single percentage, because a single one is wrong outside
-              the region it was written for: some jurisdictions bill one harmonized line,
-              others a federal and a provincial line together, and one of them has no sales
-              tax at all.
-            </p>
+            <p>A table, not a single percentage — rates vary too much for one fixed number.</p>
             <p className="mt-2">
               {today ? (
                 <>
@@ -100,18 +100,20 @@ export default async function TaxRatesPage() {
           </>
         }
       >
+        {/*
+         * A quote's own snapshot protects documents already sent, while these
+         * effective dates decide what a new quote picks up — including one
+         * back-dated into the weeks around a change — and answer "what was
+         * the rate on this date" years later.
+         */}
         <Notice tone="info" title="Editing a rate never overwrites it">
           <p>
-            Changing a rate closes the current row with an end date and inserts a new row
-            starting the day the new rate takes effect. Both rows stay.
+            Changing a rate closes the current row and inserts a new one starting when the new
+            rate applies. Both stay.
           </p>
           <p className="mt-2">
-            The reason is that a quote must still print the tax it was signed at. Every issued
-            quote also carries its own snapshot of the tax it charged, and the two work
-            together: the snapshot protects documents already sent, while these effective
-            dates decide what a new quote picks up — including one back-dated into the weeks
-            around a change — and answer &ldquo;what was the rate on this date&rdquo; years
-            later.
+            Every issued quote keeps the tax it was signed at — editing a rate never changes a
+            document already sent.
           </p>
         </Notice>
 
@@ -206,8 +208,7 @@ export default async function TaxRatesPage() {
                         <div>
                           <h3 className="t-small font-semibold">Change the rate</h3>
                           <p className="mb-2 max-w-prose t-small text-subtle">
-                            Closes this row on the day before the new rate starts and
-                            inserts its successor.
+                            Closes this row and inserts its successor.
                           </p>
                           <ActionForm
                             action={supersedeTaxRate}
@@ -250,10 +251,8 @@ export default async function TaxRatesPage() {
                         <div>
                           <h3 className="t-small font-semibold">Correct the presentation</h3>
                           <p className="mb-2 max-w-prose t-small text-subtle">
-                            What it is called, its registration number, whether it compounds
-                            and the order it applies in. These change in place — every
-                            issued quote already carries its own copy of all four, so a
-                            correction here cannot reach a signed document.
+                            Changes here don&rsquo;t reach an already-issued quote — it keeps
+                            its own copy.
                           </p>
                           <ActionForm
                             action={editTaxRatePresentation}
@@ -310,7 +309,9 @@ export default async function TaxRatesPage() {
                                 defaultChecked={row.isCompound}
                                 disabled={!allowed}
                                 wide
-                                hint="Compound taxes evaluate after every non-compound one, in the order above. No current Canadian jurisdiction compounds; one historically did."
+                                // No current Canadian jurisdiction compounds;
+                                // one historically did.
+                                hint="Evaluates after every non-compound tax, in the order above."
                               />
                             </FieldGrid>
                           </ActionForm>
@@ -321,8 +322,7 @@ export default async function TaxRatesPage() {
                             {row.isActive ? 'Retire' : 'Bring back'}
                           </h3>
                           <p className="mb-2 max-w-prose t-small text-subtle">
-                            Nothing is deleted. A retired rate keeps its dates, so a quote
-                            inside its window still answers to an audit.
+                            Nothing is deleted — a retired rate keeps its dates for audit.
                           </p>
                           <RowAction
                             action={setTaxRateActive}
@@ -351,9 +351,8 @@ export default async function TaxRatesPage() {
         title="Add a rate"
         description={
           <p>
-            A second row for a jurisdiction that bills two lines, or the first row on a new
-            deployment. To <em>change</em> an existing rate, use the row above instead — that
-            is what keeps the history.
+            To <em>change</em> an existing rate, use the row above instead — this keeps the
+            history.
           </p>
         }
       >
@@ -391,7 +390,7 @@ export default async function TaxRatesPage() {
               suffix="%"
               maxLength={8}
               disabled={!allowed}
-              hint="Two decimal places at most, which is what the stored scale holds exactly."
+              hint="Two decimal places at most."
             />
             <TextField
               idPrefix="new-rate"
@@ -400,7 +399,7 @@ export default async function TaxRatesPage() {
               type="date"
               required
               disabled={!allowed}
-              hint="The first day this rate applies. Back-dating is allowed and is how a historical rate is recorded."
+              hint="The first day this rate applies. Back-dating is allowed."
             />
             <TextField
               idPrefix="new-rate"

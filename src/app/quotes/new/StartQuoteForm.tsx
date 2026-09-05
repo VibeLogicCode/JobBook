@@ -140,7 +140,7 @@ export function StartQuoteForm({
             disabled={!customerChoice}
             value={opportunityChoice}
             onChange={(event) => setOpportunityChoice(event.target.value)}
-            hint="An opportunity holds every quote for one piece of work. It becomes a job when one of them is accepted."
+            hint="Holds every quote for one job; becomes a job once one is accepted."
             options={[
               { value: NEW, label: '+ New opportunity' },
               ...mine.map((row) => ({
@@ -196,7 +196,7 @@ export function StartQuoteForm({
           name="scopeTemplateId"
           value={templateChoice}
           onChange={(event) => setTemplateChoice(event.target.value)}
-          hint="A template fills the worksheet from your measurements. Blank starts empty and you add lines yourself."
+          hint="A template fills lines from your measurements below; blank starts empty."
           options={[
             { value: '', label: 'Blank quote — no lines' },
             ...templates.map((template) => ({

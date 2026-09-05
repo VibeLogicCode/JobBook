@@ -62,24 +62,25 @@ const POSTURE_COPY: Record<
 > = {
   lan: {
     title: 'Office network only',
-    who: 'Anybody who can reach the machine is treated as one named user. No password, no provider, no session.',
+    who: 'Anybody who can reach the machine is treated as one named user — no password, no session.',
     needs: 'One address, which must already have a user account.',
     caution:
-      'Correct on a network only your staff can reach, and wrong on anything reachable from the internet — there, reaching the box at all is the same thing as being the owner.',
+      'Correct on a staff-only network. Wrong on anything reachable from the internet — there, reaching the box is being the owner.',
   },
   tunnel: {
     title: 'Cloudflare Tunnel, with Access in front',
-    who: 'Cloudflare authenticates at its edge before a request ever reaches this machine, against whichever identity providers your Access policy names.',
+    who: 'Cloudflare authenticates at its edge, before any request reaches this machine.',
     needs: 'A Zero Trust team domain, the Access application audience tag, and the tunnel token.',
-    caution:
-      'Nothing needs to be published: cloudflared dials out, so there is no inbound port and no certificate to renew. A tunnel with no Access policy on it publishes this deployment with no sign-in at all.',
+    // No inbound port and no certificate to renew, since cloudflared dials
+    // out rather than being published to.
+    caution: 'A tunnel with no Access policy on it publishes this deployment with no sign-in at all.',
   },
   sso: {
     title: 'This application signs people in itself',
-    who: 'The application runs the OpenID Connect flow against Google or Microsoft and issues its own session cookie.',
+    who: 'Runs OpenID Connect against Google or Microsoft; issues its own session cookie.',
     needs: 'The public URL, and a client id and secret per provider — plus your directory id for Microsoft.',
     caution:
-      'This makes this application the internet-facing authentication surface, which it is not in the other two postures. Choose it when there is nothing at the edge to do the job.',
+      'This makes the application itself the internet-facing authentication surface. Choose it only when nothing sits at the edge to do that job.',
   },
 };
 
@@ -177,16 +178,14 @@ export default async function AccessStepPage() {
       <ActionForm action={saveAccessStep} submitLabel="Write the configuration">
         <Notice tone="warning" title="This is the one setting a wrong answer gives the company away">
           <p>
-            These values are the only thing this wizard writes to a <em>file</em> rather than to
-            the database — they are credentials, and a database row is mirrored to SharePoint and
-            lands in every hourly backup. They go to{' '}
-            <span className="num">{authConfigPath()}</span> at permissions 0600, and nothing
+            These are the only values this wizard writes to a <em>file</em> rather than the
+            database, since a database row is mirrored to SharePoint and every backup. They go
+            to <span className="num">{authConfigPath()}</span> at permissions 0600, and nothing
             copies that file anywhere.
           </p>
           <p className="mt-2">
-            Read all three below before choosing. The application cannot tell whether this
-            machine is reachable from the internet, so nothing here is pre-selected and nothing
-            is guessed.
+            Read all three below before choosing — the application can&rsquo;t tell whether this
+            machine is reachable from the internet, so nothing here is pre-selected.
           </p>
         </Notice>
 
@@ -206,23 +205,23 @@ export default async function AccessStepPage() {
               maxLength={200}
               defaultValue={onDisk?.entries.get('LOCAL_USER_EMAIL') ?? owner?.email ?? ''}
               placeholder="The account every request arrives as"
-              hint="It must match a user account, active. Authorization is a lookup against the users table on every request, and this posture is not exempt from it."
+              hint="Must match an active user account. This posture is not exempt from that check."
             />
           </FieldGrid>
+          {/*
+           * Not a missing feature: local mode makes every visitor the owner,
+           * so if this application could turn it on by writing a file, anyone
+           * who found a way to write one file inside it could promote
+           * themselves to owner with nothing in the audit log. The config
+           * file may tighten this deployment and must never loosen it, so the
+           * loosest setting has to come from somewhere it cannot reach.
+           */}
           <Notice tone="negative" title="This step cannot switch the application into local mode">
             <p>
               It writes the address and stops there. Turning local mode <em>on</em> is one line in
               the container environment — <span className="num">AUTH_MODE=local</span> in the
               compose file or the <span className="num">.env</span> beside it — and you have to
               add it yourself.
-            </p>
-            <p className="mt-2">
-              That is not a missing feature. Local mode makes every visitor the owner, so if this
-              application could select it by writing a file, then anybody who found a way to
-              write one file inside the application would promote themselves from an ordinary
-              user to owner: no password, no database change, nothing in the audit log. The
-              configuration file may tighten this deployment and may never loosen it, so the
-              loosest setting of all has to come from somewhere the application cannot reach.
             </p>
           </Notice>
         </PostureFields>
@@ -236,7 +235,7 @@ export default async function AccessStepPage() {
               maxLength={200}
               defaultValue={onDisk?.entries.get('CF_ACCESS_TEAM_DOMAIN') ?? ''}
               placeholder="https://your-team.cloudflareaccess.com"
-              hint="Your Zero Trust team domain, in full. The Access token's signing keys are fetched from it, and it is also the issuer every token is checked against."
+              hint="Your Zero Trust team domain, in full."
             />
             <TextField
               name="accessAud"
@@ -245,23 +244,25 @@ export default async function AccessStepPage() {
               numeric
               defaultValue={onDisk?.entries.get('CF_ACCESS_AUD') ?? ''}
               placeholder="The application's Audience tag"
-              hint="A long opaque tag from the Access application's overview page. It ties a token to this application specifically, so a valid token for a different application in your account is refused."
+              hint="From the Access application's overview page."
             />
+            {/* cloudflared reads its environment from compose and does not
+                mount this file's volume, so the token has to travel by hand. */}
             <TextField
               name="tunnelToken"
               label="Tunnel token"
               maxLength={4000}
               wide
               placeholder="Shown once, when the tunnel is created"
-              hint="Stored but never shown back, so copy it into the .env file beside the compose file as TUNNEL_TOKEN before you leave this page — the cloudflared container reads its environment from compose and does not mount this file's volume."
+              hint="Never shown back — copy it into .env as TUNNEL_TOKEN before leaving this page."
             />
           </FieldGrid>
+          {/* Two places that could disagree about the sign-in method is worse
+              than one, so the per-user setting on the users screen is hidden
+              in this posture. */}
           <Notice tone="info" title="Which sign-in methods are allowed is not a setting here">
-            Google, Microsoft, a one-time PIN, a device posture rule, MFA — all of it is policy on
-            the Access application in the Cloudflare dashboard, and the container never sees a
-            credential. The per-user sign-in method on the users screen is hidden in this
-            posture, because Access already owns that decision and two places that can disagree
-            about it is worse than one.
+            That&rsquo;s policy in the Access application, not here — the container never sees a
+            credential. The per-user sign-in setting is hidden in this posture.
           </Notice>
         </PostureFields>
 
@@ -275,7 +276,7 @@ export default async function AccessStepPage() {
               wide
               defaultValue={origin ?? ''}
               placeholder="https://quotes.your-company.example"
-              hint="The origin people reach this deployment at. Every provider redirect URI is built from it, and it is never derived from the Host header — that is the classic route to an open redirect."
+              hint="The origin people reach this at. Every redirect URI is built from it."
             />
             <TextField
               name="googleClientId"
@@ -317,14 +318,19 @@ export default async function AccessStepPage() {
             />
           </FieldGrid>
 
+          {/*
+           * On those two endpoints any Entra directory in the world can mint
+           * a token this application would accept, which makes the email
+           * address in the token attacker-controlled: somebody registers a
+           * tenant, sets a user's mail to the owner's address, signs in, and
+           * the first-link match hands them the owner's account. The runtime
+           * refuses both at boot; this form refuses them here so the refusal
+           * arrives while the value is still on screen rather than as a
+           * container that will not start.
+           */}
           <Notice tone="negative" title="Why common and organizations are refused">
-            On those two endpoints <em>any</em> Entra directory in the world can mint a token this
-            application would accept, which makes the email address in the token
-            attacker-controlled: somebody registers a tenant, sets a user&apos;s mail to the
-            owner&apos;s address, signs in, and the first-link match hands them the owner&apos;s
-            account. The runtime refuses both at boot; this form refuses them here so the refusal
-            arrives while the value is still on screen rather than as a container that will not
-            start.
+            Either would let any Entra directory mint a token this application accepts — refused
+            at boot too, not only here.
           </Notice>
 
           <Notice tone="info" title="Paste these redirect URIs into each console, exactly">
@@ -335,16 +341,13 @@ export default async function AccessStepPage() {
             </p>
             <p className="mt-2">
               A trailing slash is the commonest cause of{' '}
-              <span className="num">redirect_uri_mismatch</span>. Registering the client is
-              installer work rather than owner work — each console changes its layout more often
-              than this product ships a release — and this step validates the result rather than
-              walking you through it.
+              <span className="num">redirect_uri_mismatch</span>.
             </p>
-            <p className="mt-2">
-              Apple is not offered. Its client secret is not a string but a signed token minted
-              per request from a mounted key, and its callback is a cross-site form POST; the
-              runtime refuses it today, and offering a button that cannot work is a support call.
-            </p>
+            {/* Apple's client secret is a signed token minted per request
+                from a mounted key, not a plain string, and its callback is a
+                cross-site form POST — the runtime refuses it today, and a
+                button that cannot work is a support call. */}
+            <p className="mt-2">Apple is not offered — the runtime refuses it today.</p>
           </Notice>
         </PostureFields>
 
@@ -445,11 +448,13 @@ export default async function AccessStepPage() {
           </Notice>
         ) : null}
 
+        {/* It could, by mounting the Docker socket into the container — but a
+            container holding that socket is root on the host, and that
+            trade is one saved command against a bug here becoming a
+            compromise of the whole machine. */}
         <Notice tone="info" title="The application cannot restart itself, and should not be able to">
-          It could: mount the Docker socket into this container and it could recycle itself. A
-          container holding the Docker socket is root on the host, so that trade is one saved
-          command against a bug in this application becoming a compromise of the whole machine.
-          The honest alternative is the one above — it says which containers and what to run.
+          That would need root-level access to the host. Restart manually, using the command
+          above.
         </Notice>
       </ActionForm>
     </StepPanel>
