@@ -55,19 +55,13 @@ export interface InvoiceLineInput {
   notes?: string;
 }
 
-export interface IssueInvoiceArgs {
-  projectId: string;
-  kind: InvoiceKind;
-  /** Defaults to the tenant's today. Decides which tax rates applied. */
-  issueDate?: string;
-  /** Ten-thousandths. Required for 'progress' and 'final', refused otherwise. */
-  percentCompleteTenThou?: bigint;
-  /** Cents, exclusive of tax. Required for 'deposit' and 'change_order'. */
-  amountCents?: number;
-  /** Requested drawdown against the customer's advances. Clamped by the engine. */
-  depositApplyCents?: number;
-  /** 'holdback_release' only. Defaults to the whole outstanding balance. */
-  releaseHoldbackCents?: number;
+/**
+ * Extends the priced fields rather than restating them, so the preview and the
+ * commit cannot drift apart on which figures decide a price: everything below
+ * is about the DOCUMENT -- its lines, its period, its status -- and nothing
+ * below changes an amount.
+ */
+export interface IssueInvoiceArgs extends PriceInvoiceArgs {
   periodFrom?: string;
   periodTo?: string;
   lines?: InvoiceLineInput[];
@@ -245,6 +239,176 @@ export async function jobBillingState(projectId: string): Promise<JobBillingStat
   });
 }
 
+/** The contract facts a billing screen shows, read the way an invoice reads them. */
+export interface JobContract {
+  /** PRE-TAX. The figure progress billing multiplies; see `Contract` above. */
+  subtotalCents: number;
+  holdbackPctTenThou: bigint;
+  /** Zero means this is an opportunity, not a job: there is nothing to bill. */
+  acceptedQuoteCount: number;
+}
+
+/**
+ * The contract, for a screen rather than for an invoice.
+ *
+ * Exists so a page does not write the accepted-quote query a third time, and
+ * so what it displays is what an invoice would actually bill against --
+ * including the refusal when two accepted quotes disagree about the holdback
+ * rate, which a screen should surface rather than discover at issue.
+ */
+export async function jobContract(projectId: string): Promise<JobContract> {
+  return db.transaction(async (tx) => {
+    const contract = await contractOf(tx, projectId);
+    return {
+      subtotalCents: contract.subtotalCents,
+      holdbackPctTenThou: contract.holdbackPctTenThou,
+      acceptedQuoteCount: contract.quoteCount,
+    };
+  });
+}
+
+/** The fields that decide a price, shared by the preview and the issue. */
+export interface PriceInvoiceArgs {
+  projectId: string;
+  kind: InvoiceKind;
+  /** Defaults to the tenant's today. Decides which tax rates applied. */
+  issueDate?: string;
+  /** Ten-thousandths. Required for 'progress' and 'final', refused otherwise. */
+  percentCompleteTenThou?: bigint;
+  /** Cents, exclusive of tax. Required for 'deposit' and 'change_order'. */
+  amountCents?: number;
+  /** Requested drawdown against the customer's advances. Clamped by the engine. */
+  depositApplyCents?: number;
+  /** 'holdback_release' only. Defaults to the whole outstanding balance. */
+  releaseHoldbackCents?: number;
+}
+
+interface PricedInvoice {
+  org: typeof organization.$inferSelect;
+  project: typeof projects.$inferSelect;
+  contract: Contract;
+  issueDate: string;
+  state: JobBillingState;
+  computed: ComputedInvoice;
+}
+
+/**
+ * Everything between "which job" and "what it costs", including every refusal.
+ *
+ * Factored out so that the screen's PREVIEW and the commit run the same code.
+ * A preview computed by a second, similar function is the worst of the two
+ * options available: it would show a figure that the issue then priced
+ * differently, or accept a request the issue then refused, and the owner would
+ * have pressed the button on the strength of the first one. The commit is
+ * still the gate -- this runs again inside the writing transaction, against
+ * whatever the state is by then -- but there is only one set of rules.
+ */
+async function priceInvoice(tx: Tx, args: PriceInvoiceArgs): Promise<PricedInvoice> {
+  const [org] = await tx.select().from(organization).where(eq(organization.id, 1));
+  if (!org) throw new Error('organization row is missing; run setup first');
+
+  const [project] = await tx.select().from(projects).where(eq(projects.id, args.projectId));
+  if (!project) throw new Error(`project ${args.projectId} not found`);
+  if (project.recordStatus !== 'active') {
+    throw new Error('a void project cannot be invoiced');
+  }
+
+  const contract = await contractOf(tx, args.projectId);
+  if (contract.quoteCount === 0) {
+    // There is nothing to bill against. Progress billing would multiply a
+    // contract value of zero and produce a $0 invoice that looks issued and
+    // settles nothing, which is worse than a refusal because it consumes a
+    // number and appears on the AR aging at zero.
+    throw new Error(
+      'this project has no accepted quote, so there is no contract to bill: accept a quote first',
+    );
+  }
+
+  // The completion percentage is bounded HERE because computeInvoice does not
+  // bound it: it calls `earnedToDateCents` directly, and the only function
+  // that asserts the range -- `progressAmountCents` -- is not on its path. A
+  // draw at 110% would otherwise price and store cleanly, billing work no
+  // customer had accepted while leaving the contract untouched, and the
+  // arithmetic would be internally consistent all the way to the customer.
+  // Billing past the contract needs a change order that raises the contract.
+  if (args.percentCompleteTenThou !== undefined) {
+    assertPercentTenThou(args.percentCompleteTenThou, 'percent complete');
+  }
+
+  const issueDate = args.issueDate ?? (await tenantToday(tx));
+  const state = await deriveBillingState(tx, args.projectId, contract.subtotalCents);
+
+  const computed = computeInvoice(
+    state,
+    {
+      kind: args.kind,
+      issueDate,
+      percentCompleteTenThou: args.percentCompleteTenThou,
+      amountCents: args.amountCents,
+      holdbackPctTenThou: contract.holdbackPctTenThou,
+      depositApplyCents: args.depositApplyCents,
+      releaseHoldbackCents: args.releaseHoldbackCents,
+    },
+    await loadTaxRatesFor(tx),
+    {
+      taxDeferredOnHoldback: org.taxDeferredOnHoldback,
+      customerExempt: await customerExemptFor(tx, args.projectId),
+    },
+  );
+
+  // The invariant the whole derivation rests on: the draws sum to the
+  // contract. The percentage path cannot break it once the bound above holds,
+  // but VOIDING AN ACCEPTED QUOTE can -- the contract shrinks while the
+  // invoices that billed the old one stand -- and every kind is then billing
+  // against a contract smaller than what has already gone out. Refused rather
+  // than absorbed, because the fix is a change order that restores the
+  // contract value and only the owner knows which one.
+  if (computed.nextState.previouslyBilledCents > contract.subtotalCents) {
+    throw new Error(
+      `this job has billed ${computed.nextState.previouslyBilledCents} cents against a contract of ${contract.subtotalCents}: accept a change order to raise the contract before invoicing again`,
+    );
+  }
+
+  return { org, project, contract, issueDate, state, computed };
+}
+
+/** What the screen shows before anything is committed. */
+export interface InvoicePreview {
+  /** Priced by the same function the commit prices with. */
+  computed: ComputedInvoice;
+  /** The job as it stands NOW, so the screen can show what the draw moves. */
+  state: JobBillingState;
+  holdbackPctTenThou: bigint;
+  /** Excise Tax Act s.168(7), as this tenant has it set. Decides the tax base. */
+  taxDeferredOnHoldback: boolean;
+  issueDate: string;
+}
+
+/**
+ * Prices an invoice without issuing one.
+ *
+ * Nothing is written -- no document number is allocated, no row is inserted --
+ * so an owner can try a percentage, read the withholding and the tax it
+ * produces, and change his mind without leaving a gap in the number series.
+ *
+ * It is NOT a substitute for the checks at issue. The state it prices against
+ * is the state at the moment it was asked, and the commit re-prices from
+ * scratch inside its own transaction; a preview is what the owner reads, and
+ * the transaction is what decides.
+ */
+export async function previewInvoice(args: PriceInvoiceArgs): Promise<InvoicePreview> {
+  return db.transaction(async (tx) => {
+    const priced = await priceInvoice(tx, args);
+    return {
+      computed: priced.computed,
+      state: priced.state,
+      holdbackPctTenThou: priced.contract.holdbackPctTenThou,
+      taxDeferredOnHoldback: priced.org.taxDeferredOnHoldback,
+      issueDate: priced.issueDate,
+    };
+  });
+}
+
 /**
  * Issues an invoice against a job.
  *
@@ -257,70 +421,7 @@ export async function jobBillingState(projectId: string): Promise<JobBillingStat
  */
 export async function issueInvoice(args: IssueInvoiceArgs): Promise<IssuedInvoice> {
   return db.transaction(async (tx) => {
-    const [org] = await tx.select().from(organization).where(eq(organization.id, 1));
-    if (!org) throw new Error('organization row is missing; run setup first');
-
-    const [project] = await tx.select().from(projects).where(eq(projects.id, args.projectId));
-    if (!project) throw new Error(`project ${args.projectId} not found`);
-    if (project.recordStatus !== 'active') {
-      throw new Error('a void project cannot be invoiced');
-    }
-
-    const contract = await contractOf(tx, args.projectId);
-    if (contract.quoteCount === 0) {
-      // There is nothing to bill against. Progress billing would multiply a
-      // contract value of zero and produce a $0 invoice that looks issued and
-      // settles nothing, which is worse than a refusal because it consumes a
-      // number and appears on the AR aging at zero.
-      throw new Error(
-        'this project has no accepted quote, so there is no contract to bill: accept a quote first',
-      );
-    }
-
-    // The completion percentage is bounded HERE because computeInvoice does not
-    // bound it: it calls `earnedToDateCents` directly, and the only function
-    // that asserts the range -- `progressAmountCents` -- is not on its path. A
-    // draw at 110% would otherwise price and store cleanly, billing work no
-    // customer had accepted while leaving the contract untouched, and the
-    // arithmetic would be internally consistent all the way to the customer.
-    // Billing past the contract needs a change order that raises the contract.
-    if (args.percentCompleteTenThou !== undefined) {
-      assertPercentTenThou(args.percentCompleteTenThou, 'percent complete');
-    }
-
-    const issueDate = args.issueDate ?? (await tenantToday(tx));
-    const state = await deriveBillingState(tx, args.projectId, contract.subtotalCents);
-
-    const computed = computeInvoice(
-      state,
-      {
-        kind: args.kind,
-        issueDate,
-        percentCompleteTenThou: args.percentCompleteTenThou,
-        amountCents: args.amountCents,
-        holdbackPctTenThou: contract.holdbackPctTenThou,
-        depositApplyCents: args.depositApplyCents,
-        releaseHoldbackCents: args.releaseHoldbackCents,
-      },
-      await loadTaxRatesFor(tx),
-      {
-        taxDeferredOnHoldback: org.taxDeferredOnHoldback,
-        customerExempt: await customerExemptFor(tx, args.projectId),
-      },
-    );
-
-    // The invariant the whole derivation rests on: the draws sum to the
-    // contract. The percentage path cannot break it once the bound above holds,
-    // but VOIDING AN ACCEPTED QUOTE can -- the contract shrinks while the
-    // invoices that billed the old one stand -- and every kind is then billing
-    // against a contract smaller than what has already gone out. Refused rather
-    // than absorbed, because the fix is a change order that restores the
-    // contract value and only the owner knows which one.
-    if (computed.nextState.previouslyBilledCents > contract.subtotalCents) {
-      throw new Error(
-        `this job has billed ${computed.nextState.previouslyBilledCents} cents against a contract of ${contract.subtotalCents}: accept a change order to raise the contract before invoicing again`,
-      );
-    }
+    const { org, project, contract, issueDate, computed } = await priceInvoice(tx, args);
 
     const invoiceNumber = await allocateDocumentNumber(tx, 'invoice', yearOf(issueDate));
     const status = args.status ?? 'draft';

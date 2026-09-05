@@ -3,6 +3,9 @@ import { notFound } from 'next/navigation';
 import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { customers, organization, projects, quotes, stageHistory } from '@/db/schema';
+import { buttonClass } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
+import { Notice } from '@/components/ui/Notice';
 import { Pill, statusTone } from '@/components/ui/Pill';
 import { AmountCell, TableWrap } from '@/components/ui/Table';
 import { formatBasisPoints, formatCents } from '@/lib/money/format';
@@ -122,18 +125,23 @@ export default async function ProjectPage({
         <div className="no-print ml-auto flex flex-wrap gap-2">
           {active && !editing ? (
             <>
-              <Link
-                href={`/projects/${project.id}?edit=1`}
-                className="flex min-h-11 items-center rounded-[4px] border border-line-strong bg-surface px-3 hover:bg-surface-2"
-              >
+              <Link href={`/projects/${project.id}?edit=1`} className={buttonClass('secondary')}>
                 Edit
               </Link>
+              {/* Billing is offered only once something has actually been
+                  sold. An opportunity has no contract to bill against, and
+                  the billing action refuses one outright -- so showing the
+                  link on a lead would be an invitation to a dead end. The
+                  condition is the same accepted-quote test the noun above
+                  uses, rather than a second reading of `stage`. */}
+              {accepted.length > 0 ? (
+                <Link href={`/billing/${project.id}`} className={buttonClass('secondary')}>
+                  Billing
+                </Link>
+              ) : null}
               {/* Another quote on the same opportunity -- a second price
                   point, or a scope the customer asked to see separately. */}
-              <Link
-                href={`/quotes/new?opportunity=${project.id}`}
-                className="flex min-h-11 items-center rounded-[4px] bg-accent px-3 text-accent-fg hover:bg-accent-hover"
-              >
+              <Link href={`/quotes/new?opportunity=${project.id}`} className={buttonClass('primary')}>
                 New quote
               </Link>
             </>
@@ -145,7 +153,10 @@ export default async function ProjectPage({
           and which stage it is in. A stage with a panel of its own read as a
           setting to go and change rather than as this job's status, and put
           the one figure that matters two scrolls away from it. */}
-      <section className="rounded-[6px] border border-line bg-surface p-4">
+      {/* Not a `MetricCard`: this block puts the stage control BESIDE the
+          figure, and MetricCard stacks its slots. The surface treatment is
+          `Card`'s either way, so the panel is not described twice. */}
+      <Card className="p-4">
         <div className="flex flex-wrap items-start gap-x-8 gap-y-4">
           <div className="min-w-0">
             {/* The label names the accepted quotes because the figure is
@@ -192,13 +203,12 @@ export default async function ProjectPage({
             ) : null}
           </div>
         </div>
-      </section>
+      </Card>
 
       {project.stage === 'lost' && project.lostReason ? (
-        <p className="rounded-[6px] border border-line bg-surface-2 px-4 py-3 t-small">
-          <span className="text-muted">Lost because: </span>
+        <Notice tone="neutral" title="Lost because">
           {project.lostReason}
-        </p>
+        </Notice>
       ) : null}
 
       {editing ? (
