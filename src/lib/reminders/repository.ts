@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, isNotNull, sql, type SQL } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, isNotNull, sql, type SQL } from 'drizzle-orm';
 import type { PgColumn } from 'drizzle-orm/pg-core';
 import { db } from '@/db/client';
 import { activityKindEnum } from '@/db/enums';
@@ -6,6 +6,7 @@ import {
   activities, customers, organization, projects, quotes, reminderRules, reminders,
 } from '@/db/schema';
 import { seedDefaultReminderRules } from '@/db/seed/reminder-rules';
+import { searchCondition } from '@/lib/list/search';
 import { tenantToday } from '@/lib/quote/dates';
 import type { Tx } from '@/lib/quote/repository';
 import { evaluateRules } from '@/lib/reminders/rules';
@@ -485,6 +486,14 @@ export interface ReminderRow {
 export interface ListRemindersOptions {
   status?: 'open' | 'done' | 'dismissed';
   entity?: { type: EntityType; id: string };
+  /**
+   * Free text, matched in SQL over the title and the detail.
+   *
+   * In SQL rather than over the returned array, per the rule the list screens
+   * already follow: filtering in the browser is only correct while the whole
+   * list is in it, which stops being true the first time this needs a page.
+   */
+  search?: string;
 }
 
 /**
@@ -507,6 +516,8 @@ export async function listReminders(
       conditions.push(eq(reminders.entityType, options.entity.type));
       conditions.push(eq(reminders.entityId, options.entity.id));
     }
+    const search = searchCondition(options.search ?? '', [reminders.title, reminders.detail]);
+    if (search) conditions.push(search);
 
     return tx
       .select({
@@ -528,6 +539,106 @@ export async function listReminders(
   };
 
   return executor ? run(executor) : db.transaction(run);
+}
+
+/**
+ * What a reminder is ABOUT, in words a person recognises.
+ *
+ * A reminder carries `entity_type` and `entity_id` and nothing else, which is
+ * the right shape for the engine and useless on a screen: "Follow up on quote
+ * to Sample Client" beside a uuid tells the owner nothing about which job, and
+ * gives him nowhere to press. Resolved here, in one pass over the whole list,
+ * rather than per row -- a list of twenty reminders should cost three queries,
+ * not sixty.
+ */
+export interface EntityRef {
+  type: EntityType;
+  id: string;
+  /** The thing itself: the job's name, or the customer's. */
+  label: string;
+  /** Who it is for, and the document number when there is one. */
+  sub: string | null;
+  href: string;
+}
+
+/** The key both sides of the lookup agree on. */
+export function entityKey(type: EntityType, id: string): string {
+  return `${type}:${id}`;
+}
+
+export async function describeEntities(
+  refs: readonly { entityType: EntityType; entityId: string }[],
+  executor: Tx | typeof db = db,
+): Promise<Map<string, EntityRef>> {
+  const found = new Map<string, EntityRef>();
+  const idsOf = (type: EntityType): string[] =>
+    [...new Set(refs.filter((ref) => ref.entityType === type).map((ref) => ref.entityId))];
+
+  const customerIds = idsOf('customer');
+  if (customerIds.length > 0) {
+    const rows = await executor
+      .select({ id: customers.id, name: customers.name, company: customers.companyName })
+      .from(customers)
+      .where(inArray(customers.id, customerIds));
+    for (const row of rows) {
+      found.set(entityKey('customer', row.id), {
+        type: 'customer',
+        id: row.id,
+        label: row.name,
+        sub: row.company,
+        href: `/customers/${row.id}`,
+      });
+    }
+  }
+
+  const projectIds = idsOf('project');
+  if (projectIds.length > 0) {
+    const rows = await executor
+      .select({
+        id: projects.id,
+        name: projects.name,
+        number: projects.projectNumber,
+        customer: customers.name,
+      })
+      .from(projects)
+      .innerJoin(customers, eq(projects.customerId, customers.id))
+      .where(inArray(projects.id, projectIds));
+    for (const row of rows) {
+      found.set(entityKey('project', row.id), {
+        type: 'project',
+        id: row.id,
+        label: row.name,
+        sub: `${row.customer} · ${row.number}`,
+        href: `/projects/${row.id}`,
+      });
+    }
+  }
+
+  const quoteIds = idsOf('quote');
+  if (quoteIds.length > 0) {
+    const rows = await executor
+      .select({
+        id: quotes.id,
+        number: quotes.quoteNumber,
+        project: projects.name,
+        customer: customers.name,
+      })
+      .from(quotes)
+      .innerJoin(projects, eq(quotes.projectId, projects.id))
+      .innerJoin(customers, eq(projects.customerId, customers.id))
+      .where(inArray(quotes.id, quoteIds));
+    for (const row of rows) {
+      found.set(entityKey('quote', row.id), {
+        type: 'quote',
+        id: row.id,
+        label: row.project,
+        sub: `${row.customer} · ${row.number}`,
+        href: `/quotes/${row.id}`,
+      });
+    }
+  }
+
+  return found;
 }
 
 export interface ActivityRow {

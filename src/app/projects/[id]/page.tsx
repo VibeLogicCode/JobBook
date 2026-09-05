@@ -15,6 +15,9 @@ import { ProjectForm } from '@/components/detail/ProjectForm';
 import { StageControl } from '@/components/detail/StageControl';
 import { StageTimeline } from '@/components/detail/StageTimeline';
 import { tenantIsoToday } from '@/components/detail/dates';
+import { LogActivityForm } from '@/components/timeline/LogActivityForm';
+import { Timeline } from '@/components/timeline/Timeline';
+import { listTimeline } from '@/lib/reminders/repository';
 import {
   CONTRACT_TYPES, PROJECT_STAGES, PROJECT_TYPES, stageTone, workNoun,
 } from '@/components/detail/labels';
@@ -102,6 +105,12 @@ export default async function ProjectPage({
     .from(customers)
     .where(eq(customers.recordStatus, 'active'))
     .orderBy(asc(customers.name));
+
+  // What happened on this job, ordered by when it happened rather than by when
+  // it was typed. Separate from the stage history below, and deliberately: one
+  // is what the system did to the record, the other is what people did about
+  // the work.
+  const timeline = await listTimeline('project', id);
 
   const today = tenantIsoToday(org?.timezone ?? 'UTC');
   // The record is a job from the moment a quote on it is accepted, which is
@@ -276,6 +285,27 @@ export default async function ProjectPage({
           </Panel>
         </div>
       )}
+
+      {/* Above the quote table, because a job's next action is decided by the
+          last conversation about it rather than by the version history -- and
+          because a form nobody scrolls to is a form nobody fills in. */}
+      <Panel title="Activity">
+        {active ? (
+          <div className="mb-4">
+            <LogActivityForm
+              entityType="project"
+              entityId={project.id}
+              today={today}
+              startOpen={timeline.length === 0}
+            />
+          </div>
+        ) : null}
+        <Timeline
+          entries={timeline}
+          locale={org?.locale ?? 'en-CA'}
+          timeZone={org?.timezone ?? 'UTC'}
+        />
+      </Panel>
 
       {/* min-w-0 because this panel is a grid item, and a grid item's
           automatic minimum width is its min-content -- which, for a panel

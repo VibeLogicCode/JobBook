@@ -3,12 +3,19 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
-  ClipboardList, FileText, Home, LayoutTemplate, Moon, Ruler, Settings, Sun, Users,
+  BellRing, ClipboardList, FileText, Home, LayoutTemplate, Moon, Ruler, Settings, Sun, Users,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
+/**
+ * Reminders sits second, directly under Today, because the two are one
+ * question asked twice: what is happening, and what do I have to do about it.
+ * Anywhere further down the rail it becomes a screen he has to remember to
+ * visit, and a reminder system nobody opens is worse than no reminder system.
+ */
 const DESTINATIONS = [
   { href: '/', label: 'Today', icon: Home },
+  { href: '/reminders', label: 'Reminders', icon: BellRing },
   { href: '/quotes', label: 'Quotes', icon: FileText },
   { href: '/projects', label: 'Pipeline', icon: ClipboardList },
   { href: '/customers', label: 'People', icon: Users },
@@ -21,9 +28,16 @@ const DESTINATIONS = [
  * The bottom bar carries five, per the UI spec's breakpoint table; the rail
  * carries all of them.
  *
- * Templates and Setup are the two that lose the seat. Both are things a person
- * does at a desk while configuring the system, not on a phone at a job site,
- * which is what a bottom tab bar is for.
+ * The bar was already full, so Reminders did not get appended -- it took a
+ * seat, and Rates gave it up. Rates is the rate book: a thing maintained at a
+ * desk, read by the worksheet rather than by a person, and reached from the
+ * rail on the machine where prices actually get edited. Reminders is the
+ * opposite -- it is the screen for a phone in a truck at 7am, which is exactly
+ * what a bottom tab bar is for. Templates and Setup were already off it for
+ * the same reason.
+ *
+ * Kept as `slice(0, 5)` rather than a second hand-written list: two lists is
+ * how a destination ends up on one and not the other.
  */
 const BOTTOM_BAR = DESTINATIONS.slice(0, 5);
 

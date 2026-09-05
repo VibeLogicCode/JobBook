@@ -12,6 +12,9 @@ import { CustomerForm } from '@/components/detail/CustomerForm';
 import { DetailList, DetailRow, EmptyState, Panel } from '@/components/detail/Panel';
 import { VoidControl } from '@/components/detail/VoidControl';
 import { tenantIsoToday } from '@/components/detail/dates';
+import { LogActivityForm } from '@/components/timeline/LogActivityForm';
+import { Timeline } from '@/components/timeline/Timeline';
+import { listTimeline } from '@/lib/reminders/repository';
 import {
   CUSTOMER_TYPES, LEAD_SOURCES, PROJECT_STAGES, isLiveStage, stageTone,
 } from '@/components/detail/labels';
@@ -76,6 +79,11 @@ export default async function CustomerPage({
     .innerJoin(projects, eq(quotes.projectId, projects.id))
     .where(and(eq(projects.customerId, id), eq(quotes.recordStatus, 'active')))
     .orderBy(desc(quotes.quoteDate), desc(quotes.version));
+
+  // Ordered by when things HAPPENED, not by when they were typed: the
+  // repository sorts on `occurred_at`, so Tuesday's call logged on Thursday
+  // reads under Tuesday.
+  const timeline = await listTimeline('customer', id);
 
   const today = tenantIsoToday(org?.timezone ?? 'UTC');
   // Rendered in the tenant's zone for the same reason `today` is computed in
@@ -226,6 +234,28 @@ export default async function CustomerPage({
           </Panel>
         </div>
       )}
+
+      {/* High on the page rather than under the tables, because the phase turns
+          on whether this gets written down at all. A quote sent and never
+          chased is indistinguishable from one that was declined, and both show
+          up as silence -- and the `no_activity` rule reads exactly this. */}
+      <Panel title="Activity">
+        {active ? (
+          <div className="mb-4">
+            <LogActivityForm
+              entityType="customer"
+              entityId={customer.id}
+              today={today}
+              startOpen={timeline.length === 0}
+            />
+          </div>
+        ) : null}
+        <Timeline
+          entries={timeline}
+          locale={org?.locale ?? 'en-CA'}
+          timeZone={org?.timezone ?? 'UTC'}
+        />
+      </Panel>
 
       {/* min-w-0 on both table panels because a grid item's automatic minimum
           width is its min-content, and for a panel holding a table that
