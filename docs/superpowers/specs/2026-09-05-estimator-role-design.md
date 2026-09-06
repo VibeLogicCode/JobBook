@@ -3,6 +3,11 @@
 **2026-09-05.** A fourth role: somebody who prices work for customers and is
 never shown what that work costs the company.
 
+**Scheduled for Phase 3, after crew and BEFORE AP/AR** — owner's decision,
+2026-09-05. The ordering against AP/AR is deliberate rather than incidental:
+AP/AR's screens are cost surfaces, and a permission boundary costs one line per
+screen when it exists first and an audit of finished screens when it does not.
+
 Agreed with the owner on 2026-09-05. His words: *"an employee who can quote but
 should not see profit margins, detail rate level rates, but can quote and see
 line totals and quote totals but not the math behind them"*, and *"no ability to
