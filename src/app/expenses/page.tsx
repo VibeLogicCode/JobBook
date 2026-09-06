@@ -1,4 +1,6 @@
 import { and, asc, desc, eq, ne, sql } from 'drizzle-orm';
+import { Camera } from 'lucide-react';
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { db } from '@/db/client';
 import {
@@ -51,6 +53,34 @@ const KIND_OPTIONS = [
   { value: 'purchase', label: 'Purchases' },
   { value: 'mileage', label: 'Mileage' },
 ];
+
+/**
+ * The browser tab.
+ *
+ * Plain "Expenses" answers "which screen is this" for the common case, but
+ * this screen has a second identity the moment `?project=…` narrows it to one
+ * job: several tabs each reading "Expenses" cannot be told apart, and the
+ * number is exactly what the page body already leads with once a job is
+ * chosen (`PageHeader`'s parent link, the cost-code table's heading). The
+ * title says the same thing the screen does.
+ */
+export async function generateMetadata({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}): Promise<Metadata> {
+  const params = await searchParams;
+  const raw = params.project;
+  const projectId = Array.isArray(raw) ? raw[0] : raw;
+  if (!projectId) return { title: 'Expenses' };
+
+  const [project] = await db
+    .select({ number: projects.projectNumber })
+    .from(projects)
+    .where(eq(projects.id, projectId));
+
+  return { title: project ? `${project.number} — Expenses` : 'Expenses' };
+}
 
 /**
  * What a job cost: the receipts, the subcontractors' invoices, and the driving.
@@ -308,6 +338,60 @@ export default async function ExpensesPage({
         resetOnSuccess
       >
         <FieldGrid>
+          {/*
+            First in the form, deliberately, and full width rather than a
+            corner: what actually happens here is the photograph first, the
+            figures off it second -- he is standing at a counter or in a van,
+            he shoots the receipt, then types what it says. A field further
+            down treated the photo as an afterthought to money that had not
+            been typed yet.
+
+            Sized well past the 44px floor because this is tapped one-handed,
+            outdoors, sometimes with a glove on -- the whole box is the
+            target, not just the button drawn inside it. The dashed line is
+            this app's own word for "nothing here yet" (the schedule uses it
+            for a task with nobody assigned), and it costs nothing extra: it
+            is the browser's own empty-file state, so no script has to track
+            whether one was chosen, and none does.
+
+            `accept` is the list the action enforces, not a second copy of it.
+            `capture` is deliberately gone: it sends a phone straight to the
+            camera, which is the wrong door for the supplier PDF sitting in
+            the mail app. The camera is still one tap inside the picker.
+
+            The file is identified by its contents rather than its name --
+            renaming something .jpg will not get it past the `accept` list --
+            and a PDF downloads instead of opening inline, deliberately: a PDF
+            can carry script, and one displayed inside this application would
+            be running inside it.
+          */}
+          <div className="flex min-w-0 flex-col gap-1 sm:col-span-2">
+            <label htmlFor="new-expense-receipt" className="t-small font-semibold">
+              Receipt
+            </label>
+            <div className="relative">
+              <Camera
+                size={22}
+                aria-hidden
+                className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-subtle"
+              />
+              <input
+                id="new-expense-receipt"
+                name="receipt"
+                type="file"
+                accept={RECEIPT_ACCEPT}
+                disabled={!allowed}
+                aria-describedby="new-expense-receipt-hint"
+                className={`field min-h-16 cursor-pointer border-dashed py-3 pl-12 pr-3 file:mr-3 file:min-h-11 file:cursor-pointer file:rounded-control file:border-0 file:bg-accent file:px-4 file:font-semibold file:text-accent-fg hover:file:bg-accent-hover ${allowed ? '' : 'cursor-not-allowed opacity-60'}`}
+              />
+            </div>
+            <p id="new-expense-receipt-hint" className="t-small text-subtle">
+              A photo or the supplier&apos;s PDF, up to{' '}
+              <span className="num">{formatBytes(RECEIPT_MAX_BYTES)}</span>. PDFs download
+              instead of opening here.
+            </p>
+          </div>
+
           <SelectField
             idPrefix="new-expense"
             name="projectId"
@@ -464,37 +548,6 @@ export default async function ExpensesPage({
             disabled={!allowed}
             hint="For cost-plus, time-and-material work, or spend against an allowance."
           />
-
-          <div className="flex min-w-0 flex-col gap-1 sm:col-span-2">
-            <label htmlFor="new-expense-receipt" className="t-small font-semibold">
-              Receipt
-            </label>
-            {/* `accept` is the list the action enforces, not a second copy
-                of it. `capture` is deliberately gone: it sends a phone straight
-                to the camera, which is the wrong door for the supplier PDF
-                sitting in the mail app. The camera is still one tap inside the
-                picker.
-
-                The file is identified by its contents rather than its name --
-                renaming something .jpg will not get it past the `accept` list
-                -- and a PDF downloads instead of opening inline, deliberately:
-                a PDF can carry script, and one displayed inside this
-                application would be running inside it. */}
-            <input
-              id="new-expense-receipt"
-              name="receipt"
-              type="file"
-              accept={RECEIPT_ACCEPT}
-              disabled={!allowed}
-              aria-describedby="new-expense-receipt-hint"
-              className={`field ${allowed ? '' : 'opacity-60'}`}
-            />
-            <p id="new-expense-receipt-hint" className="t-small text-subtle">
-              A photo or the supplier&apos;s PDF, up to{' '}
-              <span className="num">{formatBytes(RECEIPT_MAX_BYTES)}</span>. PDFs download
-              instead of opening here.
-            </p>
-          </div>
 
           <TextAreaField
             idPrefix="new-expense"
