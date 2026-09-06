@@ -235,3 +235,34 @@ export const expenseSourceEnum = pgEnum('expense_source', ['manual', 'ocr', 'imp
  * 'captured' would be spend the owner entered and the costing view ignored.
  */
 export const expenseStatusEnum = pgEnum('expense_status', ['captured', 'review', 'posted']);
+
+/**
+ * Schedule templates (spec 2026-09-05, section 5).
+ */
+
+/**
+ * What a template task's DURATION scales with, or nothing.
+ *
+ * Mirrors `DurationSource` in `src/lib/schedule/template.ts` member for
+ * member -- that file is pure and declares its own union so it stays testable
+ * without a schema; this is the half the database enforces, and
+ * `schedule_template_tasks_duration_source_columns` is what keeps the two from
+ * drifting.
+ */
+export const durationSourceEnum = pgEnum('duration_source', [
+  'none', 'area', 'washrooms', 'kitchens', 'bedrooms',
+]);
+
+/**
+ * What a template task's PRESENCE conditions on, or nothing (a null pair of
+ * condition columns, which section 6 states means unconditional rather than
+ * "never applies").
+ *
+ * `area` is deliberately absent -- mirrors `ConditionMeasurement` in
+ * `src/lib/schedule/template.ts`, and the reason is stated there: `area > 0` is
+ * true of essentially every quote, so it would tick every task while looking
+ * like a filter. Area stays a duration source only.
+ */
+export const conditionMeasurementEnum = pgEnum('condition_measurement', [
+  'washrooms', 'kitchens', 'bedrooms',
+]);

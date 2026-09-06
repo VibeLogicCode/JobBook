@@ -16,6 +16,7 @@ import {
   DEMO_COST_CODES, DEMO_CUSTOMERS, DEMO_ORGANIZATION, DEMO_RATE_ITEMS, DEMO_TAX_RATE,
   DEMO_TEMPLATES, DEMO_USERS,
 } from '@/db/seed/demo';
+import { seedScheduleTemplates } from '@/db/seed/schedule-templates';
 import { createQuoteFromTemplate } from '@/lib/quote/repository';
 
 async function main() {
@@ -93,6 +94,13 @@ async function main() {
       })),
     );
   }
+
+  // The one worked example for the schedule template editor (a separate piece
+  // of work), so it opens onto something real rather than an empty list. Runs
+  // after the loop above so its "Wet bar rough-in" task's rate-item condition
+  // resolves against the FIN-09 row just inserted -- see the file for why that
+  // lookup is by code rather than a fixed id.
+  await seedScheduleTemplates();
 
   let projectSeq = 1;
   for (const customer of DEMO_CUSTOMERS) {
