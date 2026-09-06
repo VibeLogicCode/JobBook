@@ -38,7 +38,7 @@ is the failure that guards against.
 npm install
 npx playwright install chromium   # the PDF pipeline and its test need it
 docker compose up -d db       # Postgres on 127.0.0.1:5433
-npm run db:migrate            # then repeat against TEST_DATABASE_URL
+npm run db:migrate            # both databases: development and test
 npm run db:seed
 npm run dev
 ```
@@ -66,8 +66,17 @@ the development database on the first run. Create it once:
 
 ```bash
 docker compose exec db psql -U quote -d quote -c 'create database quote_test'
-DATABASE_URL="$TEST_DATABASE_URL" npx drizzle-kit migrate
+npm run db:migrate
 ```
+
+`db:migrate` applies to **both** databases. It used to apply to one, with a
+footnote here saying to repeat the command by hand — and a footnote is not a
+mechanism. Migration 0016 reached `quote` and not `quote_test`, and the suite
+returned eighteen failures reading `column "trade_id" does not exist`, which
+looks like a broken migration rather than a forgotten command.
+
+`db:migrate:dev` is there for the rare case you want the development database
+alone.
 
 ## Layout
 
