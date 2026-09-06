@@ -129,6 +129,14 @@ interface Fixture {
   projectName: string;
   siteAddress: string | null;
   customerExempt: boolean;
+  /**
+   * What the job is contracted as, because it decides what this document is
+   * allowed to say. A lump sum is ONE price for a scope: itemising it invites
+   * the customer to argue a single line and to cherry-pick items out. Every
+   * other type prints in full, and a null prints as it always did -- a
+   * customer's contract is not something to guess from a missing value.
+   */
+  contractType: string | null;
   storedSubtotalCents: number;
   storedTaxTotalCents: number;
   storedTotalCents: number;
@@ -235,6 +243,7 @@ async function load(): Promise<Loaded> {
         siteCity: projects.siteCity,
         customerName: customers.name,
         customerExempt: customers.isTaxExempt,
+        contractType: projects.contractType,
       })
       .from(quotes)
       .innerJoin(projects, eq(quotes.projectId, projects.id))
@@ -272,6 +281,7 @@ async function load(): Promise<Loaded> {
         siteAddress:
           [row.siteAddressLine1, row.siteCity].filter(Boolean).join(', ') || null,
         customerExempt: row.customerExempt,
+        contractType: row.contractType,
         storedSubtotalCents: row.quote.subtotalCents,
         storedTaxTotalCents: row.quote.taxTotalCents,
         storedTotalCents: row.quote.totalCents,
@@ -558,37 +568,99 @@ describe.skipIf(loaded === null)('the printed quote document', () => {
       if (org!.logoFileId) expect(doc.logoSources.length).toBeGreaterThan(0);
     });
 
-    it('prints every included line, in its group, in stored order', () => {
+    it('prints every included line, whatever the contract says about prices', () => {
+      // The SCOPE is the same document either way. What changes is whether a
+      // figure sits beside each part of it, and a lump sum that quietly
+      // dropped a line would be a different promise, not a tidier one.
       const included = fixture.lines.filter((line) => line.isIncluded);
-      const expectedGroups: string[] = [];
       for (const line of included) {
-        if (!expectedGroups.includes(line.lineGroup)) expectedGroups.push(line.lineGroup);
-      }
-
-      expect(doc.groups.map((row) => row.group)).toEqual(expectedGroups.map(norm));
-
-      for (const [index, group] of expectedGroups.entries()) {
-        const lines = included.filter((line) => line.lineGroup === group);
-        expect(doc.groups[index]!.items).toEqual(
-          lines.map((line) => norm(`${line.description}${line.isAllowance ? ' (allowance)' : ''}`)),
-        );
+        expect(doc.text, `${line.description} is in the scope`).toContain(norm(line.description));
       }
     });
 
-    it('prices each group at the sum of its lines, formatted for a person', () => {
-      const included = fixture.lines.filter((line) => line.isIncluded);
-      const expectedGroups: string[] = [];
-      for (const line of included) {
-        if (!expectedGroups.includes(line.lineGroup)) expectedGroups.push(line.lineGroup);
-      }
+    /**
+     * The unchanged path, and it is unchanged on purpose.
+     *
+     * A quote whose job has no contract type recorded prints exactly as this
+     * product always printed it: grouped by trade, one figure per group. A
+     * missing value is not an instruction, and guessing a customer's contract
+     * from a null is the one reading that could put the wrong document in
+     * front of somebody.
+     */
+    it.skipIf(fixture.contractType !== null)(
+      'groups the scope and prices each group at the sum of its lines',
+      () => {
+        const included = fixture.lines.filter((line) => line.isIncluded);
+        const expectedGroups: string[] = [];
+        for (const line of included) {
+          if (!expectedGroups.includes(line.lineGroup)) expectedGroups.push(line.lineGroup);
+        }
 
-      for (const [index, group] of expectedGroups.entries()) {
-        const sum = included
-          .filter((line) => line.lineGroup === group)
-          .reduce((total, line) => total + line.lineTotalCents, 0);
-        expectAmount(doc.groups[index]!.amount, sum, `group ${group}`);
-      }
-    });
+        for (const [index, group] of expectedGroups.entries()) {
+          const sum = included
+            .filter((line) => line.lineGroup === group)
+            .reduce((total, line) => total + line.lineTotalCents, 0);
+          expectAmount(doc.groups[index]!.amount, sum, `group ${group}`);
+        }
+      },
+    );
+
+    /**
+     * The contract types that DO itemise: time and material, cost plus, unit
+     * price. The customer is paying for what is used or per unit, so seeing
+     * each line and its amount is the arrangement rather than a courtesy.
+     */
+    it.skipIf(fixture.contractType === null || fixture.contractType === 'lump_sum')(
+      'prints an amount against every line it charges for',
+      () => {
+        const included = fixture.lines.filter((line) => line.isIncluded);
+        for (const line of included) {
+          expect(
+            doc.moneyText,
+            `${line.description} carries its own amount`,
+          ).toContain(norm(formatCents(line.lineTotalCents)));
+        }
+      },
+    );
+
+    /**
+     * THE ONE THAT GUARDS THE OWNER'S ACTUAL INSTRUCTION.
+     *
+     * "In lump sum i don't want to show which line is how much money i am
+     * charging them -- it's a lump sum or fixed price."
+     *
+     * So the scope table carries no money at all, and the only figures on the
+     * page are the totals block and the priced upgrades a customer chooses
+     * from. An allowance keeps its figure deliberately: it is a stated budget
+     * the final bill trues up against, and this document's own terms say fees
+     * are billed at cost "unless listed as an allowance", which would refer to
+     * a number the customer had never been shown.
+     */
+    it.skipIf(fixture.contractType !== 'lump_sum')(
+      'shows no price against any line of a lump-sum scope',
+      () => {
+        for (const row of doc.groups) {
+          expect(row.amount, `group ${row.group} carries no amount`).toBe('');
+        }
+
+        const totals = new Set(doc.totals.map((row) => row.amount));
+        const upgrades = new Set((doc.upgrades ?? []).map((row) => row.amount));
+        const allowances = fixture.lines
+          .filter((line) => line.isIncluded && line.isAllowance)
+          .map((line) => norm(formatCents(line.lineTotalCents)));
+
+        // Every figure anywhere in the scope region must be one the rule
+        // permits. Scanning the rendered text rather than the scraped rows,
+        // because a price re-introduced in some new corner of the markup would
+        // slip past an assertion that only looked where prices used to be.
+        const figures = doc.moneyText.match(/\$[\d,]+\.\d{2}/g) ?? [];
+        for (const figure of figures) {
+          const permitted =
+            totals.has(figure) || upgrades.has(figure) || allowances.includes(figure);
+          expect(permitted, `${figure} is a total, an upgrade or an allowance`).toBe(true);
+        }
+      },
+    );
 
     it('agrees with the calculation engine on the subtotal it prints', () => {
       // Two claims, and both matter. First that the stored subtotal is still

@@ -1,10 +1,23 @@
 'use server';
 
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { and, asc, eq, ne, sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
+import { z } from 'zod';
 import { db } from '@/db/client';
-import { assignments, costCodes, organization, projects, scheduleTasks, trades, users, vendors } from '@/db/schema';
+import {
+  assignments,
+  costCodes,
+  organization,
+  projects,
+  quotes,
+  scheduleTasks,
+  scheduleTemplates,
+  scheduleTemplateTasks,
+  trades,
+  users,
+  vendors,
+} from '@/db/schema';
 import { guard } from '@/lib/auth/guard';
 import { lagBetween } from '@/lib/schedule/calendar';
 import {
@@ -14,8 +27,9 @@ import {
   planMove,
   type ScheduleTask,
 } from '@/lib/schedule/push';
+import { planImport, type PlannedTask, type Scope, type TemplateTask } from '@/lib/schedule/template';
 import { type ActionResult, refused, saved } from '@/app/settings/result';
-import { formValues, invalid } from '@/app/settings/validate';
+import { formValues, invalid, isoDate } from '@/app/settings/validate';
 import {
   ASSIGNMENT_LABELS,
   TASK_LABELS,
@@ -732,6 +746,254 @@ export async function voidTask(
 
   revalidateSchedule(projectId);
   return saved(`${name} is void, off the schedule and the finish date.`);
+}
+
+/* -------------------------------------------------------------------------
+   Importing a schedule template -- spec
+   docs/superpowers/specs/2026-09-05-schedule-templates-design.md, section 7.
+   ------------------------------------------------------------------------- */
+
+export type ApplyTemplateResult = { ok: true; message: string } | { ok: false; error: string };
+
+const applyTemplateSchema = z.object({
+  projectId: z.uuid('is not a job'),
+  templateId: z.uuid('is not a template'),
+  startDate: isoDate,
+  tickedTemplateTaskIds: z.array(z.uuid()).min(1, 'Tick at least one task to import.'),
+});
+
+/**
+ * The accepted estimate's measurements -- section 6.2, and the correction the
+ * spec makes twice: a change order carries none, so only sequence 1 is read
+ * here. Zero, never null, when there is no accepted estimate at all, because
+ * `durationDaysOf` multiplies by these and a null would need its own branch
+ * for a job this action already has a sentence for (a stale ticked id, caught
+ * before this is ever called).
+ */
+async function readScope(tx: Tx, projectId: string): Promise<Scope> {
+  const [estimate] = await tx
+    .select({
+      washroomCount: quotes.washroomCount,
+      kitchenCount: quotes.kitchenCount,
+      bedroomCount: quotes.bedroomCount,
+      areaSqftMilli: quotes.areaSqftMilli,
+    })
+    .from(quotes)
+    .where(
+      and(
+        eq(quotes.projectId, projectId),
+        eq(quotes.kind, 'estimate'),
+        eq(quotes.sequence, 1),
+        eq(quotes.status, 'accepted'),
+        eq(quotes.recordStatus, 'active'),
+      ),
+    );
+  return {
+    areaSqftMilli: estimate?.areaSqftMilli ?? 0n,
+    washroomCount: estimate?.washroomCount ?? 0,
+    kitchenCount: estimate?.kitchenCount ?? 0,
+    bedroomCount: estimate?.bedroomCount ?? 0,
+  };
+}
+
+/**
+ * Applies a schedule template to a job.
+ *
+ * A direct call rather than a `FormAction`, matching `acceptQuote` in
+ * `src/app/quotes/[id]/actions.ts`: the sheet already computed the preview it
+ * is asking this to write, so there is no form to build for something the
+ * client already holds typed -- only the three facts section 7.5 says the
+ * request may carry.
+ *
+ * **Posted dates are never trusted.** This re-reads the template's live
+ * tasks and this job's scope INSIDE the transaction and calls `planImport`
+ * again, so the write is the output of the same pure engine the sheet
+ * previewed with, run against data read a moment before it is used rather
+ * than data that travelled from the browser. The only things taken from the
+ * request are which tasks were ticked and which date to start from -- the two
+ * facts only a person can supply.
+ *
+ * A ticked id that is no longer live -- voided from the template since the
+ * sheet opened -- is refused in one sentence, the way `moveTaskDates` refuses
+ * a fingerprint the schedule has moved out from under.
+ *
+ * Template task ids never reach `schedule_tasks`: each planned row gets a
+ * fresh id, generated here rather than left to the column default, so a
+ * dependent can be inserted pointing at its predecessor's real row before
+ * either exists in the database. `ensureInserted` walks the chain rather than
+ * looping over `planned` in its `sort_order` -- section 5.2's own point, that
+ * a task may sort above its own predecessor, applies to insert order exactly
+ * as it applies to dates.
+ */
+export async function applyScheduleTemplate(
+  input: z.input<typeof applyTemplateSchema>,
+): Promise<ApplyTemplateResult> {
+  const parsed = applyTemplateSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? 'That request did not make sense.' };
+  }
+  const { projectId, templateId, startDate, tickedTemplateTaskIds } = parsed.data;
+
+  const allowed = await guard('quote:write');
+  if (!allowed.ok) {
+    return { ok: false, error: allowed.error === 'Your role does not permit that.' ? REFUSAL : allowed.error };
+  }
+  // Captured as a plain value rather than read off `allowed` again below: the
+  // deepest write happens inside `ensureInserted`, a function declared inside
+  // the transaction and called recursively, and TypeScript does not carry a
+  // narrowed union across that many function boundaries.
+  const actorId = allowed.actor.id;
+
+  let outcome: ApplyTemplateResult;
+  try {
+    outcome = await db.transaction(async (tx): Promise<ApplyTemplateResult> => {
+      const [project] = await tx
+        .select({ id: projects.id, recordStatus: projects.recordStatus })
+        .from(projects)
+        .where(eq(projects.id, projectId));
+      if (!project || project.recordStatus === 'void') {
+        return { ok: false, error: 'That job no longer exists.' };
+      }
+
+      await lockProject(tx, projectId);
+
+      const [template] = await tx
+        .select({
+          id: scheduleTemplates.id,
+          name: scheduleTemplates.name,
+          recordStatus: scheduleTemplates.recordStatus,
+        })
+        .from(scheduleTemplates)
+        .where(eq(scheduleTemplates.id, templateId));
+      if (!template || template.recordStatus === 'void') {
+        return { ok: false, error: 'That schedule template no longer exists.' };
+      }
+
+      const templateTaskRows = await tx
+        .select()
+        .from(scheduleTemplateTasks)
+        .where(
+          and(
+            eq(scheduleTemplateTasks.scheduleTemplateId, templateId),
+            ne(scheduleTemplateTasks.recordStatus, 'void'),
+          ),
+        );
+
+      const liveIds = new Set(templateTaskRows.map((row) => row.id));
+      if (tickedTemplateTaskIds.some((id) => !liveIds.has(id))) {
+        return {
+          ok: false,
+          error: `${template.name} changed since you opened this sheet — one of the tasks you ticked is no longer on it. Reopen Import from template and try again.`,
+        };
+      }
+
+      const tasks: TemplateTask[] = templateTaskRows.map((row) => ({
+        id: row.id,
+        name: row.name,
+        sortOrder: row.sortOrder,
+        isMilestone: row.isMilestone,
+        durationBaseDays: row.durationBaseDays,
+        durationSource: row.durationSource,
+        durationAreaPerDayMilli: row.durationAreaPerDayMilli,
+        durationDaysPerUnit: row.durationDaysPerUnit,
+        predecessorTaskId: row.predecessorTaskId,
+        lagDays: row.lagDays,
+        conditionMeasurement: row.conditionMeasurement,
+        conditionRateItemId: row.conditionRateItemId,
+      }));
+
+      const scope = await readScope(tx, projectId);
+      const ticked = new Set(tickedTemplateTaskIds);
+      const planned = planImport(tasks, ticked, scope, startDate);
+
+      // Every ticked id was just confirmed live, so this is unreachable in
+      // practice -- kept as the sentence rather than a silent no-op, the same
+      // choice `moveTaskDates` makes for its own "nothing to do" case.
+      if (planned.length === 0) {
+        return { ok: false, error: 'Tick at least one task to import.' };
+      }
+
+      // "Where an imported task's name already exists on the schedule, one
+      // line says so" (section 7.5) -- the cheap guard against importing the
+      // same template twice. Read BEFORE this import's own inserts, so a
+      // template with two tasks sharing a name does not flag itself.
+      const existingNames = new Set(
+        (
+          await tx
+            .select({ name: scheduleTasks.name })
+            .from(scheduleTasks)
+            .where(and(eq(scheduleTasks.projectId, projectId), ne(scheduleTasks.recordStatus, 'void')))
+        ).map((row) => row.name),
+      );
+      const duplicateNames = [
+        ...new Set(planned.filter((row) => existingNames.has(row.name)).map((row) => row.name)),
+      ];
+
+      const templateTaskById = new Map(templateTaskRows.map((row) => [row.id, row]));
+      const plannedByTemplateTaskId = new Map(planned.map((row) => [row.templateTaskId, row]));
+      const dbIdByTemplateTaskId = new Map<string, string>();
+
+      async function ensureInserted(row: PlannedTask): Promise<string> {
+        const already = dbIdByTemplateTaskId.get(row.templateTaskId);
+        if (already) return already;
+
+        let predecessorDbId: string | null = null;
+        if (row.predecessorTemplateTaskId !== null) {
+          predecessorDbId = await ensureInserted(
+            plannedByTemplateTaskId.get(row.predecessorTemplateTaskId)!,
+          );
+        }
+
+        const source = templateTaskById.get(row.templateTaskId)!;
+        const id = randomUUID();
+        dbIdByTemplateTaskId.set(row.templateTaskId, id);
+
+        await tx.insert(scheduleTasks).values({
+          id,
+          projectId,
+          name: row.name,
+          tradeId: source.tradeId,
+          costCodeId: source.costCodeId,
+          plannedStart: row.start,
+          plannedEnd: row.end,
+          isMilestone: source.isMilestone,
+          // Roots get lagDays 0 straight from planImport -- effectiveLink's own
+          // rule -- so lag_needs_predecessor never sees a lag with nothing to
+          // lag behind.
+          predecessorTaskId: predecessorDbId,
+          lagDays: row.lagDays,
+          sortOrder: source.sortOrder,
+          notes: source.notes,
+          createdBy: actorId,
+        });
+        return id;
+      }
+
+      for (const row of planned) await ensureInserted(row);
+
+      const count = planned.length;
+      const base = `${count} ${count === 1 ? 'task' : 'tasks'} added from ${template.name}.`;
+      const message =
+        duplicateNames.length === 0
+          ? base
+          : `${base} ${andListTemplate(duplicateNames)} ${
+              duplicateNames.length === 1 ? 'already exists' : 'already exist'
+            } on this schedule.`;
+
+      return { ok: true, message };
+    });
+  } catch (error) {
+    return { ok: false, error: failureText(error) };
+  }
+
+  if (outcome.ok) revalidateSchedule(projectId);
+  return outcome;
+}
+
+/** "Framing and Drywall", for the duplicate-name note above. */
+function andListTemplate(items: readonly string[]): string {
+  if (items.length <= 1) return items[0] ?? '';
+  return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
 }
 
 /* -------------------------------------------------------------------------

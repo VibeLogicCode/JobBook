@@ -9,7 +9,13 @@ import {
   costCodes,
   organization,
   projects,
+  projectTypes,
+  quoteLines,
+  quotes,
+  rateItems,
   scheduleTasks,
+  scheduleTemplates,
+  scheduleTemplateTasks,
   trades,
   users,
   vendors,
@@ -59,6 +65,9 @@ import {
   waitsOnLabel,
   type Assignee,
   type Clash,
+  type ImportTemplateOption,
+  type ImportTemplateTaskWire,
+  type ScopeEvidenceWire,
   type Span,
   type TaskStatus,
 } from '@/app/projects/[id]/schedule/schema';
@@ -82,6 +91,7 @@ import {
   type Option,
 } from '@/components/settings/Fields';
 import { CalendarGrid } from '@/components/schedule/CalendarGrid';
+import { ImportTemplateSheet } from '@/components/schedule/ImportTemplateSheet';
 import { PeriodNav } from '@/components/schedule/PeriodNav';
 import { TaskEditor, TaskFields } from '@/components/schedule/TaskEditor';
 import { TaskSheet } from '@/components/schedule/TaskSheet';
@@ -125,6 +135,7 @@ const loadScheduleProject = cache(async (projectId: string) => {
       name: projects.name,
       stage: projects.stage,
       recordStatus: projects.recordStatus,
+      projectTypeId: projects.projectTypeId,
     })
     .from(projects)
     .where(eq(projects.id, projectId));
@@ -281,6 +292,157 @@ export default async function SchedulePage({
     .orderBy(asc(trades.sortOrder), asc(trades.name));
 
   const tradeById = new Map(allTrades.map((row) => [row.id, row]));
+
+  /* -----------------------------------------------------------------------
+     Importing a schedule template -- spec
+     docs/superpowers/specs/2026-09-05-schedule-templates-design.md, section 7.
+     ----------------------------------------------------------------------- */
+
+  // Active templates, matching this job's own project type sorted first --
+  // "not filtered to them: a basement template is a reasonable start for a
+  // rec room" (section 7.1).
+  const templateRows = await db
+    .select({
+      id: scheduleTemplates.id,
+      name: scheduleTemplates.name,
+      projectTypeId: scheduleTemplates.projectTypeId,
+      projectTypeName: projectTypes.name,
+    })
+    .from(scheduleTemplates)
+    .innerJoin(projectTypes, eq(projectTypes.id, scheduleTemplates.projectTypeId))
+    .where(and(eq(scheduleTemplates.isActive, true), ne(scheduleTemplates.recordStatus, 'void')))
+    .orderBy(asc(scheduleTemplates.name));
+
+  templateRows.sort((a, b) => {
+    const aMatch = a.projectTypeId === project.projectTypeId ? 0 : 1;
+    const bMatch = b.projectTypeId === project.projectTypeId ? 0 : 1;
+    return aMatch !== bMatch ? aMatch - bMatch : a.name.localeCompare(b.name);
+  });
+
+  const templateIds = templateRows.map((row) => row.id);
+  const templateTaskRows =
+    templateIds.length === 0
+      ? []
+      : await db
+          .select()
+          .from(scheduleTemplateTasks)
+          .where(
+            and(
+              inArray(scheduleTemplateTasks.scheduleTemplateId, templateIds),
+              ne(scheduleTemplateTasks.recordStatus, 'void'),
+            ),
+          )
+          .orderBy(asc(scheduleTemplateTasks.scheduleTemplateId), asc(scheduleTemplateTasks.sortOrder));
+
+  // Resolved once, here, so the sheet never has to look a rate item up to
+  // explain a greyed row -- see `templateReasonText` in `schema.ts`.
+  const conditionRateItemIds = [
+    ...new Set(
+      templateTaskRows
+        .map((row) => row.conditionRateItemId)
+        .filter((id): id is string => id !== null),
+    ),
+  ];
+  const rateItemCodeRows =
+    conditionRateItemIds.length === 0
+      ? []
+      : await db
+          .select({ id: rateItems.id, code: rateItems.code })
+          .from(rateItems)
+          .where(inArray(rateItems.id, conditionRateItemIds));
+  const rateItemCodeById = new Map(rateItemCodeRows.map((row) => [row.id, row.code]));
+
+  const templateTasksByTemplate: Record<string, ImportTemplateTaskWire[]> = {};
+  for (const row of templateTaskRows) {
+    const wire: ImportTemplateTaskWire = {
+      id: row.id,
+      name: row.name,
+      tradeName: row.tradeId ? (tradeById.get(row.tradeId)?.name ?? null) : null,
+      sortOrder: row.sortOrder,
+      isMilestone: row.isMilestone,
+      durationBaseDays: row.durationBaseDays,
+      durationSource: row.durationSource,
+      durationAreaPerDayMilli:
+        row.durationAreaPerDayMilli === null ? null : row.durationAreaPerDayMilli.toString(),
+      durationDaysPerUnit: row.durationDaysPerUnit,
+      predecessorTaskId: row.predecessorTaskId,
+      lagDays: row.lagDays,
+      conditionMeasurement: row.conditionMeasurement,
+      conditionRateItemId: row.conditionRateItemId,
+      conditionRateItemCode: row.conditionRateItemId
+        ? (rateItemCodeById.get(row.conditionRateItemId) ?? null)
+        : null,
+    };
+    const list = templateTasksByTemplate[row.scheduleTemplateId];
+    if (list) list.push(wire);
+    else templateTasksByTemplate[row.scheduleTemplateId] = [wire];
+  }
+
+  const templateOptions: ImportTemplateOption[] = templateRows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    projectTypeName: row.projectTypeName,
+    taskCount: (templateTasksByTemplate[row.id] ?? []).length,
+  }));
+
+  /**
+   * Section 6.2, and the correction the spec makes twice: measurements come
+   * from the accepted ESTIMATE (sequence 1) only -- a change order carries
+   * none -- but a rate-item condition reads included, non-void lines from
+   * EVERY accepted, active quote on the project, estimate and change orders
+   * alike, because a change order's lines are contract scope.
+   */
+  const acceptedQuoteRows = await db
+    .select({
+      id: quotes.id,
+      kind: quotes.kind,
+      sequence: quotes.sequence,
+      quoteNumber: quotes.quoteNumber,
+      washroomCount: quotes.washroomCount,
+      kitchenCount: quotes.kitchenCount,
+      bedroomCount: quotes.bedroomCount,
+      areaSqftMilli: quotes.areaSqftMilli,
+    })
+    .from(quotes)
+    .where(
+      and(
+        eq(quotes.projectId, project.id),
+        eq(quotes.status, 'accepted'),
+        eq(quotes.recordStatus, 'active'),
+      ),
+    )
+    .orderBy(asc(quotes.sequence));
+
+  const estimateRow = acceptedQuoteRows.find((row) => row.kind === 'estimate' && row.sequence === 1) ?? null;
+
+  const includedRateItemRows =
+    acceptedQuoteRows.length === 0
+      ? []
+      : await db
+          .select({ rateItemId: quoteLines.rateItemId })
+          .from(quoteLines)
+          .where(
+            and(
+              inArray(quoteLines.quoteId, acceptedQuoteRows.map((row) => row.id)),
+              eq(quoteLines.isIncluded, true),
+              ne(quoteLines.recordStatus, 'void'),
+            ),
+          );
+
+  const scopeEvidence: ScopeEvidenceWire = {
+    hasAcceptedQuote: acceptedQuoteRows.length > 0,
+    washroomCount: estimateRow?.washroomCount ?? 0,
+    kitchenCount: estimateRow?.kitchenCount ?? 0,
+    bedroomCount: estimateRow?.bedroomCount ?? 0,
+    areaSqftMilli: (estimateRow?.areaSqftMilli ?? 0n).toString(),
+    includedRateItemIds: [
+      ...new Set(
+        includedRateItemRows.map((row) => row.rateItemId).filter((id): id is string => id !== null),
+      ),
+    ],
+    acceptedQuoteNumbers: acceptedQuoteRows.map((row) => row.quoteNumber),
+    estimateQuoteNumber: estimateRow?.quoteNumber ?? null,
+  };
 
   /* -----------------------------------------------------------------------
      Who is on each task
@@ -707,67 +869,81 @@ export default async function SchedulePage({
         title="Schedule"
         description="A task can wait on one other task; move it and everything behind shifts too."
         actions={
-          <SheetButton
-            trigger="Add task"
-            variant="primary"
-            label="Add a task to this schedule"
-            title="Add a task"
-            subtitle={project.name}
-            discardPrompt="Throw away this task? Nothing has been saved yet."
-          >
-            <ActionForm
-              action={createTask}
-              submitLabel="Add task"
-              disabled={!allowed}
-              disabledNote={state.actor ? REFUSAL : (state.reason ?? undefined)}
-              resetOnSuccess
-            >
-              <input type="hidden" name="projectId" value={project.id} />
-              <FieldGrid>
-                <TaskFields
-                  idPrefix="new-task"
-                  disabled={!allowed}
-                  tradeOptions={tradeOptions()}
-                  costCodeOptions={costCodeOptions()}
-                  predecessorOptions={predecessorOptions()}
-                />
-                <TextField
-                  idPrefix="new-task"
-                  name="plannedStart"
-                  label="Starts"
-                  type="date"
-                  required
-                  defaultValue={today}
-                  disabled={!allowed}
-                />
-                <TextField
-                  idPrefix="new-task"
-                  name="plannedEnd"
-                  label="Finishes"
-                  type="date"
-                  required
-                  defaultValue={today}
-                  disabled={!allowed}
-                  hint="Inclusive — same date twice is one day. Weekends count."
-                />
-                <CheckboxField
-                  idPrefix="new-task"
-                  name="isMilestone"
-                  label="This is a milestone, not a span of work"
-                  disabled={!allowed}
-                  wide
-                  hint="A permit, inspection or delivery — one day, not a span. Finish date matches start."
-                />
-              </FieldGrid>
-              <TextAreaField
-                idPrefix="new-task"
-                name="notes"
-                label="Notes"
-                rows={2}
-                disabled={!allowed}
+          <>
+            {templateOptions.length > 0 ? (
+              <ImportTemplateSheet
+                projectId={project.id}
+                today={today}
+                locale={locale}
+                templates={templateOptions}
+                tasksByTemplate={templateTasksByTemplate}
+                scopeEvidence={scopeEvidence}
+                allowed={allowed}
+                disabledNote={state.actor ? REFUSAL : (state.reason ?? undefined)}
               />
-            </ActionForm>
-          </SheetButton>
+            ) : null}
+            <SheetButton
+              trigger="Add task"
+              variant="primary"
+              label="Add a task to this schedule"
+              title="Add a task"
+              subtitle={project.name}
+              discardPrompt="Throw away this task? Nothing has been saved yet."
+            >
+              <ActionForm
+                action={createTask}
+                submitLabel="Add task"
+                disabled={!allowed}
+                disabledNote={state.actor ? REFUSAL : (state.reason ?? undefined)}
+                resetOnSuccess
+              >
+                <input type="hidden" name="projectId" value={project.id} />
+                <FieldGrid>
+                  <TaskFields
+                    idPrefix="new-task"
+                    disabled={!allowed}
+                    tradeOptions={tradeOptions()}
+                    costCodeOptions={costCodeOptions()}
+                    predecessorOptions={predecessorOptions()}
+                  />
+                  <TextField
+                    idPrefix="new-task"
+                    name="plannedStart"
+                    label="Starts"
+                    type="date"
+                    required
+                    defaultValue={today}
+                    disabled={!allowed}
+                  />
+                  <TextField
+                    idPrefix="new-task"
+                    name="plannedEnd"
+                    label="Finishes"
+                    type="date"
+                    required
+                    defaultValue={today}
+                    disabled={!allowed}
+                    hint="Inclusive — same date twice is one day. Weekends count."
+                  />
+                  <CheckboxField
+                    idPrefix="new-task"
+                    name="isMilestone"
+                    label="This is a milestone, not a span of work"
+                    disabled={!allowed}
+                    wide
+                    hint="A permit, inspection or delivery — one day, not a span. Finish date matches start."
+                  />
+                </FieldGrid>
+                <TextAreaField
+                  idPrefix="new-task"
+                  name="notes"
+                  label="Notes"
+                  rows={2}
+                  disabled={!allowed}
+                />
+              </ActionForm>
+            </SheetButton>
+          </>
         }
       />
 

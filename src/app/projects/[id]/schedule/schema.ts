@@ -4,6 +4,16 @@ import { isoDate, optionalText, requiredText } from '@/app/settings/validate';
 import { parseAmountToCents } from '@/lib/money/format';
 import { daysBetween, durationDays } from '@/lib/schedule/calendar';
 import type { HeldTask, TaskMove } from '@/lib/schedule/push';
+import {
+  conditionOutcome,
+  isSuggested,
+  type ConditionMeasurement,
+  type ConditionOutcome,
+  type DurationSource,
+  type Scope,
+  type ScopeEvidence,
+  type TemplateTask,
+} from '@/lib/schedule/template';
 import type { Tone } from '@/components/ui/Pill';
 import { isUuid } from '@/lib/ids';
 
@@ -624,3 +634,163 @@ export function centsToInput(cents: number): string {
   const digits = String(Math.abs(cents)).padStart(3, '0');
   return `${cents < 0 ? '-' : ''}${digits.slice(0, -2)}.${digits.slice(-2)}`;
 }
+
+/* -------------------------------------------------------------------------
+   Importing a schedule template -- spec
+   docs/superpowers/specs/2026-09-05-schedule-templates-design.md, section 7.
+   ------------------------------------------------------------------------- */
+
+/**
+ * A schedule template offered in the picker (section 7.1).
+ *
+ * Active templates only, matching the job's own project type sorted first --
+ * "not filtered to them: a basement template is a reasonable start for a rec
+ * room." The sort happens in the page, which is the one place that already
+ * knows the job's `projectTypeId`; this is just what survives onto the wire.
+ */
+export interface ImportTemplateOption {
+  id: string;
+  name: string;
+  projectTypeName: string;
+  taskCount: number;
+}
+
+/**
+ * One template task, wire-shaped for the client sheet.
+ *
+ * `durationAreaPerDayMilli` crosses the server/client boundary as a string --
+ * a Server Component cannot hand a client one a `bigint` prop -- and
+ * `templateTaskOf` below converts it back with `BigInt(...)` before anything
+ * calls into `src/lib/schedule/template.ts`. Every other field matches
+ * `TemplateTask` there column for column, plus the display-only trade name
+ * and resolved rate item code neither pure function needs.
+ */
+export interface ImportTemplateTaskWire {
+  id: string;
+  name: string;
+  tradeName: string | null;
+  sortOrder: number;
+  isMilestone: boolean;
+  durationBaseDays: number;
+  durationSource: DurationSource;
+  durationAreaPerDayMilli: string | null;
+  durationDaysPerUnit: number | null;
+  predecessorTaskId: string | null;
+  lagDays: number;
+  conditionMeasurement: ConditionMeasurement | null;
+  conditionRateItemId: string | null;
+  /** Resolved once, in the page, so the sheet never has to look a rate item up to explain itself. */
+  conditionRateItemCode: string | null;
+}
+
+/** The one conversion the engine needs: the wire shape back to `TemplateTask`. */
+export function templateTaskOf(row: ImportTemplateTaskWire): TemplateTask {
+  return {
+    id: row.id,
+    name: row.name,
+    sortOrder: row.sortOrder,
+    isMilestone: row.isMilestone,
+    durationBaseDays: row.durationBaseDays,
+    durationSource: row.durationSource,
+    durationAreaPerDayMilli:
+      row.durationAreaPerDayMilli === null ? null : BigInt(row.durationAreaPerDayMilli),
+    durationDaysPerUnit: row.durationDaysPerUnit,
+    predecessorTaskId: row.predecessorTaskId,
+    lagDays: row.lagDays,
+    conditionMeasurement: row.conditionMeasurement,
+    conditionRateItemId: row.conditionRateItemId,
+  };
+}
+
+/**
+ * The job's scope evidence, wire-shaped -- section 6.2.
+ *
+ * `areaSqftMilli` is a string for the reason above. `acceptedQuoteNumbers` and
+ * `estimateQuoteNumber` are not read by the engine at all; they exist so the
+ * sheet can name the quote a reason is about, the way the spec's own example
+ * does: *"No line on QT-2026-0001 carries TILE-SHWR."*
+ */
+export interface ScopeEvidenceWire {
+  hasAcceptedQuote: boolean;
+  washroomCount: number;
+  kitchenCount: number;
+  bedroomCount: number;
+  areaSqftMilli: string;
+  includedRateItemIds: string[];
+  acceptedQuoteNumbers: string[];
+  estimateQuoteNumber: string | null;
+}
+
+export function scopeEvidenceOf(wire: ScopeEvidenceWire): ScopeEvidence {
+  const scope: Scope = {
+    areaSqftMilli: BigInt(wire.areaSqftMilli),
+    washroomCount: wire.washroomCount,
+    kitchenCount: wire.kitchenCount,
+    bedroomCount: wire.bedroomCount,
+  };
+  return {
+    scope,
+    includedRateItemIds: new Set(wire.includedRateItemIds),
+    hasAcceptedQuote: wire.hasAcceptedQuote,
+  };
+}
+
+/** Every task the evidence suggests, ticked -- the sheet's opening state (section 7.3). */
+export function initialTickedIds(
+  tasks: readonly ImportTemplateTaskWire[],
+  evidence: ScopeEvidence,
+): Set<string> {
+  const ticked = new Set<string>();
+  for (const row of tasks) {
+    if (isSuggested(conditionOutcome(templateTaskOf(row), evidence))) ticked.add(row.id);
+  }
+  return ticked;
+}
+
+/** "Excavation and Site survey", never an Oxford comma this product does not use elsewhere. */
+function andJoin(items: readonly string[]): string {
+  if (items.length <= 1) return items[0] ?? '';
+  return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
+}
+
+/**
+ * A per-row fact, never the paragraph explaining why (section 7.3, and
+ * section 9 is explicit that the reasoning stays in the design document).
+ * `null` for a matching row -- ticked by default, no grey, nothing to say.
+ */
+export function templateReasonText(
+  outcome: ConditionOutcome,
+  ctx: {
+    estimateQuoteNumber: string | null;
+    acceptedQuoteNumbers: readonly string[];
+    conditionRateItemCode: string | null;
+  },
+): string | null {
+  if (isSuggested(outcome)) return null;
+  switch (outcome.kind) {
+    case 'noAcceptedQuote':
+      return 'No accepted quote on this job.';
+    case 'measurement':
+      return `No ${outcome.measurement} on ${ctx.estimateQuoteNumber ?? 'this quote'}.`;
+    case 'rateItem':
+      return `No line on ${andJoin(ctx.acceptedQuoteNumbers)} carries ${
+        ctx.conditionRateItemCode ?? 'the item this task needs'
+      }.`;
+    default:
+      return null;
+  }
+}
+
+/**
+ * "Drywall will wait on Site survey instead." -- the consequence section 7.4
+ * requires be stated, in the same words the spec itself uses. Never shown for
+ * an untouched link: the caller only calls this once `relinked` is true.
+ */
+export function relinkedNote(taskName: string, newPredecessorName: string | null): string {
+  return newPredecessorName === null
+    ? `${taskName} will start on its own instead.`
+    : `${taskName} will wait on ${newPredecessorName} instead.`;
+}
+
+/** The fact section 7.4 requires be stated when a negative lag is clamped across a re-link. */
+export const LAG_CLAMPED_NOTE = 'The overlap this task had planned is dropped.';
