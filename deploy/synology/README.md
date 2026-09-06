@@ -106,8 +106,8 @@ Then edit `.env` and set, at minimum:
 | Variable | What to set it to |
 |---|---|
 | `SCOPELINE_DATA` | The folder every bind mount hangs off. `/volume1/docker/scopeline` unless Container Manager lives on another volume — see above. |
-| `POSTGRES_PASSWORD` | Output of `openssl rand -base64 32`. The compose file refuses to start without this. |
-| `INTERNAL_RENDER_SECRET` | Output of `openssl rand -base64 48`. Also required to start. |
+| `POSTGRES_PASSWORD` | Output of `openssl rand -hex 32`. The compose file refuses to start without this. |
+| `INTERNAL_RENDER_SECRET` | Output of `openssl rand -hex 48`. Also required to start. |
 | `LOCAL_USER_EMAIL` | The address you'll sign in as. See the note below — what this needs to be depends on `SEED_DEMO`. |
 | `APP_PORT` | Only if the default (`38080`) collides with something else already running on this NAS. |
 
