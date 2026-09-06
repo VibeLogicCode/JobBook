@@ -23,10 +23,9 @@ import { listTimeline } from '@/lib/reminders/repository';
 import {
   CUSTOMER_TYPES, PROJECT_STAGES, isLiveStage, stageTone,
 } from '@/components/detail/labels';
+import { isUuid } from '@/lib/ids';
 
 export const dynamic = 'force-dynamic';
-
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** `cache()`-wrapped so `generateMetadata` and the page share this one read. */
 const loadCustomerRecord = cache(async (id: string) => {
@@ -41,7 +40,7 @@ export async function generateMetadata({
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
   const { id } = await params;
-  if (!UUID.test(id)) return { title: 'Customer' };
+  if (!isUuid(id)) return { title: 'Customer' };
   try {
     const customer = await loadCustomerRecord(id);
     return { title: customer ? customer.name : 'Customer' };
@@ -62,7 +61,7 @@ export default async function CustomerPage({
 
   // A malformed id is a wrong URL, not a server fault. Postgres rejects a
   // non-uuid outright, so without this the answer to a typo is a 500.
-  if (!UUID.test(id)) notFound();
+  if (!isUuid(id)) notFound();
 
   const customer = await loadCustomerRecord(id);
   if (!customer) notFound();

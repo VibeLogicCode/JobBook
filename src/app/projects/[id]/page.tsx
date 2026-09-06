@@ -26,10 +26,9 @@ import { listTimeline } from '@/lib/reminders/repository';
 import {
   CONTRACT_TYPES, PROJECT_STAGES, stageTone, workNoun,
 } from '@/components/detail/labels';
+import { isUuid } from '@/lib/ids';
 
 export const dynamic = 'force-dynamic';
-
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * The job, its customer and its derived contract value -- the one query this
@@ -78,7 +77,7 @@ export async function generateMetadata({
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
   const { id } = await params;
-  if (!UUID.test(id)) return { title: 'Job' };
+  if (!isUuid(id)) return { title: 'Job' };
   try {
     const job = await loadProjectRecord(id);
     return { title: job ? `${job.project.projectNumber} — ${job.project.name}` : 'Job' };
@@ -99,7 +98,7 @@ export default async function ProjectPage({
 
   // A malformed id is a wrong URL, not a server fault. Postgres rejects a
   // non-uuid outright, so without this the answer to a typo is a 500.
-  if (!UUID.test(id)) notFound();
+  if (!isUuid(id)) notFound();
 
   const job = await loadProjectRecord(id);
 

@@ -41,6 +41,7 @@ import { Card } from '@/components/ui/Card';
 import { FilterBar, NoMatches, filterHref, type FilterSelect } from '@/components/ui/FilterBar';
 import { Notice } from '@/components/ui/Notice';
 import { PageHeader } from '@/components/ui/PageHeader';
+import { isUuid } from '@/lib/ids';
 
 export const dynamic = 'force-dynamic';
 
@@ -71,8 +72,6 @@ export const metadata: Metadata = {
 function one(raw: string | string[] | undefined): string {
   return (Array.isArray(raw) ? raw[0] : raw) ?? '';
 }
-
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** "Excavation, Site survey and Kitchen rough-in" — the warning's list of tasks. */
 function andList(items: readonly string[]): string {
@@ -350,7 +349,7 @@ export default async function CalendarPage({
      The one task the URL has open
      ----------------------------------------------------------------------- */
 
-  const open = UUID.test(openTaskId) ? await loadOpenTask(openTaskId, locale, roster) : null;
+  const open = isUuid(openTaskId) ? await loadOpenTask(openTaskId, locale, roster) : null;
   const openJobIsVoid = open?.project.recordStatus === 'void';
   const allowed = state.actor ? can(state.actor.role, 'quote:write') && !openJobIsVoid : false;
   const mayVoid = state.actor ? can(state.actor.role, 'record:void') && !openJobIsVoid : false;

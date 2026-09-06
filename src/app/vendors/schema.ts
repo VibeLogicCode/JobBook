@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { optionalInt, optionalText, requiredText } from '@/app/settings/validate';
+import { UUID, isUuid } from '@/lib/ids';
 
 /**
  * The shape a vendor arrives in from a form, plus the one rule about the name
@@ -48,8 +49,6 @@ const nameField = z
   .refine((value) => value !== '', 'is required')
   .refine((value) => value.length <= 200, 'must be 200 characters or fewer');
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 /**
  * A blankable id, refused unless it looks like one.
  *
@@ -62,7 +61,7 @@ const optionalUuid = (message: string) =>
   z
     .string()
     .transform((value) => value.trim())
-    .refine((value) => value === '' || UUID.test(value), message)
+    .refine((value) => value === '' || isUuid(value), message)
     .transform((value) => (value === '' ? null : value));
 
 /**

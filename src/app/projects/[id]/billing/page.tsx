@@ -31,6 +31,7 @@ import {
 } from '@/lib/invoice/repository';
 import type { InvoiceKind } from '@/lib/invoice/types';
 import { formatCents } from '@/lib/money/format';
+import { isUuid } from '@/lib/ids';
 
 /**
  * Billing a job.
@@ -56,8 +57,6 @@ import { formatCents } from '@/lib/money/format';
  */
 
 export const dynamic = 'force-dynamic';
-
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** Every kind the engine can bill, so a row written by another path still reads. */
 const INVOICE_KINDS: Record<InvoiceKind, string> = {
@@ -112,7 +111,7 @@ export async function generateMetadata({
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
   const { id } = await params;
-  if (!UUID.test(id)) return { title: 'Billing' };
+  if (!isUuid(id)) return { title: 'Billing' };
   try {
     const job = await loadBillingJob(id);
     return { title: job ? `Billing — ${job.project.projectNumber}` : 'Billing' };
@@ -131,7 +130,7 @@ export default async function BillingPage({
   const { id: projectId } = await params;
   // A malformed id is a wrong URL, not a server fault: Postgres rejects a
   // non-uuid outright, so without this the answer to a typo is a 500.
-  if (!UUID.test(projectId)) notFound();
+  if (!isUuid(projectId)) notFound();
 
   const { kind: rawKind, percent: rawPercent, issue: rawIssue, issued } = await searchParams;
 

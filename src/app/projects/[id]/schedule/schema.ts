@@ -5,6 +5,7 @@ import { parseAmountToCents } from '@/lib/money/format';
 import { daysBetween, durationDays } from '@/lib/schedule/calendar';
 import type { HeldTask, TaskMove } from '@/lib/schedule/push';
 import type { Tone } from '@/components/ui/Pill';
+import { isUuid } from '@/lib/ids';
 
 /**
  * What a schedule task arrives as from a form, and what the screen says about
@@ -325,22 +326,6 @@ export const ASSIGNMENT_LABELS: Record<string, string> = {
   reason: 'Reason',
 };
 
-/**
- * WHO, as one select value.
- *
- * The database holds two nullable foreign keys with a check that exactly one
- * is set (see `db/schema/assignments.ts`), and a form cannot submit that shape
- * without two controls that have to agree. So the picker is ONE control whose
- * options are prefixed -- `vendor:<uuid>` or `user:<uuid>` -- and this is where
- * the prefix is taken apart, once, on the way in.
- *
- * The prefix is not a magic string standing in for a person. It names WHICH
- * TABLE the id belongs to, which is the one thing a uuid does not carry, and
- * the action then resolves it against that table inside its own transaction.
- * "Me" is `user:<the owner's own id>` and nothing about it is special.
- */
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 export type AssigneeKind = 'vendor' | 'user';
 export interface Assignee {
   kind: AssigneeKind;
@@ -358,7 +343,7 @@ export function parseAssignee(raw: string): Assignee | null {
   const kind = raw.slice(0, separator);
   const id = raw.slice(separator + 1);
   if (kind !== 'vendor' && kind !== 'user') return null;
-  if (!UUID.test(id)) return null;
+  if (!isUuid(id)) return null;
   return { kind, id };
 }
 

@@ -28,6 +28,7 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { Section } from '@/components/settings/Section';
 import { Pill } from '@/components/ui/Pill';
 import { SheetButton } from '@/components/ui/Sheet';
+import { isUuid } from '@/lib/ids';
 
 export const dynamic = 'force-dynamic';
 
@@ -44,6 +45,9 @@ export async function generateMetadata({
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
   const { id } = await params;
+  // A mistyped URL is a 404, not a 500: an id of the wrong shape reaches the
+  // driver as `invalid input syntax for type uuid` and surfaces as an error page.
+  if (!isUuid(id)) notFound();
   try {
     const template = await loadScheduleTemplate(id);
     return { title: template && template.recordStatus !== 'void' ? template.name : 'Template' };
@@ -79,6 +83,9 @@ export default async function ScheduleTemplateDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  // A mistyped URL is a 404, not a 500: an id of the wrong shape reaches the
+  // driver as `invalid input syntax for type uuid` and surfaces as an error page.
+  if (!isUuid(id)) notFound();
   const state = await resolveActor();
   const allowed = state.actor ? can(state.actor.role, 'rates:edit') : false;
   const mayVoid = state.actor ? can(state.actor.role, 'record:void') : false;
