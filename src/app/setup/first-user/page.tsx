@@ -103,19 +103,46 @@ export default async function FirstUserStepPage() {
             placeholder="The person's name"
             hint="Shown in the application. It is not used to decide anything."
           />
-          <TextField
-            name="email"
-            label="Email"
-            type="email"
-            inputMode="email"
-            required
-            maxLength={200}
-            defaultValue={existing?.email ?? verifiedEmail ?? ''}
-            placeholder="The address they sign in with"
-            // After a first successful sign-in, authentication keys on the
-            // provider's stable subject instead, because an email changes.
-            hint="The row's unique identity — after first sign-in, authentication keys on the provider's subject instead."
-          />
+          {/*
+            In LOCAL mode the address is not a choice, so the form does not
+            pretend to offer one.
+
+            Local mode resolves every request to the one address the
+            deployment names, and authorization is a lookup of that address in
+            `users` -- local mode is not exempt. So an owner row created under
+            any OTHER address locks the deployment out the moment setup
+            finishes: the wizard closes, the app looks up an address with no
+            row behind it, and the only way back in is editing the compose
+            file. The field was already prefilled with the right value; making
+            it editable only ever offered somebody the chance to be wrong.
+
+            It is a real input under the other modes, where a provider asserts
+            the address and this row has to match what the provider will say.
+          */}
+          {mode === 'local' && verifiedEmail ? (
+            <>
+              <input type="hidden" name="email" value={verifiedEmail} />
+              <ReadOnlyField
+                label="Email"
+                value={verifiedEmail}
+                hint="Set by this deployment's configuration, not here. Change it in the compose file and restart, and this follows."
+              />
+            </>
+          ) : (
+            <TextField
+              name="email"
+              label="Email"
+              type="email"
+              inputMode="email"
+              required
+              maxLength={200}
+              defaultValue={existing?.email ?? verifiedEmail ?? ''}
+              placeholder="The address they sign in with"
+              // After a first successful sign-in, authentication keys on the
+              // provider's stable subject instead, because an email changes.
+              hint="The row's unique identity — after first sign-in, authentication keys on the provider's subject instead."
+            />
+          )}
           <ReadOnlyField
             label="Role"
             value="Owner"
