@@ -42,7 +42,7 @@ services:
       # Bind mount, not a named volume: this is the one directory that must be
       # findable, and backupable by hand, from File Station if everything else
       # about Docker on this box is ever forgotten.
-      - /volume1/docker/scopeline/db:/var/lib/postgresql/data
+      - ${SCOPELINE_DATA:-/volume1/docker/scopeline}/db:/var/lib/postgresql/data
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U quote']
       interval: 5s
@@ -118,12 +118,12 @@ services:
       # terminating TLS in front of it.
       - '${APP_BIND:-0.0.0.0}:${APP_PORT:-38080}:3000'
     volumes:
-      - /volume1/docker/scopeline/files:/data/files
-      - /volume1/docker/scopeline/backups:/data/backups
+      - ${SCOPELINE_DATA:-/volume1/docker/scopeline}/files:/data/files
+      - ${SCOPELINE_DATA:-/volume1/docker/scopeline}/backups:/data/backups
       # Where the setup wizard writes the deployment configuration. A file
       # rather than database rows, because these are credentials and a
       # database row is mirrored to SharePoint and lands in every backup.
-      - /volume1/docker/scopeline/config:/data/config
+      - ${SCOPELINE_DATA:-/volume1/docker/scopeline}/config:/data/config
       # The USB drive attached to the NAS, at the same path BACKUP_USB_DIR
       # names. Commented out rather than guessed: an unset host path silently
       # becomes an anonymous volume, which is a backup destination on the same
@@ -175,8 +175,8 @@ services:
     volumes:
       # Reads the same uploaded files the app writes, and writes into the same
       # backup volume, so one artifact set exists rather than two.
-      - /volume1/docker/scopeline/files:/data/files:ro
-      - /volume1/docker/scopeline/backups:/data/backups
+      - ${SCOPELINE_DATA:-/volume1/docker/scopeline}/files:/data/files:ro
+      - ${SCOPELINE_DATA:-/volume1/docker/scopeline}/backups:/data/backups
       # - /volumeUSB1/usbshare/scopeline-backup:/mnt/backup
     # on-failure, not unless-stopped: an unconfigured key is a permanent
     # condition, and a container that restarts forever on the same fatal

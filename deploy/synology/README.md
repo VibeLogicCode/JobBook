@@ -58,6 +58,19 @@ between versions before, so if it doesn't match what you see, trust the SSH
 command above over this description — it does not depend on which DSM
 version you're running.
 
+## Which volume?
+
+**Check this before you create anything.** A Synology's first storage volume
+is `/volume1`, but that is not always where Container Manager was installed —
+a NAS whose packages went onto a second pool keeps them under `/volume2`.
+Pointing a bind mount at a volume the package does not live on surfaces later
+as a database that will not start, which is a poor way to learn it.
+
+Look at **Package Center > Container Manager** (or Storage Manager) and set
+`SCOPELINE_DATA` in `.env` to match — `/volume2/docker/scopeline` if that is
+where yours is. Every path below hangs off it, and the examples say
+`/volume1/...` only because something has to be written down.
+
 ## Creating the folders
 
 Do this before the first `up`, not after. Bind mounts (below) do not create
@@ -103,6 +116,7 @@ Then edit `.env` and set, at minimum:
 
 | Variable | What to set it to |
 |---|---|
+| `SCOPELINE_DATA` | The folder every bind mount hangs off. `/volume1/docker/scopeline` unless Container Manager lives on another volume — see above. |
 | `POSTGRES_PASSWORD` | Output of `openssl rand -base64 32`. The compose file refuses to start without this. |
 | `INTERNAL_RENDER_SECRET` | Output of `openssl rand -base64 48`. Also required to start. |
 | `LOCAL_USER_EMAIL` | The address you'll sign in as. See the note below — what this needs to be depends on `SEED_DEMO`. |
