@@ -200,17 +200,6 @@ export const reminderTriggerEnum = pgEnum('reminder_trigger', [
 export const expenseKindEnum = pgEnum('expense_kind', ['purchase', 'mileage']);
 
 /**
- * How the money left. NOT how it was categorised -- that is `cost_code_id`.
- *
- * 'account' is a supplier account billed monthly, which is the one member that
- * is not an instrument: it says the money has not left yet, which is what the
- * Phase 4 payables view will read.
- */
-export const paymentMethodEnum = pgEnum('payment_method', [
-  'cash', 'debit', 'credit', 'cheque', 'etransfer', 'account',
-]);
-
-/**
  * Where the row came from. 'ocr' and 'import' are created here and left
  * unused, deliberately: the plan's third decision defers reading receipts, and
  * adding this column later would be a migration against a table that by then

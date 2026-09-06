@@ -4,10 +4,11 @@ import {
 } from 'drizzle-orm/pg-core';
 import { auditColumns, cents, qty, rate } from '@/db/columns';
 import {
-  expenseKindEnum, expenseSourceEnum, expenseStatusEnum, paymentMethodEnum,
+  expenseKindEnum, expenseSourceEnum, expenseStatusEnum,
 } from '@/db/enums';
 import { costCodes, projects } from '@/db/schema/customers';
 import { customerInvoices } from '@/db/schema/invoices';
+import { paymentMethods } from '@/db/schema/payment-methods';
 import { files } from '@/db/schema/system';
 import { vendors } from '@/db/schema/vendors';
 
@@ -93,8 +94,17 @@ export const expenses = pgTable('expenses', {
   taxTotalCents: cents('tax_total_cents').notNull().default(0),
   totalCents: cents('total_cents').notNull().default(0),
 
-  /** Null on a mileage row: an allowance for driving is not paid by any instrument. */
-  paymentMethod: paymentMethodEnum('payment_method'),
+  /**
+   * How the money left. NOT how it was categorised -- that is `cost_code_id`.
+   *
+   * Null on a mileage row: an allowance for driving is not paid by any
+   * instrument. A live reference into `payment_methods` rather than an enum
+   * (migration 0019, following `vendor_type_id` and `cost_code_id`): the
+   * owner is free to add his own methods, and `payment_methods.is_on_account`
+   * -- not this column's name -- is what any future code asks to learn
+   * whether the money has left yet.
+   */
+  paymentMethodId: uuid('payment_method_id').references(() => paymentMethods.id),
   /**
    * The photograph or scan. Null on a mileage row, and the form does not ask.
    *
@@ -183,6 +193,8 @@ export const expenses = pgTable('expenses', {
   // Grouped by code, across jobs: the "what did concrete cost this year"
   // question the accountant export answers.
   index('expenses_cost_code_idx').on(t.costCodeId),
+  // What the payment methods screen counts to decide whether voiding one is refused.
+  index('expenses_payment_method_idx').on(t.paymentMethodId),
 
   // The identity the whole row rests on. Get it wrong and a job's cost is out
   // by the tax on every receipt, which is the error least likely to be spotted
@@ -198,7 +210,7 @@ export const expenses = pgTable('expenses', {
           when 'mileage' then
             vendor_id is null
             and receipt_file_id is null
-            and payment_method is null
+            and payment_method_id is null
             and vendor_tax_number_captured is null
             and tax_total_cents = 0
             and is_billable = false

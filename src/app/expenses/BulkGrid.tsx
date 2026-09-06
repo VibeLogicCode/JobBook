@@ -3,7 +3,7 @@
 import { useActionState, useEffect, useRef, useState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { createExpenseBatch } from '@/app/expenses/actions';
-import { BATCH_ROWS, PAYMENT_METHODS } from '@/app/expenses/schema';
+import { BATCH_ROWS } from '@/app/expenses/schema';
 import type { ActionResult } from '@/app/settings/result';
 import type { Option } from '@/components/settings/Fields';
 import { Button } from '@/components/ui/Button';
@@ -37,6 +37,7 @@ export function BulkGrid({
   projectOptions,
   vendorOptions,
   codeOptions,
+  paymentMethodOptions,
   taxOptions,
   defaultProjectId,
 }: {
@@ -46,6 +47,7 @@ export function BulkGrid({
   projectOptions: Option[];
   vendorOptions: Option[];
   codeOptions: Option[];
+  paymentMethodOptions: Option[];
   /** The taxes in force. Empty when none is configured, and then no picker is shown. */
   taxOptions: Option[];
   defaultProjectId: string;
@@ -216,9 +218,9 @@ export function BulkGrid({
                 <td data-label="Paid by">
                   <select {...cell(`r${index}_pay`, `Row ${row} paid by`)}>
                     <option value="">Not said</option>
-                    {PAYMENT_METHODS.map((method) => (
-                      <option key={method.value} value={method.value}>
-                        {method.label}
+                    {paymentMethodOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
                       </option>
                     ))}
                   </select>

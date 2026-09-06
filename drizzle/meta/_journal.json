@@ -134,6 +134,13 @@
       "when": 1788663263879,
       "tag": "0018_zippy_rick_jones",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1788668290969,
+      "tag": "0019_payment_methods",
+      "breakpoints": true
     }
   ]
 }

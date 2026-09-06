@@ -5,7 +5,8 @@ import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { db } from '@/db/client';
 import {
-  costCodes, expenseTaxes, expenses, files, organization, projects, taxRates, vendors,
+  costCodes, expenseTaxes, expenses, files, organization, paymentMethods, projects, taxRates,
+  vendors,
 } from '@/db/schema';
 import { guard } from '@/lib/auth/guard';
 import { type ActionResult, refused, saved } from '@/app/settings/result';
@@ -160,6 +161,29 @@ async function requireCostCode(tx: Tx, id: string | null): Promise<{ code: strin
     );
   }
   return { code: row.code };
+}
+
+/**
+ * The payment method. Retired is accepted for the same reason a retired
+ * vendor or cost code is: a method the owner stopped offering still describes
+ * how a receipt in hand was actually paid. Void is refused, because a method
+ * that should never have existed cannot truthfully describe how anything was
+ * paid.
+ */
+async function requirePaymentMethod(tx: Tx, id: string | null): Promise<{ name: string } | null> {
+  if (id === null) return null;
+  const [row] = await tx
+    .select({ name: paymentMethods.name, recordStatus: paymentMethods.recordStatus })
+    .from(paymentMethods)
+    .where(eq(paymentMethods.id, id));
+
+  if (!row) throw new RuleError('That payment method is not on the list.');
+  if (row.recordStatus === 'void') {
+    throw new RuleError(
+      `${row.name} is void, so an expense should not be recorded against it. Choose a method that still stands, or leave it blank.`,
+    );
+  }
+  return { name: row.name };
 }
 
 /**
@@ -393,6 +417,7 @@ export async function createExpense(
       const project = await requireProject(tx, input.projectId);
       const vendor = await requireVendor(tx, input.vendorId);
       await requireCostCode(tx, input.costCodeId);
+      await requirePaymentMethod(tx, input.paymentMethodId);
       await refuseFutureDate(tx, input.expenseDate);
 
       const resolved = await resolveTaxLines(tx, lines, input.expenseDate);
@@ -411,7 +436,7 @@ export async function createExpense(
           subtotalCents: input.subtotal,
           taxTotalCents,
           totalCents,
-          paymentMethod: input.paymentMethod,
+          paymentMethodId: input.paymentMethodId,
           receiptFileId,
           vendorTaxNumberCaptured: input.vendorTaxNumberCaptured,
           source: 'manual',
@@ -630,6 +655,7 @@ export async function createExpenseBatch(
       for (const row of read.rows) {
         await requireVendor(tx, row.vendorId);
         await requireCostCode(tx, row.costCodeId);
+        await requirePaymentMethod(tx, row.paymentMethodId);
         await refuseFutureDate(tx, row.expenseDate);
 
         const mismatch = signMismatch(row.subtotalCents, row.taxCents);
@@ -667,7 +693,7 @@ export async function createExpenseBatch(
             subtotalCents: row.subtotalCents,
             taxTotalCents: row.taxCents,
             totalCents: rowTotal,
-            paymentMethod: row.paymentMethod,
+            paymentMethodId: row.paymentMethodId,
             source: 'manual',
             status: 'posted',
             createdBy: allowed.actor.id,

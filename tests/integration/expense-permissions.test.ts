@@ -73,7 +73,7 @@ function purchase(fields: Record<string, string>): FormData {
     vendorId: '',
     costCodeId: '',
     reference: '',
-    paymentMethod: '',
+    paymentMethodId: '',
     vendorTaxNumberCaptured: '',
     notes: '',
     ...fields,

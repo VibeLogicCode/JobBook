@@ -229,6 +229,8 @@ describe('the bulk grid', () => {
     expect(errors).toEqual([]);
   });
 
+  const DEBIT = '44444444-4444-4444-8444-444444444444';
+
   it('reads a complete row', () => {
     const { rows, errors } = readBatchRows(
       batchRow(0, {
@@ -236,7 +238,7 @@ describe('the bulk grid', () => {
         desc: '  2x4   studs ',
         sub: '$1,234.50',
         tax: '160.49',
-        pay: 'debit',
+        pay: DEBIT,
         ref: 'A-9912',
       }),
     );
@@ -249,7 +251,7 @@ describe('the bulk grid', () => {
       description: '2x4 studs',
       subtotalCents: 123450,
       taxCents: 16049,
-      paymentMethod: 'debit',
+      paymentMethodId: DEBIT,
       reference: 'A-9912',
       vendorId: null,
       costCodeId: null,
@@ -282,6 +284,15 @@ describe('the bulk grid', () => {
       batchRow(0, { date: '2026-08-14', desc: 'Studs', sub: '10.00', vendor: 'not-a-uuid' }),
     );
     expect(errors.map((error) => error.field)).toEqual(['r0_vendor']);
+  });
+
+  it('refuses a payment method that is not an id, the same way a vendor is', () => {
+    // Payment methods live in a table now, not a fixed enum — this function
+    // has no database to check the id against, so it can only shape it.
+    const { errors } = readBatchRows(
+      batchRow(0, { date: '2026-08-14', desc: 'Studs', sub: '10.00', pay: 'cash' }),
+    );
+    expect(errors.map((error) => error.field)).toEqual(['r0_pay']);
   });
 
   it('reads a credit row all the way through', () => {
@@ -317,7 +328,7 @@ describe('the expense form', () => {
     description: 'Framing lumber',
     reference: '',
     subtotal: '1234.50',
-    paymentMethod: '',
+    paymentMethodId: '',
     vendorTaxNumberCaptured: '',
     notes: '',
   };
@@ -331,7 +342,7 @@ describe('the expense form', () => {
     expect(parsed.success).toBe(true);
     expect(parsed.data?.vendorId).toBeNull();
     expect(parsed.data?.costCodeId).toBeNull();
-    expect(parsed.data?.paymentMethod).toBeNull();
+    expect(parsed.data?.paymentMethodId).toBeNull();
   });
 
   it('reads an absent billable checkbox as off', () => {

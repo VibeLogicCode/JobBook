@@ -220,7 +220,7 @@ export const EXPENSE_LABELS: Record<string, string> = {
   description: 'Description',
   reference: 'Receipt number',
   subtotal: 'Subtotal',
-  paymentMethod: 'Paid by',
+  paymentMethodId: 'Paid by',
   vendorTaxNumberCaptured: 'Tax number on the receipt',
   isBillable: 'Billable to the customer',
   notes: 'Notes',
@@ -229,22 +229,6 @@ export const EXPENSE_LABELS: Record<string, string> = {
   reason: 'Reason',
   taxes: 'Tax',
 };
-
-export const PAYMENT_METHODS = [
-  { value: 'cash', label: 'Cash' },
-  { value: 'debit', label: 'Debit' },
-  { value: 'credit', label: 'Credit card' },
-  { value: 'cheque', label: 'Cheque' },
-  { value: 'etransfer', label: 'Transfer' },
-  { value: 'account', label: 'On account — not paid yet' },
-] as const;
-
-export type PaymentMethod = (typeof PAYMENT_METHODS)[number]['value'];
-
-const paymentMethodValues = PAYMENT_METHODS.map((entry) => entry.value) as [
-  PaymentMethod,
-  ...PaymentMethod[],
-];
 
 /** An ISO date as `<input type="date">` submits it, refusing 2026-02-31. */
 const isoDate = z
@@ -293,18 +277,13 @@ export const purchaseFields = z.object({
   reference: optionalText(100),
   subtotal: amountField(),
   /**
-   * Blank AND absent both mean "not said", and they have to, because they are
-   * the same fact arriving two ways: a select left on its empty option posts
-   * an empty string, and a form that has not grown the control yet posts
-   * nothing at all. An enum that accepted only the first turns a missing
-   * control into "Paid by: Invalid input", which is a sentence about a box
-   * that is not on the screen.
+   * A live reference into `payment_methods`, shaped like `vendorId` and
+   * `costCodeId` rather than matched against a fixed set of strings -- see
+   * `db/schema/payment-methods.ts` for why this stopped being an enum. The
+   * action re-reads it inside its transaction anyway, so this only refuses
+   * something that could not possibly be an id.
    */
-  paymentMethod: z
-    .enum(paymentMethodValues)
-    .or(z.literal(''))
-    .optional()
-    .transform((value) => (value === '' || value === undefined ? null : value)),
+  paymentMethodId: optionalUuid,
   /**
    * Copied off the paper, never looked up from the vendor. See the column's
    * note: the claim is evidenced by what the receipt said on the day.
@@ -467,10 +446,6 @@ export function expenseStatusLabel(status: string): string {
   }
 }
 
-export function paymentMethodLabel(method: string | null): string {
-  return PAYMENT_METHODS.find((entry) => entry.value === method)?.label ?? '—';
-}
-
 /* -------------------------------------------------------------------------
    Bulk entry
    ------------------------------------------------------------------------- */
@@ -496,7 +471,7 @@ export interface BatchRow {
   reference: string | null;
   subtotalCents: number;
   taxCents: number;
-  paymentMethod: PaymentMethod | null;
+  paymentMethodId: string | null;
 }
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -565,9 +540,12 @@ export function readBatchRows(values: Record<string, string>): {
     const codeRaw = at('code');
     if (codeRaw !== '' && !uuidPattern.test(codeRaw)) push('code', 'is not on the list');
 
+    // A live id, like `vendor` and `code` above, and validated the same way:
+    // shaped rather than looked up here, because this function is pure and
+    // has no database to check it against. The action re-reads it inside its
+    // transaction.
     const payRaw = at('pay');
-    const paymentMethod = PAYMENT_METHODS.find((entry) => entry.value === payRaw)?.value ?? null;
-    if (payRaw !== '' && paymentMethod === null) push('pay', 'is not a way money leaves');
+    if (payRaw !== '' && !uuidPattern.test(payRaw)) push('pay', 'is not on the list');
 
     if (errors.some((error) => error.field.startsWith(`r${index}_`))) continue;
 
@@ -580,7 +558,7 @@ export function readBatchRows(values: Record<string, string>): {
       reference: reference === '' ? null : reference,
       subtotalCents: subtotalCents!,
       taxCents: taxCents!,
-      paymentMethod,
+      paymentMethodId: payRaw === '' ? null : payRaw,
     });
   }
 

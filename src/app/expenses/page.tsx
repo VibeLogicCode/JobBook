@@ -4,21 +4,20 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { db } from '@/db/client';
 import {
-  costCodes, expenseTaxes, expenses, files, organization, projects, taxRates, vendors,
+  costCodes, expenseTaxes, expenses, files, organization, paymentMethods, projects, taxRates,
+  vendors,
 } from '@/db/schema';
 import { resolveActor } from '@/app/settings/actor';
 import { can } from '@/lib/auth/permissions';
 import { createExpense, createMileage, voidExpense } from '@/app/expenses/actions';
 import { BulkGrid } from '@/app/expenses/BulkGrid';
 import {
-  PAYMENT_METHODS,
   RECEIPT_ACCEPT,
   RECEIPT_MAX_BYTES,
   expenseStatusLabel,
   formatDistance,
   formatRatePerKm,
   mileageSummary,
-  paymentMethodLabel,
 } from '@/app/expenses/schema';
 import { formatBytes } from '@/app/settings/identity/logo/logo';
 import { ActionForm } from '@/components/settings/ActionForm';
@@ -176,6 +175,26 @@ export default async function ExpensesPage({
     label: `${row.code} — ${row.name}${row.isActive ? '' : ' (retired)'}`,
   }));
 
+  const paymentMethodRows = await db
+    .select({
+      id: paymentMethods.id,
+      name: paymentMethods.name,
+      isOnAccount: paymentMethods.isOnAccount,
+      isActive: paymentMethods.isActive,
+    })
+    .from(paymentMethods)
+    .where(ne(paymentMethods.recordStatus, 'void'))
+    .orderBy(asc(paymentMethods.sortOrder), asc(paymentMethods.name));
+
+  // "On account" is not a label here — `isOnAccount` is read straight off the
+  // row to grow the hint, so a deployment's own on-account method (a second
+  // supplier account, a line of credit) reads the same way this one does,
+  // with nothing matching its name.
+  const paymentMethodOptions: Option[] = paymentMethodRows.map((row) => ({
+    value: row.id,
+    label: `${row.name}${row.isOnAccount ? ' — not paid yet' : ''}${row.isActive ? '' : ' (retired)'}`,
+  }));
+
   // The taxes the form offers. In force TODAY, because that is what a form
   // rendered today can know; the action resolves each against the rate that
   // was in force on the receipt's own date before it snapshots one.
@@ -212,7 +231,8 @@ export default async function ExpensesPage({
       subtotalCents: expenses.subtotalCents,
       taxTotalCents: expenses.taxTotalCents,
       totalCents: expenses.totalCents,
-      paymentMethod: expenses.paymentMethod,
+      paymentMethodId: expenses.paymentMethodId,
+      paymentMethodName: paymentMethods.name,
       receiptFileId: expenses.receiptFileId,
       // Read from the file row rather than assumed from the expense, because a
       // receipt is now a PNG, a JPEG or a PDF and only the first two are
@@ -240,6 +260,7 @@ export default async function ExpensesPage({
     .innerJoin(projects, eq(projects.id, expenses.projectId))
     .leftJoin(vendors, eq(vendors.id, expenses.vendorId))
     .leftJoin(costCodes, eq(costCodes.id, expenses.costCodeId))
+    .leftJoin(paymentMethods, eq(paymentMethods.id, expenses.paymentMethodId))
     .leftJoin(files, eq(files.id, expenses.receiptFileId))
     .where(
       and(
@@ -465,13 +486,10 @@ export default async function ExpensesPage({
           />
           <SelectField
             idPrefix="new-expense"
-            name="paymentMethod"
+            name="paymentMethodId"
             label="Paid by"
             defaultValue=""
-            options={PAYMENT_METHODS.map((method) => ({
-              value: method.value,
-              label: method.label,
-            }))}
+            options={paymentMethodOptions}
             blankLabel="Not said"
             disabled={!allowed}
             hint="How the money left. On account means it hasn't left yet."
@@ -677,6 +695,7 @@ export default async function ExpensesPage({
         projectOptions={projectOptions}
         vendorOptions={vendorOptions}
         codeOptions={codeOptions}
+        paymentMethodOptions={paymentMethodOptions}
         taxOptions={inForce.map((row) => ({ value: row.id, label: row.label }))}
         defaultProjectId={projectFilter}
       />
@@ -896,7 +915,7 @@ export default async function ExpensesPage({
                     {row.costCode === null ? 'Not coded' : `${row.costCode} — ${row.costCodeName}`}
                   </td>
                   <td data-label="Paid by" className="t-small text-muted">
-                    {isMileage ? 'An allowance, not a payment' : paymentMethodLabel(row.paymentMethod)}
+                    {isMileage ? 'An allowance, not a payment' : (row.paymentMethodName ?? '—')}
                   </td>
                   <AmountCell data-label="Subtotal" cents={row.subtotalCents} />
                   <AmountCell data-label="Tax" cents={row.taxTotalCents} />

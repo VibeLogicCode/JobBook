@@ -14,19 +14,19 @@ import type { NavGroup } from '@/components/settings/SettingsNav';
  * - **The company** -- who it is, how to reach it, where it is, what it owes,
  *   what it prints. Facts about the company itself, changed rarely.
  * - **Lists** -- every taxonomy a working screen is built against: rates,
- *   codes, types, trades, groups, project types, lead sources. Tax rates
- *   moves here from "the company" for the reason financial and legal keeps
- *   the tax REGISTRATION number and not the rate table: a registration number
- *   is a fact about the company, and a rate is a row you add to, exactly like
- *   a cost code or a trade.
+ *   codes, types, trades, groups, project types, lead sources, payment
+ *   methods. Tax rates moves here from "the company" for the reason financial
+ *   and legal keeps the tax REGISTRATION number and not the rate table: a
+ *   registration number is a fact about the company, and a rate is a row you
+ *   add to, exactly like a cost code or a trade.
  * - **Access and automation** -- who may touch any of it, and the one setting
  *   that writes rows on its own rather than merely deciding what a document
  *   says.
  *
- * Project types and lead sources land at the end of Lists rather than
- * reshuffling the taxonomies already there, for the same reason line groups
- * did: the order among a run of lists means nothing, and a picker somebody
- * hunts a list for looks in the run, not at its position within it.
+ * Project types, lead sources and payment methods land at the end of Lists
+ * rather than reshuffling the taxonomies already there, for the same reason
+ * line groups did: the order among a run of lists means nothing, and a picker
+ * somebody hunts a list for looks in the run, not at its position within it.
  */
 export const SETTINGS_GROUPS: NavGroup[] = [
   {
@@ -96,6 +96,11 @@ export const SETTINGS_GROUPS: NavGroup[] = [
         href: '/settings/lead-sources',
         label: 'Lead sources',
         summary: 'How a customer found you. Retiring one never blanks the customer who has it.',
+      },
+      {
+        href: '/settings/payment-methods',
+        label: 'Payment methods',
+        summary: 'How money leaves. One of them means the money has not left yet.',
       },
     ],
   },
