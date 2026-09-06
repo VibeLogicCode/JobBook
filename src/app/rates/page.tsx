@@ -9,22 +9,17 @@ import {
   updateRateItem,
   voidRateItem,
 } from '@/app/rates/actions';
-import { CALC_MODE_OPTIONS } from '@/app/rates/schema';
 import { ImportPanel } from '@/app/rates/ImportPanel';
 import { ActionForm, RowAction } from '@/components/settings/ActionForm';
-import {
-  CheckboxField,
-  FieldGrid,
-  SelectField,
-  TextField,
-} from '@/components/settings/Fields';
+import { FieldGrid, TextField } from '@/components/settings/Fields';
 import { Section } from '@/components/settings/Section';
+import { RateItemFields } from '@/components/rates/RateItemFields';
 import { Notice } from '@/components/ui/Notice';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Pill } from '@/components/ui/Pill';
 import { SheetButton } from '@/components/ui/Sheet';
 import { AmountCell, TableWrap } from '@/components/ui/Table';
-import { formatBasisPoints, formatQty, formatRate } from '@/lib/money/format';
+import { formatBasisPoints, formatRate } from '@/lib/money/format';
 import { marginBasisPoints } from '@/lib/money/scale';
 
 export const dynamic = 'force-dynamic';
@@ -115,6 +110,35 @@ export default async function RatesPage() {
         className="mb-4"
         title="Rates"
         description="One list per deployment. Editing a rate never moves a quote already written."
+        actions={
+          // A press, then the form over a blurred page -- the same shape the
+          // owner asked for twice, and the shape the row below already uses
+          // for "Change...". A form sitting at the foot of the table, below
+          // everything already priced, was the split he was naming.
+          <SheetButton
+            trigger="Add a rate item"
+            variant="primary"
+            label="Add a rate item"
+            title="Add a rate item"
+            discardPrompt="Throw away this rate item? Nothing has been saved yet."
+          >
+            <ActionForm
+              action={createRateItem}
+              submitLabel="Add rate item"
+              disabled={!allowed}
+              disabledNote={state.actor ? REFUSAL : (state.reason ?? undefined)}
+              resetOnSuccess
+            >
+              <FieldGrid>
+                <RateItemFields
+                  idPrefix="new-rate"
+                  costCodeOptions={costCodeOptions}
+                  disabled={!allowed}
+                />
+              </FieldGrid>
+            </ActionForm>
+          </SheetButton>
+        }
       />
 
       <div className="flex flex-col gap-4">
@@ -143,7 +167,7 @@ export default async function RatesPage() {
               {rows.length === 0 ? (
                 <tr>
                   <td data-label="Description" colSpan={9}>
-                    Nothing priced yet. Add one below, or paste a whole price list into the
+                    Nothing priced yet. Add one above, or paste a whole price list into the
                     importer — a quote can still be built line by line without any.
                   </td>
                 </tr>
@@ -224,121 +248,16 @@ export default async function RatesPage() {
                             >
                               <input type="hidden" name="id" value={item.id} />
                               <FieldGrid>
-                                <TextField
+                                <RateItemFields
                                   idPrefix={`edit-${item.id}`}
-                                  name="code"
-                                  label="Code"
-                                  required
-                                  maxLength={60}
-                                  defaultValue={item.code}
-                                  disabled={!allowed || isVoid}
-                                  hint="Unique across the one list."
-                                />
-                                <TextField
-                                  idPrefix={`edit-${item.id}`}
-                                  name="description"
-                                  label="Description"
-                                  required
-                                  maxLength={500}
-                                  defaultValue={item.description}
-                                  disabled={!allowed || isVoid}
-                                  hint="What a quote line says by default."
-                                />
-                                <SelectField
-                                  idPrefix={`edit-${item.id}`}
-                                  name="calcMode"
-                                  label="How it calculates"
-                                  required
-                                  defaultValue={item.calcMode}
-                                  options={CALC_MODE_OPTIONS}
-                                  disabled={!allowed || isVoid}
-                                />
-                                <TextField
-                                  idPrefix={`edit-${item.id}`}
-                                  name="unitLabel"
-                                  label="Unit"
-                                  maxLength={20}
-                                  defaultValue={item.unitLabel}
-                                  disabled={!allowed || isVoid}
-                                  hint="Display only — sqft, lnft, ea, hr. It never affects the arithmetic."
-                                />
-                                <TextField
-                                  idPrefix={`edit-${item.id}`}
-                                  name="costRate"
-                                  label="Cost"
-                                  numeric
-                                  inputMode="decimal"
-                                  maxLength={20}
-                                  defaultValue={formatRate(item.costRateTenThou)}
-                                  disabled={!allowed || isVoid}
-                                  hint="What it costs you. Never printed on a customer document."
-                                />
-                                <TextField
-                                  idPrefix={`edit-${item.id}`}
-                                  name="sellRate"
-                                  label="Sell"
-                                  required
-                                  numeric
-                                  inputMode="decimal"
-                                  maxLength={20}
-                                  defaultValue={formatRate(item.sellRateTenThou)}
-                                  disabled={!allowed || isVoid}
-                                  hint="Negative is allowed, and is how a discount line is written."
-                                />
-                                <SelectField
-                                  idPrefix={`edit-${item.id}`}
-                                  name="costCodeId"
-                                  label="Cost code"
-                                  defaultValue={item.costCodeId}
-                                  options={optionsFor(item.costCodeId)}
-                                  blankLabel="Not costed"
-                                  disabled={!allowed || isVoid}
-                                  hint={
+                                  item={item}
+                                  costCodeOptions={optionsFor(item.costCodeId)}
+                                  costCodeHint={
                                     costCodeNote
                                       ? `Coded to a ${costCodeNote} cost code; stays until you pick another.`
                                       : undefined
                                   }
-                                />
-                                <TextField
-                                  idPrefix={`edit-${item.id}`}
-                                  name="defaultQty"
-                                  label="Default quantity"
-                                  numeric
-                                  inputMode="decimal"
-                                  maxLength={20}
-                                  defaultValue={
-                                    item.defaultQtyMilli === null
-                                      ? ''
-                                      : formatQty(item.defaultQtyMilli)
-                                  }
                                   disabled={!allowed || isVoid}
-                                  hint="Filled in when added to a quote; blank to type one each time."
-                                />
-                                <TextField
-                                  idPrefix={`edit-${item.id}`}
-                                  name="sortOrder"
-                                  label="Order"
-                                  numeric
-                                  inputMode="numeric"
-                                  maxLength={6}
-                                  defaultValue={String(item.sortOrder)}
-                                  disabled={!allowed || isVoid}
-                                />
-                                <CheckboxField
-                                  idPrefix={`edit-${item.id}`}
-                                  name="isTaxable"
-                                  label="Tax applies to this item"
-                                  defaultChecked={item.isTaxable}
-                                  disabled={!allowed || isVoid}
-                                  hint="Off for a pass-through such as a municipal permit fee."
-                                />
-                                <CheckboxField
-                                  idPrefix={`edit-${item.id}`}
-                                  name="isAllowance"
-                                  label="This is an allowance"
-                                  defaultChecked={item.isAllowance}
-                                  disabled={!allowed || isVoid}
-                                  hint="A placeholder the customer can spend, reconciled against actual cost later."
                                 />
                               </FieldGrid>
                             </ActionForm>
@@ -412,126 +331,6 @@ export default async function RatesPage() {
               })}
             </tbody>
           </TableWrap>
-        </Section>
-
-        <Section
-          title="Add a rate item"
-          description={
-            <p>
-              One line, by hand. A whole list at once goes through the importer below.
-            </p>
-          }
-        >
-          <ActionForm
-            action={createRateItem}
-            submitLabel="Add rate item"
-            disabled={!allowed}
-            disabledNote={state.actor ? REFUSAL : (state.reason ?? undefined)}
-            resetOnSuccess
-          >
-            <FieldGrid>
-              <TextField
-                idPrefix="new-rate"
-                name="code"
-                label="Code"
-                required
-                maxLength={60}
-                disabled={!allowed}
-                hint="Unique across the one list."
-              />
-              <TextField
-                idPrefix="new-rate"
-                name="description"
-                label="Description"
-                required
-                maxLength={500}
-                disabled={!allowed}
-                hint="What a quote line says by default."
-              />
-              <SelectField
-                idPrefix="new-rate"
-                name="calcMode"
-                label="How it calculates"
-                required
-                defaultValue="qty"
-                options={CALC_MODE_OPTIONS}
-                disabled={!allowed}
-                hint="Quantity multiplies; flat ignores quantity; percent applies to another figure."
-              />
-              <TextField
-                idPrefix="new-rate"
-                name="unitLabel"
-                label="Unit"
-                maxLength={20}
-                disabled={!allowed}
-                hint="Display only — sqft, lnft, ea, hr. It never affects the arithmetic."
-              />
-              <TextField
-                idPrefix="new-rate"
-                name="costRate"
-                label="Cost"
-                numeric
-                inputMode="decimal"
-                maxLength={20}
-                disabled={!allowed}
-                hint="To four decimals. Blank records as zero, and the margin will read 100%."
-              />
-              <TextField
-                idPrefix="new-rate"
-                name="sellRate"
-                label="Sell"
-                required
-                numeric
-                inputMode="decimal"
-                maxLength={20}
-                disabled={!allowed}
-                hint="Negative is allowed, and is how a discount line is written."
-              />
-              <SelectField
-                idPrefix="new-rate"
-                name="costCodeId"
-                label="Cost code"
-                options={costCodeOptions}
-                blankLabel="Not costed"
-                disabled={!allowed}
-              />
-              <TextField
-                idPrefix="new-rate"
-                name="defaultQty"
-                label="Default quantity"
-                numeric
-                inputMode="decimal"
-                maxLength={20}
-                disabled={!allowed}
-                hint="Optional, never negative — a reduction is typed as a negative price."
-              />
-              <TextField
-                idPrefix="new-rate"
-                name="sortOrder"
-                label="Order"
-                numeric
-                inputMode="numeric"
-                maxLength={6}
-                defaultValue="0"
-                disabled={!allowed}
-              />
-              <CheckboxField
-                idPrefix="new-rate"
-                name="isTaxable"
-                label="Tax applies to this item"
-                defaultChecked
-                disabled={!allowed}
-                hint="Off for a pass-through such as a municipal permit fee."
-              />
-              <CheckboxField
-                idPrefix="new-rate"
-                name="isAllowance"
-                label="This is an allowance"
-                disabled={!allowed}
-                hint="A placeholder the customer can spend, reconciled against actual cost later."
-              />
-            </FieldGrid>
-          </ActionForm>
         </Section>
 
         <Section

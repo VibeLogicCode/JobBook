@@ -11,10 +11,19 @@ import { Card } from '@/components/ui/Card';
 export function Section({
   title,
   description,
+  actions,
   children,
 }: {
   title: string;
   description?: React.ReactNode;
+  /**
+   * A control that belongs to this section rather than to the page --
+   * the `SheetButton` that adds a row to the table below it, most often.
+   * Lives beside the title for the same reason `PageHeader`'s own `actions`
+   * does: the control that adds a row is a property of the section, and a
+   * section's controls sit at the top of it rather than below its table.
+   */
+  actions?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
@@ -25,7 +34,10 @@ export function Section({
     // `CardHeader`'s ruled band would draw a line between the reason and the
     // fields it is the reason for.
     <Card className="p-4 sm:p-5">
-      <h2 className="t-heading">{title}</h2>
+      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+        <h2 className="t-heading">{title}</h2>
+        {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
+      </div>
       {description ? (
         <div className="mt-1 mb-4 max-w-prose t-small text-muted">{description}</div>
       ) : (

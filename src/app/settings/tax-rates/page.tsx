@@ -10,7 +10,8 @@ import {
   supersedeTaxRate,
 } from '@/app/settings/tax-rates/actions';
 import { ActionForm, RowAction } from '@/components/settings/ActionForm';
-import { CheckboxField, FieldGrid, TextField } from '@/components/settings/Fields';
+import { FieldGrid } from '@/components/settings/Fields';
+import { TaxRateAmountFields, TaxRatePresentationFields } from '@/components/settings/TaxRateFields';
 import { Notice } from '@/components/ui/Notice';
 import { Section } from '@/components/settings/Section';
 import { Pill } from '@/components/ui/Pill';
@@ -99,6 +100,32 @@ export default async function TaxRatesPage() {
             </p>
           </>
         }
+        actions={
+          // A press, then the form over a blurred page -- the same shape
+          // "Change..." already uses on the row below, rather than a form
+          // sitting at the foot of the table. To *change* an existing rate,
+          // the row above is still the way in -- this keeps the history.
+          <SheetButton
+            trigger="Add a rate"
+            variant="primary"
+            label="Add a tax rate"
+            title="Add a rate"
+            discardPrompt="Throw away this rate? Nothing has been saved yet."
+          >
+            <ActionForm
+              action={addTaxRate}
+              submitLabel="Add rate"
+              disabled={!allowed}
+              disabledNote={state.actor ? OWNER_ONLY : (state.reason ?? undefined)}
+              resetOnSuccess
+            >
+              <FieldGrid>
+                <TaxRateAmountFields idPrefix="new-rate" disabled={!allowed} />
+                <TaxRatePresentationFields idPrefix="new-rate" disabled={!allowed} />
+              </FieldGrid>
+            </ActionForm>
+          </SheetButton>
+        }
       >
         {/*
          * A quote's own snapshot protects documents already sent, while these
@@ -139,7 +166,7 @@ export default async function TaxRatesPage() {
             {rows.length === 0 ? (
               <tr>
                 <td data-label="Label" colSpan={9}>
-                  No tax rates yet. Add the first one below. A deployment in a jurisdiction
+                  No tax rates yet. Add the first one above. A deployment in a jurisdiction
                   with no sales tax leaves this list empty, and quotes simply carry no tax
                   line.
                 </td>
@@ -224,25 +251,10 @@ export default async function TaxRatesPage() {
                           >
                             <input type="hidden" name="id" value={row.id} />
                             <FieldGrid>
-                              <TextField
+                              <TaxRateAmountFields
                                 idPrefix={`supersede-${row.id}`}
-                                name="rate"
-                                label="New rate"
-                                required
-                                numeric
-                                inputMode="decimal"
-                                suffix="%"
-                                maxLength={8}
+                                supersede
                                 disabled={!allowed || closed}
-                              />
-                              <TextField
-                                idPrefix={`supersede-${row.id}`}
-                                name="effectiveFrom"
-                                label="Takes effect on"
-                                type="date"
-                                required
-                                disabled={!allowed || closed}
-                                hint="The first day the new rate applies. It must be after this row's start date."
                               />
                             </FieldGrid>
                           </ActionForm>
@@ -262,56 +274,10 @@ export default async function TaxRatesPage() {
                           >
                             <input type="hidden" name="id" value={row.id} />
                             <FieldGrid>
-                              <TextField
+                              <TaxRatePresentationFields
                                 idPrefix={`edit-${row.id}`}
-                                name="label"
-                                label="Label"
-                                required
-                                maxLength={50}
-                                defaultValue={row.label}
+                                row={row}
                                 disabled={!allowed}
-                                hint="Printed on the document beside the amount."
-                              />
-                              <TextField
-                                idPrefix={`edit-${row.id}`}
-                                name="shortLabel"
-                                label="Short label"
-                                maxLength={20}
-                                defaultValue={row.shortLabel}
-                                disabled={!allowed}
-                                hint="For a narrow column, where the full label will not fit."
-                              />
-                              <TextField
-                                idPrefix={`edit-${row.id}`}
-                                name="registrationNumber"
-                                label="Registration number"
-                                maxLength={50}
-                                numeric
-                                defaultValue={row.registrationNumber}
-                                disabled={!allowed}
-                              />
-                              <TextField
-                                idPrefix={`edit-${row.id}`}
-                                name="sortOrder"
-                                label="Order"
-                                required
-                                numeric
-                                inputMode="numeric"
-                                maxLength={3}
-                                defaultValue={String(row.sortOrder)}
-                                disabled={!allowed}
-                                hint="Application order. It matters when a compound tax is in the list."
-                              />
-                              <CheckboxField
-                                idPrefix={`edit-${row.id}`}
-                                name="isCompound"
-                                label="Applies on the subtotal plus taxes already added"
-                                defaultChecked={row.isCompound}
-                                disabled={!allowed}
-                                wide
-                                // No current Canadian jurisdiction compounds;
-                                // one historically did.
-                                hint="Evaluates after every non-compound tax, in the order above."
                               />
                             </FieldGrid>
                           </ActionForm>
@@ -345,91 +311,6 @@ export default async function TaxRatesPage() {
             })}
           </tbody>
         </TableWrap>
-      </Section>
-
-      <Section
-        title="Add a rate"
-        description={
-          <p>
-            To <em>change</em> an existing rate, use the row above instead — this keeps the
-            history.
-          </p>
-        }
-      >
-        <ActionForm
-          action={addTaxRate}
-          submitLabel="Add rate"
-          disabled={!allowed}
-          disabledNote={state.actor ? OWNER_ONLY : (state.reason ?? undefined)}
-          resetOnSuccess
-        >
-          <FieldGrid>
-            <TextField
-              idPrefix="new-rate"
-              name="label"
-              label="Label"
-              required
-              maxLength={50}
-              disabled={!allowed}
-              hint="As it prints on a document."
-            />
-            <TextField
-              idPrefix="new-rate"
-              name="shortLabel"
-              label="Short label"
-              maxLength={20}
-              disabled={!allowed}
-            />
-            <TextField
-              idPrefix="new-rate"
-              name="rate"
-              label="Rate"
-              required
-              numeric
-              inputMode="decimal"
-              suffix="%"
-              maxLength={8}
-              disabled={!allowed}
-              hint="Two decimal places at most."
-            />
-            <TextField
-              idPrefix="new-rate"
-              name="effectiveFrom"
-              label="In force from"
-              type="date"
-              required
-              disabled={!allowed}
-              hint="The first day this rate applies. Back-dating is allowed."
-            />
-            <TextField
-              idPrefix="new-rate"
-              name="registrationNumber"
-              label="Registration number"
-              maxLength={50}
-              numeric
-              disabled={!allowed}
-              hint="Printed beside this tax. It can differ from the company's other numbers."
-            />
-            <TextField
-              idPrefix="new-rate"
-              name="sortOrder"
-              label="Order"
-              required
-              numeric
-              inputMode="numeric"
-              maxLength={3}
-              defaultValue="1"
-              disabled={!allowed}
-            />
-            <CheckboxField
-              idPrefix="new-rate"
-              name="isCompound"
-              label="Applies on the subtotal plus taxes already added"
-              disabled={!allowed}
-              wide
-            />
-          </FieldGrid>
-        </ActionForm>
       </Section>
     </div>
   );

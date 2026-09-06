@@ -10,39 +10,29 @@ import {
   voidReminderRule,
 } from '@/app/settings/reminder-rules/actions';
 import {
-  FIELD_NOTES,
-  KIND_OPTIONS,
   STAGE_OPTIONS,
-  TEMPLATE_FIELDS,
   TRIGGER_LABELS,
   TRIGGER_NOTES,
   TRIGGER_OPTIONS,
-  directionOf,
   offsetPhrase,
 } from '@/app/settings/reminder-rules/schema';
 import { PROJECT_STAGES, type ProjectStage } from '@/components/detail/labels';
 import { REMINDER_KINDS } from '@/components/reminders/labels';
 import { ActionForm, RowAction } from '@/components/settings/ActionForm';
 import { FieldGrid, ReadOnlyField, SelectField, TextField } from '@/components/settings/Fields';
+import { ReminderRuleFields } from '@/components/settings/ReminderRuleFields';
 import { Section } from '@/components/settings/Section';
 import { Notice } from '@/components/ui/Notice';
 import { Pill } from '@/components/ui/Pill';
 import { Reveal } from '@/components/ui/Reveal';
 import { SheetButton } from '@/components/ui/Sheet';
 import { AmountCell, TableWrap } from '@/components/ui/Table';
-import type { ReminderTrigger } from '@/lib/reminders/types';
 
 export const dynamic = 'force-dynamic';
 
 const REFUSAL = 'Your role can read the reminder rules but not change them.';
 
 type RuleRow = typeof reminderRules.$inferSelect;
-
-/** The direction the offset controls default to when a rule is opened. */
-const DIRECTION_OPTIONS = [
-  { value: 'after', label: 'after' },
-  { value: 'before', label: 'before' },
-];
 
 /**
  * Grouped by what a rule watches, in the order a job actually goes through it:
@@ -65,23 +55,6 @@ function inReadingOrder(rows: RuleRow[]): RuleRow[] {
 /** One row per rule, counted once, rather than a count query per row. */
 function tally(rows: { id: string | null; n: number }[]): Map<string, number> {
   return new Map(rows.flatMap((row) => (row.id === null ? [] : [[row.id, row.n] as const])));
-}
-
-/** The placeholders this trigger can fill, spelled out rather than listed bare. */
-function placeholderHint(trigger: ReminderTrigger) {
-  return (
-    <>
-      A closed set of named fields, not a template language. “{TRIGGER_LABELS[trigger]}” can fill
-      in{' '}
-      {TEMPLATE_FIELDS[trigger].map((field, index) => (
-        <span key={field}>
-          {index > 0 ? ', ' : ''}
-          <span className="font-semibold">{`{${field}}`}</span> ({FIELD_NOTES[field]})
-        </span>
-      ))}
-      . Anything else is refused when you save.
-    </>
-  );
 }
 
 export default async function ReminderRulesPage() {
@@ -129,6 +102,51 @@ export default async function ReminderRulesPage() {
         description={
           <p>Runs hourly; at most one open reminder per rule per record.</p>
         }
+        actions={
+          // A press, then the form over a blurred page -- the same shape
+          // "Change..." already uses on the row below, rather than a form
+          // sitting at the foot of the page.
+          <SheetButton
+            trigger="Add a rule"
+            variant="primary"
+            label="Add a reminder rule"
+            title="Add a rule"
+            subtitle="Starts switched on. What it watches is fixed once chosen."
+            size="lg"
+            discardPrompt="Throw away this rule? Nothing has been saved yet."
+          >
+            <ActionForm
+              action={createReminderRule}
+              submitLabel="Add rule"
+              disabled={!allowed}
+              disabledNote={state.actor ? REFUSAL : (state.reason ?? undefined)}
+              resetOnSuccess
+            >
+              <FieldGrid>
+                <ReminderRuleFields idPrefix="new-rule" disabled={!allowed} />
+                <SelectField
+                  idPrefix="new-rule"
+                  name="trigger"
+                  label="Watches for"
+                  required
+                  options={TRIGGER_OPTIONS}
+                  blankLabel="Choose an event"
+                  disabled={!allowed}
+                  hint="Fixed once the rule exists. See what each one means, below."
+                />
+                <SelectField
+                  idPrefix="new-rule"
+                  name="triggerStage"
+                  label="Stage"
+                  options={STAGE_OPTIONS}
+                  blankLabel="Not a stage rule"
+                  disabled={!allowed}
+                  hint="Only for “A job entered a stage” — required there, ignored elsewhere."
+                />
+              </FieldGrid>
+            </ActionForm>
+          </SheetButton>
+        }
       >
         {state.actor ? null : (
           <div className="mb-3">
@@ -165,7 +183,7 @@ export default async function ReminderRulesPage() {
               <tr>
                 <td data-label="Rule" colSpan={8}>
                   No rules yet. The five shipped defaults are loaded by the hourly evaluation
-                  itself, so they appear here after the first run — or add one of your own below.
+                  itself, so they appear here after the first run — or add one of your own above.
                 </td>
               </tr>
             ) : null}
@@ -245,15 +263,10 @@ export default async function ReminderRulesPage() {
                           >
                             <input type="hidden" name="id" value={row.id} />
                             <FieldGrid>
-                              <TextField
+                              <ReminderRuleFields
                                 idPrefix={`edit-${row.id}`}
-                                name="name"
-                                label="Name"
-                                required
-                                maxLength={120}
-                                defaultValue={row.name}
+                                row={row}
                                 disabled={!allowed || isVoid}
-                                hint="What this rule is called on this screen. It is never printed on a reminder."
                               />
                               <div className="flex min-w-0 flex-col gap-1 self-start">
                                 <ReadOnlyField
@@ -266,28 +279,6 @@ export default async function ReminderRulesPage() {
                                   with. Switch this one off and add the one you meant instead.
                                 </Reveal>
                               </div>
-                              <TextField
-                                idPrefix={`edit-${row.id}`}
-                                name="offsetAmount"
-                                label="How long"
-                                required
-                                numeric
-                                inputMode="numeric"
-                                maxLength={3}
-                                defaultValue={String(Math.abs(row.offsetDays))}
-                                disabled={!allowed || isVoid}
-                                suffix="days"
-                                hint="Zero means the reminder is due on the day of the event itself."
-                              />
-                              <SelectField
-                                idPrefix={`edit-${row.id}`}
-                                name="offsetDirection"
-                                label="Before or after"
-                                defaultValue={directionOf(row.offsetDays)}
-                                options={DIRECTION_OPTIONS}
-                                disabled={!allowed || isVoid}
-                                hint={`Reads as: ${offsetPhrase(row.offsetDays, row.trigger)}.`}
-                              />
                               {watchesStage ? (
                                 <SelectField
                                   idPrefix={`edit-${row.id}`}
@@ -301,27 +292,6 @@ export default async function ReminderRulesPage() {
                                   hint="Required — a rule with no stage set watches nothing."
                                 />
                               ) : null}
-                              <SelectField
-                                idPrefix={`edit-${row.id}`}
-                                name="reminderKind"
-                                label="Kind of reminder"
-                                required
-                                defaultValue={row.reminderKind}
-                                options={KIND_OPTIONS}
-                                disabled={!allowed || isVoid}
-                                hint="Labels it on the list. Does not change when it fires."
-                              />
-                              <TextField
-                                idPrefix={`edit-${row.id}`}
-                                name="titleTemplate"
-                                label="What the reminder says"
-                                required
-                                maxLength={200}
-                                defaultValue={row.titleTemplate}
-                                disabled={!allowed || isVoid}
-                                wide
-                                hint={placeholderHint(row.trigger)}
-                              />
                             </FieldGrid>
                           </ActionForm>
                         </div>
@@ -430,92 +400,6 @@ export default async function ReminderRulesPage() {
             </div>
           ))}
         </dl>
-      </Section>
-
-      <Section
-        title="Add a rule"
-        description={<p>Starts switched on. What it watches is fixed once chosen.</p>}
-      >
-        <ActionForm
-          action={createReminderRule}
-          submitLabel="Add rule"
-          disabled={!allowed}
-          disabledNote={state.actor ? REFUSAL : (state.reason ?? undefined)}
-          resetOnSuccess
-        >
-          <FieldGrid>
-            <TextField
-              idPrefix="new-rule"
-              name="name"
-              label="Name"
-              required
-              maxLength={120}
-              disabled={!allowed}
-              hint="What you will call this rule when you come back to switch it off."
-            />
-            <SelectField
-              idPrefix="new-rule"
-              name="trigger"
-              label="Watches for"
-              required
-              options={TRIGGER_OPTIONS}
-              blankLabel="Choose an event"
-              disabled={!allowed}
-              hint="Fixed once the rule exists. See what each one means, above."
-            />
-            <TextField
-              idPrefix="new-rule"
-              name="offsetAmount"
-              label="How long"
-              required
-              numeric
-              inputMode="numeric"
-              maxLength={3}
-              defaultValue="3"
-              disabled={!allowed}
-              suffix="days"
-              hint="Zero means due the same day. A year is the ceiling."
-            />
-            <SelectField
-              idPrefix="new-rule"
-              name="offsetDirection"
-              label="Before or after"
-              required
-              defaultValue="after"
-              options={DIRECTION_OPTIONS}
-              disabled={!allowed}
-              hint="Before a deadline; after a silence."
-            />
-            <SelectField
-              idPrefix="new-rule"
-              name="triggerStage"
-              label="Stage"
-              options={STAGE_OPTIONS}
-              blankLabel="Not a stage rule"
-              disabled={!allowed}
-              hint="Only for “A job entered a stage” — required there, ignored elsewhere."
-            />
-            <SelectField
-              idPrefix="new-rule"
-              name="reminderKind"
-              label="Kind of reminder"
-              required
-              defaultValue="follow_up"
-              options={KIND_OPTIONS}
-              disabled={!allowed}
-            />
-            <TextField
-              idPrefix="new-rule"
-              name="titleTemplate"
-              label="What the reminder says"
-              required
-              maxLength={200}
-              disabled={!allowed}
-              wide
-              hint="One sentence; which placeholders work depends on the event chosen, above."
-            />
-          </FieldGrid>
-        </ActionForm>
       </Section>
     </div>
   );

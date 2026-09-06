@@ -12,6 +12,7 @@ import {
 } from '@/app/settings/line-groups/actions';
 import { ActionForm, RowAction } from '@/components/settings/ActionForm';
 import { FieldGrid, TextField } from '@/components/settings/Fields';
+import { LineGroupFields } from '@/components/settings/LineGroupFields';
 import { Section } from '@/components/settings/Section';
 import { Notice } from '@/components/ui/Notice';
 import { Pill } from '@/components/ui/Pill';
@@ -57,6 +58,30 @@ export default async function LineGroupsPage() {
         title="Line groups"
         description={
           <p>The section heading a quote prints. Bands the worksheet into the blocks a customer reads.</p>
+        }
+        actions={
+          // A press, then the form over a blurred page -- the same shape
+          // "Change..." already uses on the row below, rather than a form
+          // sitting at the foot of the table.
+          <SheetButton
+            trigger="Add a line group"
+            variant="primary"
+            label="Add a line group"
+            title="Add a line group"
+            discardPrompt="Throw away this line group? Nothing has been saved yet."
+          >
+            <ActionForm
+              action={createLineGroup}
+              submitLabel="Add line group"
+              disabled={!allowed}
+              disabledNote={state.actor ? REFUSAL : (state.reason ?? undefined)}
+              resetOnSuccess
+            >
+              <FieldGrid>
+                <LineGroupFields idPrefix="new-line-group" disabled={!allowed} />
+              </FieldGrid>
+            </ActionForm>
+          </SheetButton>
         }
       >
         {state.actor ? null : (
@@ -138,26 +163,10 @@ export default async function LineGroupsPage() {
                           >
                             <input type="hidden" name="id" value={row.id} />
                             <FieldGrid>
-                              <TextField
+                              <LineGroupFields
                                 idPrefix={`edit-${row.id}`}
-                                name="name"
-                                label="Name"
-                                required
-                                maxLength={120}
-                                defaultValue={row.name}
+                                row={row}
                                 disabled={!allowed || isVoid}
-                                hint="What prints on the quote, exactly as it should read."
-                              />
-                              <TextField
-                                idPrefix={`edit-${row.id}`}
-                                name="sortOrder"
-                                label="Order"
-                                numeric
-                                inputMode="numeric"
-                                maxLength={6}
-                                defaultValue={String(row.sortOrder)}
-                                disabled={!allowed || isVoid}
-                                hint="Where it sits in the picker. Equal numbers fall back to the name."
                               />
                             </FieldGrid>
                           </ActionForm>
@@ -230,42 +239,6 @@ export default async function LineGroupsPage() {
             })}
           </tbody>
         </TableWrap>
-      </Section>
-
-      <Section
-        title="Add a line group"
-        description={<p>Nothing is offered on a line until it exists here.</p>}
-      >
-        <ActionForm
-          action={createLineGroup}
-          submitLabel="Add line group"
-          disabled={!allowed}
-          disabledNote={state.actor ? REFUSAL : (state.reason ?? undefined)}
-          resetOnSuccess
-        >
-          <FieldGrid>
-            <TextField
-              idPrefix="new-line-group"
-              name="name"
-              label="Name"
-              required
-              maxLength={120}
-              disabled={!allowed}
-              hint="What it should say on the quote, exactly."
-            />
-            <TextField
-              idPrefix="new-line-group"
-              name="sortOrder"
-              label="Order"
-              numeric
-              inputMode="numeric"
-              maxLength={6}
-              defaultValue="0"
-              disabled={!allowed}
-              hint="Where it sits in the picker. Equal numbers fall back to the name."
-            />
-          </FieldGrid>
-        </ActionForm>
       </Section>
     </div>
   );

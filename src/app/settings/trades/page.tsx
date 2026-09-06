@@ -12,6 +12,7 @@ import {
 } from '@/app/settings/trades/actions';
 import { ActionForm, RowAction } from '@/components/settings/ActionForm';
 import { FieldGrid, TextField } from '@/components/settings/Fields';
+import { TradeFields } from '@/components/settings/TradeFields';
 import { Section } from '@/components/settings/Section';
 import { Notice } from '@/components/ui/Notice';
 import { Pill } from '@/components/ui/Pill';
@@ -76,6 +77,30 @@ export default async function TradesPage() {
         title="Trades"
         description={
           <p>Not the same as a cost code — a trade finds somebody; a cost code categorises the invoice.</p>
+        }
+        actions={
+          // A press, then the form over a blurred page -- the same shape
+          // "Change..." already uses on the row below, rather than a form
+          // sitting at the foot of the table.
+          <SheetButton
+            trigger="Add a trade"
+            variant="primary"
+            label="Add a trade"
+            title="Add a trade"
+            discardPrompt="Throw away this trade? Nothing has been saved yet."
+          >
+            <ActionForm
+              action={createTrade}
+              submitLabel="Add trade"
+              disabled={!allowed}
+              disabledNote={state.actor ? REFUSAL : (state.reason ?? undefined)}
+              resetOnSuccess
+            >
+              <FieldGrid>
+                <TradeFields idPrefix="new-trade" disabled={!allowed} />
+              </FieldGrid>
+            </ActionForm>
+          </SheetButton>
         }
       >
         {state.actor ? null : (
@@ -168,26 +193,10 @@ export default async function TradesPage() {
                           >
                             <input type="hidden" name="id" value={row.id} />
                             <FieldGrid>
-                              <TextField
+                              <TradeFields
                                 idPrefix={`edit-${row.id}`}
-                                name="name"
-                                label="Name"
-                                required
-                                maxLength={120}
-                                defaultValue={row.name}
+                                row={row}
                                 disabled={!allowed || isVoid}
-                                hint="Vendors point at the row, not the text — nothing is orphaned by a rename."
-                              />
-                              <TextField
-                                idPrefix={`edit-${row.id}`}
-                                name="sortOrder"
-                                label="Order"
-                                numeric
-                                inputMode="numeric"
-                                maxLength={6}
-                                defaultValue={String(row.sortOrder)}
-                                disabled={!allowed || isVoid}
-                                hint="Where it sits in the picker. Equal numbers fall back to the name."
                               />
                             </FieldGrid>
                           </ActionForm>
@@ -269,42 +278,6 @@ export default async function TradesPage() {
             })}
           </tbody>
         </TableWrap>
-      </Section>
-
-      <Section
-        title="Add a trade"
-        description={<p>Nothing is offered on a vendor until it exists here.</p>}
-      >
-        <ActionForm
-          action={createTrade}
-          submitLabel="Add trade"
-          disabled={!allowed}
-          disabledNote={state.actor ? REFUSAL : (state.reason ?? undefined)}
-          resetOnSuccess
-        >
-          <FieldGrid>
-            <TextField
-              idPrefix="new-trade"
-              name="name"
-              label="Name"
-              required
-              maxLength={120}
-              disabled={!allowed}
-              hint="One trade, in the words you would use asking for one."
-            />
-            <TextField
-              idPrefix="new-trade"
-              name="sortOrder"
-              label="Order"
-              numeric
-              inputMode="numeric"
-              maxLength={6}
-              defaultValue="0"
-              disabled={!allowed}
-              hint="Where it sits in the picker. Equal numbers fall back to the name."
-            />
-          </FieldGrid>
-        </ActionForm>
       </Section>
     </div>
   );

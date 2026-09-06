@@ -18,6 +18,7 @@ import { Notice } from '@/components/ui/Notice';
 import { Section } from '@/components/settings/Section';
 import { buttonClass } from '@/components/ui/Button';
 import { Pill } from '@/components/ui/Pill';
+import { SheetButton } from '@/components/ui/Sheet';
 import { TableWrap } from '@/components/ui/Table';
 
 export const dynamic = 'force-dynamic';
@@ -74,6 +75,90 @@ export default async function UsersPage({
         title="Users"
         description={
           <p>Who has an account, and what their role permits — never read from the identity provider.</p>
+        }
+        actions={
+          // A press, then the form over a blurred page -- the same shape
+          // "Change..." uses on every other settings screen. There is no
+          // matching "Change..." sheet on this one -- a role is set inline,
+          // per row, and there is no other field on a user to edit -- so
+          // there is no second form to share these fields with.
+          <SheetButton
+            trigger="Add a user"
+            variant="primary"
+            label="Add a user"
+            title="Add a user"
+            subtitle="Nothing is emailed — tell the person the address; they link on first sign-in."
+            discardPrompt="Throw away this user? Nothing has been saved yet."
+          >
+            <ActionForm
+              action={addUser}
+              submitLabel="Add user"
+              disabled={!allowed}
+              disabledNote={
+                state.actor
+                  ? `Your role (${state.actor.role}) does not manage users.`
+                  : (state.reason ?? undefined)
+              }
+              resetOnSuccess
+            >
+              <FieldGrid>
+                <TextField
+                  idPrefix="new-user"
+                  name="displayName"
+                  label="Name"
+                  required
+                  maxLength={200}
+                  disabled={!allowed}
+                  hint="As it should read on screen."
+                />
+                <TextField
+                  idPrefix="new-user"
+                  name="email"
+                  label="Email"
+                  type="email"
+                  inputMode="email"
+                  required
+                  maxLength={200}
+                  disabled={!allowed}
+                  hint="Must match the verified email their provider reports."
+                />
+                <SelectField
+                  idPrefix="new-user"
+                  name="role"
+                  label="Role"
+                  required
+                  defaultValue="bookkeeper"
+                  options={
+                    state.actor?.role === 'owner'
+                      ? ROLE_OPTIONS
+                      : // An admin is not offered a choice they would be refused.
+                        ROLE_OPTIONS.filter((option) => option.value !== 'owner')
+                  }
+                  disabled={!allowed}
+                  hint={
+                    state.actor?.role === 'owner'
+                      ? 'Owner is offered because you are one.'
+                      : 'Only an owner can grant the owner role, so it is not on this list.'
+                  }
+                />
+                {mode === 'sso' ? (
+                  <SelectField
+                    idPrefix="new-user"
+                    name="loginMethod"
+                    label="Sign-in method"
+                    defaultValue=""
+                    blankLabel="Not set"
+                    options={providers.map((provider) => ({
+                      value: provider,
+                      label: PROVIDER_LABELS[provider],
+                    }))}
+                    disabled={!allowed || providers.length === 0}
+                    hint="Only providers with credentials appear. Left unset, they can't sign in yet."
+                  />
+                ) : null}
+              </FieldGrid>
+            </ActionForm>
+          </SheetButton>
         }
       >
         {mode === 'access' ? (
@@ -154,7 +239,7 @@ export default async function UsersPage({
             {visible.length === 0 ? (
               <tr>
                 <td data-label="Name" colSpan={6}>
-                  No users to show. Add the first one below.
+                  No users to show. Add the first one above.
                 </td>
               </tr>
             ) : null}
@@ -272,82 +357,6 @@ export default async function UsersPage({
             </ul>
           </Notice>
         </div>
-      </Section>
-
-      <Section
-        title="Add a user"
-        description={
-          <p>Nothing is emailed — tell the person the address; they link on first sign-in.</p>
-        }
-      >
-        <ActionForm
-          action={addUser}
-          submitLabel="Add user"
-          disabled={!allowed}
-          disabledNote={
-            state.actor
-              ? `Your role (${state.actor.role}) does not manage users.`
-              : (state.reason ?? undefined)
-          }
-          resetOnSuccess
-        >
-          <FieldGrid>
-            <TextField
-              idPrefix="new-user"
-              name="displayName"
-              label="Name"
-              required
-              maxLength={200}
-              disabled={!allowed}
-              hint="As it should read on screen."
-            />
-            <TextField
-              idPrefix="new-user"
-              name="email"
-              label="Email"
-              type="email"
-              inputMode="email"
-              required
-              maxLength={200}
-              disabled={!allowed}
-              hint="Must match the verified email their provider reports."
-            />
-            <SelectField
-              idPrefix="new-user"
-              name="role"
-              label="Role"
-              required
-              defaultValue="bookkeeper"
-              options={
-                state.actor?.role === 'owner'
-                  ? ROLE_OPTIONS
-                  : // An admin is not offered a choice they would be refused.
-                    ROLE_OPTIONS.filter((option) => option.value !== 'owner')
-              }
-              disabled={!allowed}
-              hint={
-                state.actor?.role === 'owner'
-                  ? 'Owner is offered because you are one.'
-                  : 'Only an owner can grant the owner role, so it is not on this list.'
-              }
-            />
-            {mode === 'sso' ? (
-              <SelectField
-                idPrefix="new-user"
-                name="loginMethod"
-                label="Sign-in method"
-                defaultValue=""
-                blankLabel="Not set"
-                options={providers.map((provider) => ({
-                  value: provider,
-                  label: PROVIDER_LABELS[provider],
-                }))}
-                disabled={!allowed || providers.length === 0}
-                hint="Only providers with credentials appear. Left unset, they can't sign in yet."
-              />
-            ) : null}
-          </FieldGrid>
-        </ActionForm>
       </Section>
 
       <Section title="Changing how someone signs in">

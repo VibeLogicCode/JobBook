@@ -11,12 +11,8 @@ import {
   voidVendorType,
 } from '@/app/settings/vendor-types/actions';
 import { ActionForm, RowAction } from '@/components/settings/ActionForm';
-import {
-  CheckboxField,
-  FieldGrid,
-  ReadOnlyField,
-  TextField,
-} from '@/components/settings/Fields';
+import { CheckboxField, FieldGrid, ReadOnlyField, TextField } from '@/components/settings/Fields';
+import { VendorTypeFields } from '@/components/settings/VendorTypeFields';
 import { Section } from '@/components/settings/Section';
 import { Notice } from '@/components/ui/Notice';
 import { Pill } from '@/components/ui/Pill';
@@ -87,6 +83,46 @@ export default async function VendorTypesPage() {
       <Section
         title="Vendor types"
         description={<p>Only vendors whose type performs work are asked for a trade.</p>}
+        actions={
+          // A press, then the form over a blurred page -- the same shape
+          // "Change..." already uses on the row below, rather than a form
+          // sitting at the foot of the table.
+          <SheetButton
+            trigger="Add a vendor type"
+            variant="primary"
+            label="Add a vendor type"
+            title="Add a vendor type"
+            discardPrompt="Throw away this vendor type? Nothing has been saved yet."
+          >
+            <ActionForm
+              action={createVendorType}
+              submitLabel="Add vendor type"
+              disabled={!allowed}
+              disabledNote={state.actor ? REFUSAL : (state.reason ?? undefined)}
+              resetOnSuccess
+            >
+              <FieldGrid>
+                <VendorTypeFields idPrefix="new-vendor-type" disabled={!allowed} />
+                <CheckboxField
+                  idPrefix="new-vendor-type"
+                  name="isSubcontractor"
+                  label="Vendors of this type are subcontractors"
+                  disabled={!allowed}
+                  wide
+                  hint="Tick for someone who performs work, not a materials or equipment supplier."
+                />
+                <div className="sm:col-span-2 -mt-2">
+                  <Reveal label="What this decides, and why it's fixed">
+                    Three things follow and nothing else: a T5018 slip, a WSIB clearance check
+                    before payment, and eligibility for scheduled work. They are also the only
+                    vendors asked which trade they are. Fixed once the type exists — a type set
+                    wrongly is retired and replaced, not edited.
+                  </Reveal>
+                </div>
+              </FieldGrid>
+            </ActionForm>
+          </SheetButton>
+        }
       >
         {state.actor ? null : (
           <div className="mb-3">
@@ -187,26 +223,10 @@ export default async function VendorTypesPage() {
                           >
                             <input type="hidden" name="id" value={row.id} />
                             <FieldGrid>
-                              <TextField
+                              <VendorTypeFields
                                 idPrefix={`edit-${row.id}`}
-                                name="name"
-                                label="Name"
-                                required
-                                maxLength={120}
-                                defaultValue={row.name}
+                                row={row}
                                 disabled={!allowed || isVoid}
-                                hint="Vendors point at the row, not the text — nothing is orphaned by a rename."
-                              />
-                              <TextField
-                                idPrefix={`edit-${row.id}`}
-                                name="sortOrder"
-                                label="Order"
-                                numeric
-                                inputMode="numeric"
-                                maxLength={6}
-                                defaultValue={String(row.sortOrder)}
-                                disabled={!allowed || isVoid}
-                                hint="Where it sits in the picker. Equal numbers fall back to the name."
                               />
                               {/* Shown rather than omitted. The one thing a
                                   reader of this panel most needs to know is
@@ -298,58 +318,6 @@ export default async function VendorTypesPage() {
             })}
           </tbody>
         </TableWrap>
-      </Section>
-
-      <Section
-        title="Add a vendor type"
-        description={<p>One decision below can&rsquo;t be revisited — it&rsquo;s marked.</p>}
-      >
-        <ActionForm
-          action={createVendorType}
-          submitLabel="Add vendor type"
-          disabled={!allowed}
-          disabledNote={state.actor ? REFUSAL : (state.reason ?? undefined)}
-          resetOnSuccess
-        >
-          <FieldGrid>
-            <TextField
-              idPrefix="new-vendor-type"
-              name="name"
-              label="Name"
-              required
-              maxLength={120}
-              disabled={!allowed}
-              hint="The kind of counterparty, in the words you would use out loud."
-            />
-            <TextField
-              idPrefix="new-vendor-type"
-              name="sortOrder"
-              label="Order"
-              numeric
-              inputMode="numeric"
-              maxLength={6}
-              defaultValue="0"
-              disabled={!allowed}
-              hint="Where it sits in the picker. Equal numbers fall back to the name."
-            />
-            <CheckboxField
-              idPrefix="new-vendor-type"
-              name="isSubcontractor"
-              label="Vendors of this type are subcontractors"
-              disabled={!allowed}
-              wide
-              hint="Tick for someone who performs work, not a materials or equipment supplier."
-            />
-            <div className="sm:col-span-2 -mt-2">
-              <Reveal label="What this decides, and why it's fixed">
-                Three things follow and nothing else: a T5018 slip, a WSIB clearance check
-                before payment, and eligibility for scheduled work. They are also the only
-                vendors asked which trade they are. Fixed once the type exists — a type set
-                wrongly is retired and replaced, not edited.
-              </Reveal>
-            </div>
-          </FieldGrid>
-        </ActionForm>
       </Section>
     </div>
   );

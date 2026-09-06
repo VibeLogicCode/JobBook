@@ -9,13 +9,10 @@ import {
   updateCostCode,
   voidCostCode,
 } from '@/app/settings/cost-codes/actions';
-import {
-  CATEGORY_LABELS,
-  CATEGORY_OPTIONS,
-  isCategory,
-} from '@/app/settings/cost-codes/schema';
+import { CATEGORY_LABELS, isCategory } from '@/app/settings/cost-codes/schema';
 import { ActionForm, RowAction } from '@/components/settings/ActionForm';
-import { FieldGrid, SelectField, TextField } from '@/components/settings/Fields';
+import { FieldGrid, TextField } from '@/components/settings/Fields';
+import { CostCodeFields } from '@/components/settings/CostCodeFields';
 import { Section } from '@/components/settings/Section';
 import { Notice } from '@/components/ui/Notice';
 import { Pill } from '@/components/ui/Pill';
@@ -156,6 +153,34 @@ export default async function CostCodesPage() {
         description={
           <p>How spend is categorised. Two levels: a division, and the sections inside it.</p>
         }
+        actions={
+          // A press, then the form over a blurred page -- the same shape
+          // "Change..." already uses on the row below, rather than a form
+          // sitting at the foot of the table.
+          <SheetButton
+            trigger="Add a cost code"
+            variant="primary"
+            label="Add a cost code"
+            title="Add a cost code"
+            discardPrompt="Throw away this cost code? Nothing has been saved yet."
+          >
+            <ActionForm
+              action={createCostCode}
+              submitLabel="Add cost code"
+              disabled={!allowed}
+              disabledNote={state.actor ? REFUSAL : (state.reason ?? undefined)}
+              resetOnSuccess
+            >
+              <FieldGrid>
+                <CostCodeFields
+                  idPrefix="new-cost-code"
+                  parentOptions={parentOptions()}
+                  disabled={!allowed}
+                />
+              </FieldGrid>
+            </ActionForm>
+          </SheetButton>
+        }
       >
         {state.actor ? null : (
           <div className="mb-3">
@@ -280,60 +305,17 @@ export default async function CostCodesPage() {
                           >
                             <input type="hidden" name="id" value={row.id} />
                             <FieldGrid>
-                              <TextField
+                              <CostCodeFields
                                 idPrefix={`edit-${row.id}`}
-                                name="code"
-                                label="Code"
-                                required
-                                maxLength={60}
-                                defaultValue={row.code}
-                                disabled={!allowed || isVoid}
-                                hint="Unique, stored upper case. Renaming doesn't orphan anything already filed."
-                              />
-                              <TextField
-                                idPrefix={`edit-${row.id}`}
-                                name="name"
-                                label="Name"
-                                required
-                                maxLength={200}
-                                defaultValue={row.name}
-                                disabled={!allowed || isVoid}
-                                hint="What this bucket is called on a report."
-                              />
-                              <SelectField
-                                idPrefix={`edit-${row.id}`}
-                                name="parentId"
-                                label="Sits under"
-                                defaultValue={row.parentId}
-                                options={options}
-                                blankLabel="Nothing — this is a division"
-                                disabled={!allowed || isVoid || sections > 0}
-                                hint={
+                                row={row}
+                                parentOptions={options}
+                                parentDisabled={sections > 0}
+                                parentHint={
                                   sections > 0
                                     ? "Has sections under it, so it's a division — move those first to change that."
-                                    : 'Two levels only. A section cannot hold sections of its own.'
+                                    : undefined
                                 }
-                              />
-                              <SelectField
-                                idPrefix={`edit-${row.id}`}
-                                name="category"
-                                label="Spend category"
-                                defaultValue={isCategory(row.category) ? row.category : ''}
-                                options={CATEGORY_OPTIONS}
-                                blankLabel="Not categorised"
                                 disabled={!allowed || isVoid}
-                                hint="What a year-end export groups by, above the code itself."
-                              />
-                              <TextField
-                                idPrefix={`edit-${row.id}`}
-                                name="sortOrder"
-                                label="Order"
-                                numeric
-                                inputMode="numeric"
-                                maxLength={6}
-                                defaultValue={String(row.sortOrder)}
-                                disabled={!allowed || isVoid}
-                                hint="Within its division. Equal numbers fall back to the code."
                               />
                             </FieldGrid>
                           </ActionForm>
@@ -416,71 +398,6 @@ export default async function CostCodesPage() {
             })}
           </tbody>
         </TableWrap>
-      </Section>
-
-      <Section
-        title="Add a cost code"
-        description={<p>A division on its own, or a section inside one.</p>}
-      >
-        <ActionForm
-          action={createCostCode}
-          submitLabel="Add cost code"
-          disabled={!allowed}
-          disabledNote={state.actor ? REFUSAL : (state.reason ?? undefined)}
-          resetOnSuccess
-        >
-          <FieldGrid>
-            <TextField
-              idPrefix="new-cost-code"
-              name="code"
-              label="Code"
-              required
-              maxLength={60}
-              disabled={!allowed}
-              // A comma or a pipe breaks the price-list importer, which
-              // splits a pasted line on exactly those.
-              hint="Letters, digits and . - _ / only, in upper case."
-            />
-            <TextField
-              idPrefix="new-cost-code"
-              name="name"
-              label="Name"
-              required
-              maxLength={200}
-              disabled={!allowed}
-              hint="The trade or the bucket, in the words you would use on a report."
-            />
-            <SelectField
-              idPrefix="new-cost-code"
-              name="parentId"
-              label="Sits under"
-              options={parentOptions()}
-              blankLabel="Nothing — this is a division"
-              disabled={!allowed}
-              hint="Leave it a division unless one has grown too broad to code against."
-            />
-            <SelectField
-              idPrefix="new-cost-code"
-              name="category"
-              label="Spend category"
-              options={CATEGORY_OPTIONS}
-              blankLabel="Not categorised"
-              disabled={!allowed}
-              hint="Chosen from a list, so an export never reports Labour and labour as two things."
-            />
-            <TextField
-              idPrefix="new-cost-code"
-              name="sortOrder"
-              label="Order"
-              numeric
-              inputMode="numeric"
-              maxLength={6}
-              defaultValue="0"
-              disabled={!allowed}
-              hint="Within its division. Equal numbers fall back to the code."
-            />
-          </FieldGrid>
-        </ActionForm>
       </Section>
     </div>
   );
