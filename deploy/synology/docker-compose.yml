@@ -1,0 +1,227 @@
+# Scopeline on a Synology NAS, from a pre-built image -- no git, no source, no
+# `docker build` on the box. See docker-compose.app.yml at the repo root for
+# the source-based version this is derived from; the comments there explain
+# decisions this file inherits without repeating them all.
+#
+# Load the image once, on this machine, before `up`:
+#
+#   docker load -i scopeline.tar
+#   docker compose -f deploy/synology/docker-compose.yml up -d
+#
+# then open http://<this NAS's LAN address>:${APP_PORT:-38080}. See README.md
+# in this folder for the full runbook -- copying the tar over, the folders to
+# create first, the .env values that must be set, and the first-run wizard.
+#
+# Every `build:` in the source compose file becomes `image: scopeline:latest`
+# here. Nothing else about the service definitions changes: same healthchecks,
+# same restart policies, same environment contract. What DOES change is where
+# the data lives -- bind mounts under /volume1/docker/scopeline/ instead of
+# named volumes, because a named volume is hard to find in File Station, hard
+# to back up by hand, and easy to lose in a Container Manager project reset.
+# The database directory is the one that matters most.
+#
+# Only four services travel from the source file: db, app, backup, reminders.
+# The HTTPS (Caddy) and Cloudflare Tunnel profiles are left out on purpose --
+# DSM already runs its own reverse proxy on 80/443 more often than not, and
+# guessing at how a given DSM version frees those ports is exactly the kind of
+# invented detail that goes wrong at 11pm. This file assumes the LAN posture:
+# the app published on a NAS-safe high port, reached directly by IP. If a real
+# domain, Cloudflare Tunnel or in-app SSO is wanted later, read
+# docker/README-access.md in the source repo and extend this file the same way
+# docker-compose.app.yml does -- the environment variables are identical.
+name: scopeline
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: quote
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: quote
+    volumes:
+      # Bind mount, not a named volume: this is the one directory that must be
+      # findable, and backupable by hand, from File Station if everything else
+      # about Docker on this box is ever forgotten.
+      - /volume1/docker/scopeline/db:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U quote']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  app:
+    image: scopeline:latest
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://quote:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db:5432/quote
+      # Chromium fetches the print page from inside this container. The public
+      # hostname would resolve wherever DNS points it and not to this
+      # container, so the PDF route must be reached over loopback instead.
+      INTERNAL_BASE_URL: http://127.0.0.1:3000
+      DEPLOY_CONFIG_PATH: /data/config/auth.env
+      INTERNAL_RENDER_SECRET: ${INTERNAL_RENDER_SECRET:?set INTERNAL_RENDER_SECRET in .env}
+      # --- LAN posture ---
+      # AUTH_MODE=local authenticates NOBODY. Every request is treated as the
+      # one address in LOCAL_USER_EMAIL, with no password and no login screen.
+      # That is correct ONLY on a network the owner controls -- a home or
+      # office LAN behind a router the owner also controls -- and wrong the
+      # moment this NAS, or a port forward pointed at it, is reachable from
+      # the internet. Do not port-forward APP_PORT. Do not combine this with
+      # DSM's own reverse-proxy "publish to internet" features. If remote
+      # access is wanted later, that is Cloudflare Tunnel + Access or in-app
+      # SSO (docker/README-access.md in the source repo) -- both refused
+      # automatically the moment AUTH_MODE is anything but local, so a
+      # half-configured switch fails loudly rather than quietly trusting
+      # everyone.
+      AUTH_MODE: ${AUTH_MODE:-local}
+      # Must match a users row: authorization is a lookup against users, and
+      # local mode is not exempt. The first-run setup wizard's "first user"
+      # step is what creates that row when SEED_DEMO=0 -- see README.md.
+      LOCAL_USER_EMAIL: ${LOCAL_USER_EMAIL:?set LOCAL_USER_EMAIL in .env}
+      CF_ACCESS_TEAM_DOMAIN: ${CF_ACCESS_TEAM_DOMAIN:-}
+      CF_ACCESS_AUD: ${CF_ACCESS_AUD:-}
+      # Loads the fictional demo tenant on first boot so there is something to
+      # click while testing the deployment itself. MUST be 0 before a real
+      # company's records go in -- see README.md, it is not a footnote here.
+      SEED_DEMO: ${SEED_DEMO:-1}
+
+      # Backup. The recipient is a PUBLIC age key: this NAS writes backups it
+      # cannot itself read, so a stolen or seized NAS yields no data. Unset
+      # means no backups are taken at all, and the boot says so out loud on
+      # every start. See README.md's Backups section before real data goes in.
+      BACKUP_AGE_PUBLIC_KEY: ${BACKUP_AGE_PUBLIC_KEY:-}
+      # Second copy, off this NAS's own disk. Point it at a USB drive attached
+      # to the NAS (bind-mounted below at the same path) or leave both this
+      # and the volume commented out and accept that the only copy sits on the
+      # disk it protects -- backup.sh says so loudly on every run either way.
+      BACKUP_USB_DIR: ${BACKUP_USB_DIR:-}
+      BACKUP_HEARTBEAT_URL: ${BACKUP_HEARTBEAT_URL:-}
+    ports:
+      # DSM itself occupies 5000 (HTTP) and 5001 (HTTPS), and very often 80
+      # and 443 too, through its own reverse proxy or Web Station. APP_PORT
+      # defaults to a high port well clear of all of those and of the common
+      # third-party-package ports (8080, 8443, 9000...). Change it in .env if
+      # it collides with something already running on this NAS.
+      #
+      # Bound to every interface, not loopback, because the entire point of
+      # running this on a NAS is reaching it from a phone or another machine
+      # on the LAN -- unlike docker-compose.app.yml's laptop-oriented default,
+      # which binds loopback until the operator deliberately opens it. The
+      # trade this makes is explicit: plain HTTP across the LAN, exactly the
+      # trade docker/README-access.md describes for "LAN only" -- every quote,
+      # cost figure and margin crosses the network in the clear, readable by
+      # anything sharing that network. Set APP_BIND=127.0.0.1 instead if this
+      # NAS will only ever be reached from itself or through something else
+      # terminating TLS in front of it.
+      - '${APP_BIND:-0.0.0.0}:${APP_PORT:-38080}:3000'
+    volumes:
+      - /volume1/docker/scopeline/files:/data/files
+      - /volume1/docker/scopeline/backups:/data/backups
+      # Where the setup wizard writes the deployment configuration. A file
+      # rather than database rows, because these are credentials and a
+      # database row is mirrored to SharePoint and lands in every backup.
+      - /volume1/docker/scopeline/config:/data/config
+      # The USB drive attached to the NAS, at the same path BACKUP_USB_DIR
+      # names. Commented out rather than guessed: an unset host path silently
+      # becomes an anonymous volume, which is a backup destination on the same
+      # disk as the database and defeats the point of having one. DSM mounts
+      # USB storage under /volumeUSB1/... or /volumeUSB2/... by default --
+      # confirm the exact path for this NAS (Control Panel > External Devices,
+      # or `ls /volumeUSB1` over SSH) before uncommenting.
+      # - /volumeUSB1/usbshare/scopeline-backup:/mnt/backup
+    restart: unless-stopped
+
+  # The backup schedule, in its own container.
+  #
+  # Same image, so it carries the same pg_dump, age and scripts, and updates
+  # with the app rather than drifting a major version behind it. Separate
+  # process, so a dump cannot slow the web server and a failing backup cannot
+  # take the quoting system down with it.
+  #
+  # It refuses to start without a recipient key rather than idling: a container
+  # named `backup` that is quietly taking none looks exactly like one that is
+  # working.
+  backup:
+    image: scopeline:latest
+    depends_on:
+      db:
+        condition: service_healthy
+    entrypoint: ['/usr/local/bin/backup-loop.sh']
+    # The image's healthcheck pings the web server's /api/health. This
+    # container runs no web server, so it would report unhealthy forever --
+    # a permanent false alarm sitting next to the real signal, which is the
+    # exact failure this tier's monitoring is meant to avoid. Liveness here is
+    # the dump's own freshness, reported in the app from sync_state and the
+    # artifact timestamps.
+    healthcheck:
+      disable: true
+    environment:
+      DATABASE_URL: postgres://quote:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db:5432/quote
+      # Passed through rather than required here. A missing key must fail
+      # LOUDLY AT RUNTIME -- backup-loop.sh exits with the reason and the
+      # container shows as Exited(1) -- not at parse time, where it would stop
+      # `docker compose up` bringing the quoting system up at all. A refusal to
+      # start the app because backups are unconfigured is the wrong trade for a
+      # contractor who needs to send a quote this afternoon.
+      BACKUP_AGE_PUBLIC_KEY: ${BACKUP_AGE_PUBLIC_KEY:-}
+      BACKUP_INTERVAL_MINUTES: ${BACKUP_INTERVAL_MINUTES:-60}
+      BACKUP_USB_DIR: ${BACKUP_USB_DIR:-}
+      BACKUP_HEARTBEAT_URL: ${BACKUP_HEARTBEAT_URL:-}
+      BACKUP_RETAIN_HOURLY_HOURS: ${BACKUP_RETAIN_HOURLY_HOURS:-48}
+      BACKUP_RETAIN_DAILY_DAYS: ${BACKUP_RETAIN_DAILY_DAYS:-30}
+    volumes:
+      # Reads the same uploaded files the app writes, and writes into the same
+      # backup volume, so one artifact set exists rather than two.
+      - /volume1/docker/scopeline/files:/data/files:ro
+      - /volume1/docker/scopeline/backups:/data/backups
+      # - /volumeUSB1/usbshare/scopeline-backup:/mnt/backup
+    # on-failure, not unless-stopped: an unconfigured key is a permanent
+    # condition, and a container that restarts forever on the same fatal
+    # message buries it in a log nobody reads. Exited(1) beside a running app
+    # is visible in one `docker compose ps`.
+    restart: on-failure
+
+  # The reminder schedule, in its own container.
+  #
+  # Same image and the same shape as `backup` above, for the same two reasons:
+  # a slow evaluation cannot slow the web server, and a failing evaluation
+  # cannot take the quoting system down with it. It carries the same code as
+  # the app, so it can never be querying a schema a version behind.
+  #
+  # It waits for the APP rather than for the database, which the backup service
+  # does not. The app is what applies migrations at boot, and an evaluation
+  # against a database that does not yet have `reminders` in it would fail
+  # every hour on a fresh deployment until somebody read the log.
+  reminders:
+    image: scopeline:latest
+    depends_on:
+      app:
+        condition: service_healthy
+    entrypoint: ['/usr/local/bin/reminder-loop.sh']
+    # The image's healthcheck pings the web server's /api/health, and this
+    # container runs no web server -- it would report unhealthy forever, a
+    # permanent false alarm sitting next to the real signal.
+    healthcheck:
+      disable: true
+    environment:
+      DATABASE_URL: postgres://quote:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db:5432/quote
+      # Hourly. Lower it to watch the thing work on a new deployment; there is
+      # no cost to running it more often, because an evaluation that finds
+      # nothing new inserts nothing -- the unique partial index
+      # `reminders_one_open_per_rule` is what makes that true rather than a
+      # convention somebody has to keep.
+      REMINDER_INTERVAL_MINUTES: ${REMINDER_INTERVAL_MINUTES:-60}
+    # unless-stopped, not on-failure: unlike the backup container there is
+    # nothing to configure here and therefore no permanent fatal condition to
+    # restart into. A failed evaluation is logged and the next hour tries
+    # again, so the container should outlive a bad hour.
+    restart: unless-stopped
+
+# No top-level `volumes:` section -- every mount above is a bind mount to
+# /volume1/docker/scopeline/..., created ahead of time (see README.md), not a
+# named volume Docker manages on its own. That is the deliberate difference
+# from docker-compose.app.yml: on this NAS, the database directory has to be
+# something File Station and a manual tar backup can both find.
