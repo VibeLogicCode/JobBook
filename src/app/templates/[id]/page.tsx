@@ -4,10 +4,11 @@ import { db } from '@/db/client';
 import { organization, rateItems, scopeTemplateItems, scopeTemplates } from '@/db/schema';
 import { can, resolveActor } from '@/app/settings/actor';
 import { addTemplateLine, setTemplateActive, updateTemplate } from '@/app/templates/actions';
-import { PROJECT_TYPE_OPTIONS, timesPhrase } from '@/app/templates/schema';
+import { timesPhrase } from '@/app/templates/schema';
 import { TemplateLines, type WireTemplateLine } from '@/app/templates/[id]/TemplateLines';
 import { ActionForm, RowAction } from '@/components/settings/ActionForm';
-import { FieldGrid, SelectField, TextAreaField, TextField } from '@/components/settings/Fields';
+import { FieldGrid, SelectField } from '@/components/settings/Fields';
+import { TemplateHeaderFields } from '@/components/templates/TemplateHeaderFields';
 import { TemplateLineFields } from '@/components/templates/TemplateLineFields';
 import { Notice } from '@/components/ui/Notice';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -90,7 +91,7 @@ export default async function TemplateDetailPage({
         // say so: a template opened from a quote's scope picker, from a
         // bookmark, or from a link pasted into a message arrives with no
         // history to go back through.
-        parent={{ href: '/templates', label: 'Scope templates' }}
+        parent={{ href: '/templates', label: 'Templates' }}
         eyebrow={
           <>
             {template.isActive ? (
@@ -106,117 +107,111 @@ export default async function TemplateDetailPage({
           // A press, then the form over a blurred page -- the button that
           // adds a row lives at the top of the page it belongs to, matching
           // vendors, expenses and the schedule, rather than at the foot of a
-          // table somebody has to scroll past everything to reach.
-          <SheetButton
-            trigger="Add a line"
-            variant="primary"
-            label="Add a line to this template"
-            title="Add a line"
-            subtitle={template.name}
-            discardPrompt="Throw away this line? Nothing has been saved yet."
-          >
-            {items.length === 0 ? (
-              <Notice tone="warning" title="There are no rate items to choose from">
-                A template line has to point at a priced item. Add rate items first.
-              </Notice>
-            ) : (
-              <ActionForm
-                action={addTemplateLine}
-                submitLabel="Add line"
-                disabled={!allowed}
-                disabledNote={readOnlyNote}
-                resetOnSuccess
-              >
-                <input type="hidden" name="scopeTemplateId" value={template.id} />
-                <FieldGrid>
-                  <SelectField
-                    idPrefix="new-line"
-                    name="rateItemId"
-                    label="Rate item"
-                    required
-                    wide
-                    options={items.map((item) => ({
-                      value: item.id,
-                      label: `${item.code} — ${item.description} (${
-                        item.calcMode === 'qty' ? `per ${item.unitLabel}` : item.calcMode
-                      })`,
-                    }))}
+          // table somebody has to scroll past everything to reach. Edit sits
+          // beside it for the same reason: the name, project type and
+          // description used to fill half the screen above the lines table,
+          // which is what this page is actually for -- the owner already read
+          // all three on the list a click ago.
+          <>
+            <SheetButton
+              trigger="Edit"
+              variant="secondary"
+              label={`Edit ${template.name}`}
+              title="Edit template"
+              subtitle={template.name}
+              discardPrompt="Throw away the changes to this template? Nothing has been saved yet."
+            >
+              <div className="flex flex-col gap-4">
+                <ActionForm
+                  action={updateTemplate}
+                  submitLabel="Save template"
+                  disabled={!allowed}
+                  disabledNote={readOnlyNote}
+                >
+                  <input type="hidden" name="id" value={template.id} />
+                  <TemplateHeaderFields
+                    idPrefix="template"
+                    name={template.name}
+                    projectType={template.projectType}
+                    description={template.description}
                     disabled={!allowed}
                   />
-                  <TemplateLineFields
-                    idPrefix="new-line"
-                    nextSortOrder={nextSortOrder}
+                </ActionForm>
+
+                <div className="border-t border-line pt-4">
+                  <h3 className="t-small font-semibold">
+                    {template.isActive ? 'Retire this template' : 'Bring this template back'}
+                  </h3>
+                  <p className="mb-2 max-w-prose t-small text-subtle">
+                    Nothing is deleted. A quote's reference to this template must keep resolving
+                    years later.
+                  </p>
+                  <RowAction
+                    action={setTemplateActive}
+                    label={template.isActive ? 'Retire' : 'Bring back'}
+                    destructive={template.isActive}
                     disabled={!allowed}
+                    fields={{ id: template.id, isActive: template.isActive ? 'false' : 'true' }}
+                    confirm={
+                      template.isActive
+                        ? 'Retire this template? It stops being offered on new quotes.'
+                        : undefined
+                    }
                   />
-                </FieldGrid>
-              </ActionForm>
-            )}
-          </SheetButton>
+                </div>
+              </div>
+            </SheetButton>
+
+            <SheetButton
+              trigger="Add a line"
+              variant="primary"
+              label="Add a line to this template"
+              title="Add a line"
+              subtitle={template.name}
+              discardPrompt="Throw away this line? Nothing has been saved yet."
+            >
+              {items.length === 0 ? (
+                <Notice tone="warning" title="There are no rate items to choose from">
+                  A template line has to point at a priced item. Add rate items first.
+                </Notice>
+              ) : (
+                <ActionForm
+                  action={addTemplateLine}
+                  submitLabel="Add line"
+                  disabled={!allowed}
+                  disabledNote={readOnlyNote}
+                  resetOnSuccess
+                >
+                  <input type="hidden" name="scopeTemplateId" value={template.id} />
+                  <FieldGrid>
+                    <SelectField
+                      idPrefix="new-line"
+                      name="rateItemId"
+                      label="Rate item"
+                      required
+                      wide
+                      options={items.map((item) => ({
+                        value: item.id,
+                        label: `${item.code} — ${item.description} (${
+                          item.calcMode === 'qty' ? `per ${item.unitLabel}` : item.calcMode
+                        })`,
+                      }))}
+                      disabled={!allowed}
+                    />
+                    <TemplateLineFields
+                      idPrefix="new-line"
+                      nextSortOrder={nextSortOrder}
+                      disabled={!allowed}
+                    />
+                  </FieldGrid>
+                </ActionForm>
+              )}
+            </SheetButton>
+          </>
         }
       />
 
       <div className="flex flex-col gap-4">
-        <Section title="Template">
-          <ActionForm
-            action={updateTemplate}
-            submitLabel="Save template"
-            disabled={!allowed}
-            disabledNote={readOnlyNote}
-          >
-            <input type="hidden" name="id" value={template.id} />
-            <FieldGrid>
-              <TextField
-                idPrefix="template"
-                name="name"
-                label="Name"
-                required
-                maxLength={200}
-                defaultValue={template.name}
-                disabled={!allowed}
-              />
-              <SelectField
-                idPrefix="template"
-                name="projectType"
-                label="Project type"
-                required
-                defaultValue={template.projectType}
-                options={PROJECT_TYPE_OPTIONS}
-                disabled={!allowed}
-              />
-              <TextAreaField
-                idPrefix="template"
-                name="description"
-                label="Description"
-                rows={3}
-                defaultValue={template.description}
-                disabled={!allowed}
-              />
-            </FieldGrid>
-          </ActionForm>
-
-          <div className="mt-4 border-t border-line pt-4">
-            <h3 className="t-small font-semibold">
-              {template.isActive ? 'Retire this template' : 'Bring this template back'}
-            </h3>
-            <p className="mb-2 max-w-prose t-small text-subtle">
-              Nothing is deleted. A quote's reference to this template must keep resolving
-              years later.
-            </p>
-            <RowAction
-              action={setTemplateActive}
-              label={template.isActive ? 'Retire' : 'Bring back'}
-              destructive={template.isActive}
-              disabled={!allowed}
-              fields={{ id: template.id, isActive: template.isActive ? 'false' : 'true' }}
-              confirm={
-                template.isActive
-                  ? 'Retire this template? It stops being offered on new quotes.'
-                  : undefined
-              }
-            />
-          </div>
-        </Section>
-
         <Section title="Lines">
           {duplicates.length > 0 ? (
             <div className="mb-3">

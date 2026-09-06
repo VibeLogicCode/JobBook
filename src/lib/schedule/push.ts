@@ -154,7 +154,7 @@ export interface MoveRequest {
  * wrong by the time it mattered.
  */
 export function findPredecessorCycle(
-  tasks: readonly ScheduleTask[],
+  tasks: readonly Pick<ScheduleTask, 'id' | 'name' | 'predecessorTaskId'>[],
   taskId: string,
   predecessorId: string | null,
 ): string[] | null {

@@ -2,9 +2,10 @@
 
 import { and, eq, sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
+import { redirect } from 'next/navigation';
 import { z } from 'zod';
 import { db } from '@/db/client';
-import { rateItems, scopeTemplateItems, scopeTemplates } from '@/db/schema';
+import { rateItems, scheduleTemplates, scopeTemplateItems, scopeTemplates } from '@/db/schema';
 import { requireCapability } from '@/app/settings/actor';
 import { type ActionResult, refused, saved } from '@/app/settings/result';
 import {
@@ -57,10 +58,50 @@ export async function createTemplate(
   const parsed = createSchema.safeParse(formValues(formData));
   if (!parsed.success) return invalid(parsed.error, templateLabels);
 
-  await db.insert(scopeTemplates).values({ ...parsed.data, createdBy: guard.actor.id });
+  const [created] = await db
+    .insert(scopeTemplates)
+    .values({ ...parsed.data, createdBy: guard.actor.id })
+    .returning({ id: scopeTemplates.id });
+  if (!created) return refused('The template was not saved.');
 
   revalidatePath('/templates');
-  return saved(`${parsed.data.name} created. Add lines to it.`);
+  // Straight to the record rather than a "created" notice on the list: the
+  // next thing anybody does with a fresh template is add lines to it, and the
+  // list behind the create sheet never had a row for one to click.
+  redirect(`/templates/${created.id}`);
+}
+
+/**
+ * The schedule-template half of the same create sheet (design spec §4: "Add
+ * asks the kind first"). Same three fields as `createTemplate` -- the two
+ * tables are identical up to `is_active` on purpose
+ * (`src/db/schema/schedule-templates.ts`'s own docblock) -- but a different
+ * table, a different guard resource, and a different landing page.
+ *
+ * Reuses the `scopeTemplates.edit` capability rather than inventing a
+ * `scheduleTemplates.edit` one: the design spec (§8) calls that rename correct
+ * eventually, but also records that today it maps to the same `rates:edit`
+ * check with identical role coverage, so a new capability name would decide
+ * nothing yet. Renaming is left for whoever does that split.
+ */
+export async function createScheduleTemplate(
+  _previous: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  const guard = await requireCapability('scopeTemplates.edit');
+  if (!guard.ok) return guard.result;
+
+  const parsed = createSchema.safeParse(formValues(formData));
+  if (!parsed.success) return invalid(parsed.error, templateLabels);
+
+  const [created] = await db
+    .insert(scheduleTemplates)
+    .values({ ...parsed.data, createdBy: guard.actor.id })
+    .returning({ id: scheduleTemplates.id });
+  if (!created) return refused('The template was not saved.');
+
+  revalidatePath('/templates');
+  redirect(`/templates/schedule/${created.id}`);
 }
 
 const updateSchema = createSchema.extend({ id: z.string().uuid() });
