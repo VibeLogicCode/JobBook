@@ -3,68 +3,10 @@
 import Link from 'next/link';
 import { SaveBanner } from '@/components/ui/SaveBanner';
 import { usePathname } from 'next/navigation';
-import {
-  BellRing, CalendarDays, ClipboardList, FileText, HardHat, Home, LayoutTemplate, Moon, Receipt,
-  Ruler, Settings, Sun, Users,
-} from 'lucide-react';
+import { Menu, Moon, Sun } from 'lucide-react';
 import { useEffect, useState } from 'react';
-
-/**
- * Reminders sits second, directly under Today, because the two are one
- * question asked twice: what is happening, and what do I have to do about it.
- * Anywhere further down the rail it becomes a screen he has to remember to
- * visit, and a reminder system nobody opens is worse than no reminder system.
- */
-const DESTINATIONS = [
-  { href: '/', label: 'Today', icon: Home },
-  { href: '/reminders', label: 'Reminders', icon: BellRing },
-  { href: '/quotes', label: 'Quotes', icon: FileText },
-  { href: '/projects', label: 'Pipeline', icon: ClipboardList },
-  // Directly after the pipeline, because it is the same book of work read by
-  // the day instead of by the job -- and because that position puts it on the
-  // bottom bar. See `BOTTOM_BAR`.
-  { href: '/calendar', label: 'Calendar', icon: CalendarDays },
-  { href: '/customers', label: 'People', icon: Users },
-  { href: '/rates', label: 'Rates', icon: Ruler },
-  // Appended after the fifth, so it reaches the rail without displacing
-  // anything on the bottom bar. Vendors are looked up at a desk when a bill
-  // arrives or a sub is hired, not thumbed at on site.
-  { href: '/vendors', label: 'Vendors', icon: HardHat },
-  // Beside vendors rather than beside the pipeline: these two are the
-  // money-going-out pair, and a bill is entered in the same sitting as the
-  // counterparty it is owed to.
-  { href: '/expenses', label: 'Expenses', icon: Receipt },
-  { href: '/templates', label: 'Templates', icon: LayoutTemplate },
-  { href: '/settings', label: 'Setup', icon: Settings },
-];
-
-/**
- * The bottom bar carries five, per the UI spec's breakpoint table; the rail
- * carries all of them.
- *
- * The bar was already full, so Reminders did not get appended -- it took a
- * seat, and Rates gave it up. Rates is the rate book: a thing maintained at a
- * desk, read by the worksheet rather than by a person, and reached from the
- * rail on the machine where prices actually get edited. Reminders is the
- * opposite -- it is the screen for a phone in a truck at 7am, which is exactly
- * what a bottom tab bar is for. Templates and Setup were already off it for
- * the same reason.
- *
- * THE CALENDAR TOOK THE FIFTH SEAT AND PEOPLE GAVE IT UP. Same test, same
- * answer. The bar is the five screens somebody opens standing outside with one
- * hand free, and "who is on site today, and is anybody promised to two places
- * at once" is the first question of that morning -- it is the only screen in
- * the product that can answer it, because the two halves of a double-booking
- * live on two different jobs. A customer record is the other thing entirely:
- * an address, an email, a billing contact, opened at a desk while writing a
- * quote or chasing a bill. It is also not lost -- it is on the rail, and every
- * job card and quote already links to the customer it belongs to, so the
- * commonest way anybody reaches a customer on a phone was never this tab.
- *
- * Kept as `slice(0, 5)` rather than a second hand-written list: two lists is
- * how a destination ends up on one and not the other.
- */
-const BOTTOM_BAR = DESTINATIONS.slice(0, 5);
+import { BOTTOM_BAR, DESTINATIONS, OVERFLOW } from '@/components/ui/destinations';
+import { Sheet } from '@/components/ui/Sheet';
 
 /**
  * Desktop gets a rail, mobile gets a bottom tab bar -- one tree, reflowed by
@@ -180,32 +122,115 @@ export function AppShell({
           />
         </main>
 
-        {/* Bottom tabs are a second presentation of the same destinations, so
-            they are marked presentational and hidden from the accessibility
-            tree: the rail above is the one nav a screen reader announces. */}
-        <nav
-          aria-hidden
-          className="no-print fixed inset-x-0 bottom-0 z-10 flex border-t border-line-strong bg-surface sm:hidden"
-        >
-          {BOTTOM_BAR.map(({ href, label, icon: Icon }) => {
-            const active = href === '/' ? pathname === '/' : pathname?.startsWith(href);
-            return (
-              <Link
-                key={href}
-                href={href}
-                tabIndex={-1}
-                className={`flex min-h-12 flex-1 flex-col items-center justify-center gap-0.5 py-2 ${
-                  active ? 'text-accent-text' : 'text-muted'
-                }`}
-              >
-                <Icon size={20} aria-hidden />
-                <span className="t-micro">{label}</span>
-              </Link>
-            );
-          })}
-        </nav>
+        <BottomBar pathname={pathname ?? ''} />
       </div>
     </div>
+  );
+}
+
+/**
+ * The phone navigation.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY THERE IS AN OVERFLOW AT ALL
+ * ---------------------------------------------------------------------------
+ *
+ * There was not, and the consequence was not cosmetic. The bar rendered
+ * `DESTINATIONS.slice(0, 5)` and nothing carried the remaining six, while the
+ * rail said to carry "all of them" -- true at `sm` and above, where it is
+ * `flex`, and false below it, where it is `hidden`. So People, Rates, Vendors,
+ * Expenses, Templates and Settings had no entry point on a phone whatsoever.
+ * Not clipped, not scrolled past: absent. The owner found it while trying to
+ * reach setup from one, which is also the screen he most needed.
+ *
+ * A sheet rather than a horizontally scrolling bar. Tabs that run off the edge
+ * are invisible with no affordance saying so, which is the same failure in a
+ * new coat -- somebody who does not know Templates exists will not swipe a nav
+ * bar looking for it.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY IT IS NO LONGER `aria-hidden`
+ * ---------------------------------------------------------------------------
+ *
+ * It was, on the reasoning that the rail above is the one nav a screen reader
+ * announces. That reasoning holds only while the rail is in the tree, and
+ * below `sm` it is `display: none`, which takes it out of the tree along with
+ * the layout. Between the two, a phone had no announced navigation at all, and
+ * `tabIndex={-1}` meant no keyboard path either. Now each is labelled
+ * distinctly and exactly one is ever rendered, since each hides at the width
+ * the other appears.
+ */
+function BottomBar({ pathname }: { pathname: string }) {
+  const [more, setMore] = useState(false);
+  const isActive = (href: string) => (href === '/' ? pathname === '/' : pathname.startsWith(href));
+
+  // Whether the thing the person is currently looking at lives behind the
+  // button. Without this the bar shows nothing highlighted on six of eleven
+  // screens, which reads as "you are nowhere".
+  const inOverflow = OVERFLOW.some((entry) => isActive(entry.href));
+
+  const seat =
+    'flex min-h-12 flex-1 flex-col items-center justify-center gap-0.5 py-2 t-micro';
+
+  return (
+    <>
+      <nav
+        aria-label="Main, compact"
+        className="no-print fixed inset-x-0 bottom-0 z-10 flex border-t border-line-strong bg-surface sm:hidden"
+      >
+        {BOTTOM_BAR.map(({ href, label, icon: Icon }) => (
+          <Link
+            key={href}
+            href={href}
+            aria-current={isActive(href) ? 'page' : undefined}
+            className={`${seat} ${isActive(href) ? 'text-accent-text' : 'text-muted'}`}
+          >
+            <Icon size={20} aria-hidden />
+            <span>{label}</span>
+          </Link>
+        ))}
+
+        {OVERFLOW.length > 0 ? (
+          <button
+            type="button"
+            aria-haspopup="dialog"
+            aria-expanded={more}
+            onClick={() => setMore(true)}
+            className={`${seat} ${inOverflow ? 'text-accent-text' : 'text-muted'}`}
+          >
+            <Menu size={20} aria-hidden />
+            <span>More</span>
+          </button>
+        ) : null}
+      </nav>
+
+      {more ? (
+        <Sheet label="More screens" title="More" onClose={() => setMore(false)}>
+          <ul className="flex flex-col gap-1 pb-2">
+            {OVERFLOW.map(({ href, label, icon: Icon }) => (
+              <li key={href}>
+                <Link
+                  href={href}
+                  aria-current={isActive(href) ? 'page' : undefined}
+                  // Closed on the way out rather than left to the route change:
+                  // a sheet that survives the navigation covers the screen it
+                  // just opened.
+                  onClick={() => setMore(false)}
+                  className={`flex min-h-12 items-center gap-3 rounded-control px-3 ${
+                    isActive(href)
+                      ? 'bg-accent-soft text-accent-soft-fg'
+                      : 'text-ink hover:bg-surface-2'
+                  }`}
+                >
+                  <Icon size={18} aria-hidden />
+                  <span>{label}</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </Sheet>
+      ) : null}
+    </>
   );
 }
 

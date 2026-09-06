@@ -7,7 +7,7 @@ import { Section } from '@/components/settings/Section';
 
 export const dynamic = 'force-dynamic';
 
-export const metadata: Metadata = { title: 'Setup' };
+export const metadata: Metadata = { title: 'Settings' };
 
 export default async function SettingsIndexPage() {
   const context = await loadSettings('settings.read');
@@ -16,8 +16,15 @@ export default async function SettingsIndexPage() {
     <div className="flex flex-col gap-4">
       {context.org ? null : (
         <Notice tone="negative" title="This deployment has no organization record">
-          Until one exists there is nothing for a document to print. Run first-run setup, or
-          load the demo tenant, before editing these sections.
+          Until one exists there is nothing for a document to print, and the sections below have
+          nothing to edit.{' '}
+          {/* A link, not a sentence naming a screen. This notice told the
+              owner of a fresh deployment to "run first-run setup" and left him
+              to find it -- and nothing anywhere on the site linked to it. */}
+          <Link href="/setup" className="underline">
+            Run first-run setup
+          </Link>
+          .
         </Notice>
       )}
 

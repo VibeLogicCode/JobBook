@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import { and, eq } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { customers, projects, quotes } from '@/db/schema';
@@ -10,6 +11,8 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { Money } from '@/components/ui/Money';
 import { Pill, statusTone } from '@/components/ui/Pill';
 import { ReminderList } from '@/components/reminders/ReminderList';
+import { firstRunDestination } from '@/app/setup/entry';
+import { readSetupGate } from '@/app/setup/state';
 import { loadOrganization } from '@/lib/organization/load';
 import { formatCents } from '@/lib/money/format';
 import { tenantToday } from '@/lib/quote/dates';
@@ -43,15 +46,31 @@ export default async function TodayPage() {
   const org = await loadOrganization();
 
   if (!org) {
+    /**
+     * An unfinished deployment is handed to the wizard rather than told about
+     * it. This screen used to name `npm run db:seed` -- a command written for
+     * somebody standing at a checkout, and the only instruction on the page
+     * for a contractor looking at a NAS in a browser with no shell, no
+     * repository and no npm. Its other half said "complete the setup wizard"
+     * without saying where, and nothing anywhere linked to `/setup`.
+     *
+     * `firstRunDestination` returns null for the three closed gates, so a
+     * finished deployment, a company this wizard did not create, and an
+     * unreadable database each keep their existing behaviour.
+     */
+    const destination = firstRunDestination(await readSetupGate());
+    if (destination) redirect(destination);
+
     return (
       <div className="px-4 py-8 sm:px-6">
         <PageHeader
-          title="Setup required"
+          title="No company on file"
           description={
             <>
-              No organization record exists yet, so the app has no company name, tax number, or
-              branding to work from. Load the demo tenant with{' '}
-              <span className="num">npm run db:seed</span>, or complete the setup wizard.
+              Setup is closed on this deployment but no organization record exists, so there is
+              no company name, tax number or branding to work from. Nothing can be printed until
+              one does. This is not a state the first-run wizard can leave behind, so it wants
+              looking at rather than clicking through.
             </>
           }
         />
