@@ -1,8 +1,9 @@
 import { sql } from 'drizzle-orm';
-import { boolean, integer, pgTable, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { boolean, index, integer, pgTable, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { auditColumns, qty, rate } from '@/db/columns';
-import { calcModeEnum, projectTypeEnum, qtySourceEnum } from '@/db/enums';
+import { calcModeEnum, qtySourceEnum } from '@/db/enums';
 import { costCodes } from '@/db/schema/customers';
+import { projectTypes } from '@/db/schema/project-lists';
 
 /**
  * The priced item list. ONE list per deployment -- there is deliberately no
@@ -37,11 +38,15 @@ export const rateItems = pgTable('rate_items', {
 export const scopeTemplates = pgTable('scope_templates', {
   id: uuid('id').primaryKey().defaultRandom(),
   name: text('name').notNull(),
-  projectType: projectTypeEnum('project_type').notNull(),
+  /**
+   * Was `project_type_enum`; migration 0018 converted it to a maintained
+   * list (`db/schema/project-lists.ts`).
+   */
+  projectTypeId: uuid('project_type_id').notNull().references(() => projectTypes.id),
   description: text('description'),
   isActive: boolean('is_active').notNull().default(true),
   ...auditColumns,
-});
+}, (t) => [index('scope_templates_project_type_idx').on(t.projectTypeId)]);
 
 /**
  * Quantity derives as `source value x multiplier`.

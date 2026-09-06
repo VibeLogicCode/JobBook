@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { createScheduleTemplate, createTemplate } from '@/app/templates/actions';
+import type { ListRowRef } from '@/app/settings/project-lists';
 import { ActionForm } from '@/components/settings/ActionForm';
 import { TemplateHeaderFields } from '@/components/templates/TemplateHeaderFields';
 
@@ -30,9 +31,11 @@ const KIND_OPTIONS: ReadonlyArray<{ value: Kind; label: string; hint: string }> 
 export function CreateTemplateForm({
   allowed,
   disabledNote,
+  projectTypes,
 }: {
   allowed: boolean;
   disabledNote?: string;
+  projectTypes: ListRowRef[];
 }) {
   const [kind, setKind] = useState<Kind>('quote');
 
@@ -68,7 +71,7 @@ export function CreateTemplateForm({
         disabled={!allowed}
         disabledNote={disabledNote}
       >
-        <TemplateHeaderFields idPrefix="new-template" disabled={!allowed} />
+        <TemplateHeaderFields idPrefix="new-template" disabled={!allowed} projectTypes={projectTypes} />
       </ActionForm>
     </div>
   );

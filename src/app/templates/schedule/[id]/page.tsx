@@ -4,6 +4,7 @@ import { db } from '@/db/client';
 import {
   costCodes,
   organization,
+  projectTypes,
   rateItems,
   scheduleTemplates,
   scheduleTemplateTasks,
@@ -16,7 +17,7 @@ import {
   setScheduleTemplateActive,
   updateScheduleTemplate,
 } from '@/app/templates/schedule/actions';
-import { PROJECT_TYPE_OPTIONS } from '@/app/templates/schema';
+import { listOptions } from '@/app/settings/project-lists';
 import { ScheduleTemplateTasks, type TemplateTaskRow } from '@/app/templates/schedule/[id]/ScheduleTemplateTasks';
 import { TemplateTaskFields } from '@/components/schedule/TemplateTaskFields';
 import { ActionForm, RowAction } from '@/components/settings/ActionForm';
@@ -140,6 +141,13 @@ export default async function ScheduleTemplateDetailPage({
   const [org] = await db.select().from(organization).where(eq(organization.id, 1));
   const areaUnit = org?.areaUnit ?? 'sqft';
 
+  // Every project type, retired and voided included -- this template's own
+  // may not be offered to new work any more, and it still has to render.
+  const projectTypeRows = await db
+    .select()
+    .from(projectTypes)
+    .orderBy(asc(projectTypes.sortOrder), asc(projectTypes.name));
+
   const nextSortOrder = taskRows.reduce((max, task) => Math.max(max, task.sortOrder), 0) + 10;
   // Every existing task is a valid predecessor for a brand-new one -- there is
   // no "own row" to exclude yet, unlike the Change sheet's per-row list in
@@ -224,11 +232,11 @@ export default async function ScheduleTemplateDetailPage({
               />
               <SelectField
                 idPrefix="template"
-                name="projectType"
+                name="projectTypeId"
                 label="Project type"
                 required
-                defaultValue={template.projectType}
-                options={PROJECT_TYPE_OPTIONS}
+                defaultValue={template.projectTypeId}
+                options={listOptions(projectTypeRows, template.projectTypeId)}
                 disabled={!allowed}
               />
               <TextAreaField

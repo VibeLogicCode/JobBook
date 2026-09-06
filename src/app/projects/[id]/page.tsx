@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import { db } from '@/db/client';
-import { customers, organization, projects, quotes, stageHistory } from '@/db/schema';
+import { customers, organization, projects, projectTypes, quotes, stageHistory } from '@/db/schema';
 import { buttonClass } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Notice } from '@/components/ui/Notice';
@@ -22,7 +22,7 @@ import { LogActivityForm } from '@/components/timeline/LogActivityForm';
 import { Timeline } from '@/components/timeline/Timeline';
 import { listTimeline } from '@/lib/reminders/repository';
 import {
-  CONTRACT_TYPES, PROJECT_STAGES, PROJECT_TYPES, stageTone, workNoun,
+  CONTRACT_TYPES, PROJECT_STAGES, stageTone, workNoun,
 } from '@/components/detail/labels';
 
 export const dynamic = 'force-dynamic';
@@ -49,6 +49,7 @@ export default async function ProjectPage({
       customerId: customers.id,
       customerName: customers.name,
       customerCompany: customers.companyName,
+      projectTypeName: projectTypes.name,
       /**
        * The contract value, DERIVED.
        *
@@ -67,6 +68,7 @@ export default async function ProjectPage({
     })
     .from(projects)
     .innerJoin(customers, eq(projects.customerId, customers.id))
+    .innerJoin(projectTypes, eq(projects.projectTypeId, projectTypes.id))
     .where(eq(projects.id, id));
 
   if (!job) notFound();
@@ -108,6 +110,14 @@ export default async function ProjectPage({
     .from(customers)
     .where(eq(customers.recordStatus, 'active'))
     .orderBy(asc(customers.name));
+
+  // Every project type, retired and voided included -- this job's own may no
+  // longer be offered to new work, and it still has to render and resolve in
+  // the edit sheet's picker.
+  const projectTypeList = await db
+    .select()
+    .from(projectTypes)
+    .orderBy(asc(projectTypes.sortOrder), asc(projectTypes.name));
 
   // What happened on this job, ordered by when it happened rather than by when
   // it was typed. Separate from the stage history below, and deliberately: one
@@ -184,7 +194,10 @@ export default async function ProjectPage({
                   >
                     Schedule
                   </Link>
-                  <Link href={`/billing/${project.id}`} className={buttonClass('secondary')}>
+                  <Link
+                    href={`/projects/${project.id}/billing`}
+                    className={buttonClass('secondary')}
+                  >
                     Billing
                   </Link>
                 </>
@@ -226,7 +239,7 @@ export default async function ProjectPage({
                 {job.customerName}
               </Link>
               {job.customerCompany ? ` · ${job.customerCompany}` : ''}
-              {` · ${PROJECT_TYPES[project.projectType]}`}
+              {` · ${job.projectTypeName}`}
               {project.contractType ? ` · ${CONTRACT_TYPES[project.contractType]}` : ''}
             </p>
           </div>
@@ -286,6 +299,7 @@ export default async function ProjectPage({
           <ProjectFields
             project={project}
             customers={customerList}
+            projectTypes={projectTypeList}
             defaultProvince={org?.province ?? ''}
             showRealisedDates
           />
@@ -308,7 +322,7 @@ export default async function ProjectPage({
                 <span className="text-subtle">—</span>
               )}
             </DetailRow>
-            <DetailRow label="Type of work" value={PROJECT_TYPES[project.projectType]} />
+            <DetailRow label="Type of work" value={job.projectTypeName} />
             <DetailRow
               label="Contract type"
               value={project.contractType ? CONTRACT_TYPES[project.contractType] : null}

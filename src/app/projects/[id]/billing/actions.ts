@@ -138,10 +138,10 @@ export async function issueCustomerInvoice(
     return { ok: false, error: failureText(error) };
   }
 
-  revalidatePath(`/billing/${projectId}`);
+  revalidatePath(`/projects/${projectId}/billing`);
   revalidatePath(`/projects/${projectId}`);
   // Outside the try, because redirect signals by throwing. It also clears the
   // preview: the job has moved on, and leaving the old figures on screen beside
   // a success message invites a second press on a draw that is now zero.
-  redirect(`/billing/${projectId}?issued=${encodeURIComponent(invoiceNumber)}`);
+  redirect(`/projects/${projectId}/billing?issued=${encodeURIComponent(invoiceNumber)}`);
 }

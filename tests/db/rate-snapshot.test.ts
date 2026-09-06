@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { eq, sql } from 'drizzle-orm';
 import { beforeEach, describe, expect, it } from 'vitest';
+import { PROJECT_TYPE_IDS } from '@/db/seed/project-lists';
 import { db } from '@/db/client';
 import {
   costCodes,
@@ -70,7 +71,7 @@ async function seedQuoteFromRateItem() {
       customerId: customer!.id,
       projectNumber: 'P-0001',
       name: 'Basement finish',
-      projectType: 'basement',
+      projectTypeId: PROJECT_TYPE_IDS.basement,
       stage: 'quoting',
     })
     .returning();

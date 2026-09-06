@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
 import { db } from '@/db/client';
-import { customers, projects } from '@/db/schema';
+import { customers, projects, projectTypes } from '@/db/schema';
 import { guard } from '@/lib/auth/guard';
 import { allocateDocumentNumber } from '@/lib/quote/numbering';
 import { createBlankQuote, createQuoteFromTemplate } from '@/lib/quote/repository';
@@ -64,12 +64,7 @@ const schema = z
 
     opportunityChoice: z.string().min(1, 'choose an opportunity'),
     newOpportunityName: trimmedOptional(200),
-    newOpportunityType: z
-      .enum([
-        'custom_home', 'basement', 'renovation', 'kitchen', 'bathroom',
-        'addition', 'commercial_ti', 'water_leak', 'other',
-      ])
-      .optional(),
+    newOpportunityTypeId: z.string().uuid().optional(),
     siteAddressLine1: trimmedOptional(200),
     siteCity: trimmedOptional(120),
     siteProvince: trimmedOptional(40),
@@ -96,7 +91,7 @@ const schema = z
     'a new opportunity needs a name',
   )
   .refine(
-    (v) => v.opportunityChoice !== SENTINEL_NEW || v.newOpportunityType !== undefined,
+    (v) => v.opportunityChoice !== SENTINEL_NEW || v.newOpportunityTypeId !== undefined,
     'choose what kind of work this is',
   )
   // A new customer has no opportunities yet, so the pair is impossible rather
@@ -187,6 +182,17 @@ export async function startQuote(
         return input.opportunityChoice;
       }
 
+      // Read inside the transaction rather than trusted from the form: the
+      // picker was rendered before this type might have been voided.
+      const [projectType] = await tx
+        .select({ recordStatus: projectTypes.recordStatus })
+        .from(projectTypes)
+        .where(eq(projectTypes.id, input.newOpportunityTypeId!));
+      if (!projectType) throw new Error('that type of work is not on the list');
+      if (projectType.recordStatus === 'void') {
+        throw new Error('that type of work is void, so nothing new can be filed under it');
+      }
+
       // Allocated inside the transaction, so an opportunity that fails to save
       // does not burn a number out of the series.
       const projectNumber = await allocateDocumentNumber(tx, 'project');
@@ -196,7 +202,7 @@ export async function startQuote(
           customerId,
           projectNumber,
           name: input.newOpportunityName!,
-          projectType: input.newOpportunityType!,
+          projectTypeId: input.newOpportunityTypeId!,
           siteAddressLine1: input.siteAddressLine1,
           siteCity: input.siteCity,
           siteProvince: input.siteProvince,

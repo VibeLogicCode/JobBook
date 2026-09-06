@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { loadSettings } from '@/app/settings/load';
-import { SETTINGS_SECTIONS } from '@/app/settings/nav';
+import { SETTINGS_GROUPS } from '@/app/settings/nav';
 import { Notice } from '@/components/ui/Notice';
 import { Section } from '@/components/settings/Section';
 
@@ -33,18 +33,28 @@ export default async function SettingsIndexPage() {
           )
         }
       >
-        <ul className="flex flex-col gap-2">
-          {SETTINGS_SECTIONS.map((section) => (
-            <li key={section.href}>
-              <Link
-                href={section.href}
-                className="flex min-h-11 flex-col justify-center rounded-control border border-line px-3 py-2 hover:bg-surface-2"
-              >
-                <span className="font-semibold">{section.label}</span>
-                <span className="t-small text-muted">{section.summary}</span>
-              </Link>
-            </li>
+        <div className="flex flex-col gap-4">
+          {SETTINGS_GROUPS.map((group) => (
+            <div key={group.heading}>
+              <h3 className="mb-2 t-small font-semibold text-subtle">{group.heading}</h3>
+              <ul className="flex flex-col gap-2">
+                {group.items.map((section) => (
+                  <li key={section.href}>
+                    <Link
+                      href={section.href}
+                      className="flex min-h-11 flex-col justify-center rounded-control border border-line px-3 py-2 hover:bg-surface-2"
+                    >
+                      <span className="font-semibold">{section.label}</span>
+                      <span className="t-small text-muted">{section.summary}</span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
           ))}
+        </div>
+
+        <ul className="mt-4 flex flex-col gap-2">
           <li>
             {/* Scope templates are their own screen rather than a settings
                 section: a template is edited while quoting, not while

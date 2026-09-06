@@ -1,7 +1,8 @@
-import { and, eq, sql } from 'drizzle-orm';
+import { and, asc, eq, sql } from 'drizzle-orm';
 import Link from 'next/link';
 import { db } from '@/db/client';
 import {
+  projectTypes,
   scheduleTemplateTasks,
   scheduleTemplates,
   scopeTemplateItems,
@@ -9,7 +10,6 @@ import {
 } from '@/db/schema';
 import { can, resolveActor } from '@/app/settings/actor';
 import { setTemplateActive } from '@/app/templates/actions';
-import { PROJECT_TYPE_LABELS } from '@/app/templates/schema';
 import { RowAction } from '@/components/settings/ActionForm';
 import { CreateTemplateForm } from '@/components/templates/CreateTemplateForm';
 import { Notice } from '@/components/ui/Notice';
@@ -29,7 +29,7 @@ interface TemplateRow {
   kind: Kind;
   id: string;
   name: string;
-  projectType: string;
+  projectTypeName: string;
   description: string | null;
   isActive: boolean;
   /** Template lines for a quote, tasks for a schedule -- never both. */
@@ -49,12 +49,13 @@ export default async function TemplatesPage() {
     .select({
       id: scopeTemplates.id,
       name: scopeTemplates.name,
-      projectType: scopeTemplates.projectType,
+      projectTypeName: projectTypes.name,
       description: scopeTemplates.description,
       isActive: scopeTemplates.isActive,
       count: sql<number>`count(${scopeTemplateItems.id})::int`,
     })
     .from(scopeTemplates)
+    .innerJoin(projectTypes, eq(scopeTemplates.projectTypeId, projectTypes.id))
     .leftJoin(
       scopeTemplateItems,
       and(
@@ -63,18 +64,19 @@ export default async function TemplatesPage() {
       ),
     )
     .where(eq(scopeTemplates.recordStatus, 'active'))
-    .groupBy(scopeTemplates.id);
+    .groupBy(scopeTemplates.id, projectTypes.name);
 
   const scheduleRows = await db
     .select({
       id: scheduleTemplates.id,
       name: scheduleTemplates.name,
-      projectType: scheduleTemplates.projectType,
+      projectTypeName: projectTypes.name,
       description: scheduleTemplates.description,
       isActive: scheduleTemplates.isActive,
       count: sql<number>`count(${scheduleTemplateTasks.id})::int`,
     })
     .from(scheduleTemplates)
+    .innerJoin(projectTypes, eq(scheduleTemplates.projectTypeId, projectTypes.id))
     .leftJoin(
       scheduleTemplateTasks,
       and(
@@ -83,7 +85,15 @@ export default async function TemplatesPage() {
       ),
     )
     .where(eq(scheduleTemplates.recordStatus, 'active'))
-    .groupBy(scheduleTemplates.id);
+    .groupBy(scheduleTemplates.id, projectTypes.name);
+
+  // Every project type, retired and voided included -- the create sheet's
+  // picker needs the full list, exactly as `/vendors` fetches every vendor
+  // type and trade unfiltered (see that page's own note on why).
+  const projectTypeRows = await db
+    .select()
+    .from(projectTypes)
+    .orderBy(asc(projectTypes.sortOrder), asc(projectTypes.name));
 
   // One list from two tables (design spec §4: "One list at /templates reading
   // both tables, with a Kind column"). Sorted by name -- case-insensitively,
@@ -111,7 +121,7 @@ export default async function TemplatesPage() {
             title="Create a template"
             discardPrompt="Throw away this template? Nothing has been saved yet."
           >
-            <CreateTemplateForm allowed={allowed} disabledNote={disabledNote} />
+            <CreateTemplateForm allowed={allowed} disabledNote={disabledNote} projectTypes={projectTypeRows} />
           </SheetButton>
         }
       />
@@ -169,7 +179,7 @@ export default async function TemplatesPage() {
                       </Pill>
                     </td>
                     <td data-label="Project type" className="t-small text-muted">
-                      {PROJECT_TYPE_LABELS[row.projectType] ?? row.projectType}
+                      {row.projectTypeName}
                     </td>
                     <AmountCell data-label={row.kind === 'quote' ? 'Lines' : 'Tasks'}>
                       {row.count}

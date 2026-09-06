@@ -1,6 +1,6 @@
-import { eq } from 'drizzle-orm';
+import { asc, eq } from 'drizzle-orm';
 import { db } from '@/db/client';
-import { organization } from '@/db/schema';
+import { leadSources, organization } from '@/db/schema';
 import { createCustomer } from '@/app/customers/actions';
 import { CustomerForm } from '@/components/detail/CustomerForm';
 import { Panel } from '@/components/detail/Panel';
@@ -17,6 +17,14 @@ export default async function NewCustomerPage() {
    */
   const [org] = await db.select().from(organization).where(eq(organization.id, 1));
 
+  // Only active, non-void: this is a brand-new customer, so there is no
+  // existing value to append a retired option for.
+  const leadSourceList = await db
+    .select({ id: leadSources.id, name: leadSources.name, isActive: leadSources.isActive, recordStatus: leadSources.recordStatus })
+    .from(leadSources)
+    .where(eq(leadSources.recordStatus, 'active'))
+    .orderBy(asc(leadSources.sortOrder), asc(leadSources.name));
+
   return (
     <div className="grid gap-4 px-4 py-4 sm:px-6">
       <PageHeader
@@ -27,6 +35,7 @@ export default async function NewCustomerPage() {
       <Panel title="Customer">
         <CustomerForm
           action={createCustomer}
+          leadSources={leadSourceList}
           defaultProvince={org?.province ?? ''}
           cancelHref="/customers"
           submitLabel="Create customer"

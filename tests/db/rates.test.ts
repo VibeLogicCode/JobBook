@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm';
 import { beforeEach, describe, expect, it } from 'vitest';
+import { PROJECT_TYPE_IDS } from '@/db/seed/project-lists';
 import { db } from '@/db/client';
 import { costCodes, rateItems, scopeTemplateItems, scopeTemplates } from '@/db/schema';
 
@@ -106,7 +107,7 @@ describe('scopeTemplateItems', () => {
   async function seedTemplate() {
     const [template] = await db
       .insert(scopeTemplates)
-      .values({ name: 'Basement Finish', projectType: 'basement' })
+      .values({ name: 'Basement Finish', projectTypeId: PROJECT_TYPE_IDS.basement })
       .returning();
     return template!;
   }

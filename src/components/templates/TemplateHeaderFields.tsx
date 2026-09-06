@@ -1,5 +1,5 @@
 import { FieldGrid, SelectField, TextAreaField, TextField } from '@/components/settings/Fields';
-import { PROJECT_TYPE_OPTIONS } from '@/app/templates/schema';
+import { listOptions, type ListRowRef } from '@/app/settings/project-lists';
 
 /**
  * The three fields a template cannot exist without, whichever kind it is.
@@ -14,18 +14,27 @@ import { PROJECT_TYPE_OPTIONS } from '@/app/templates/schema';
  * Renders its own `FieldGrid`, unlike `TemplateLineFields`: every caller here
  * wants exactly these three fields and nothing beside them, so there is no
  * form that needs to interleave a field of its own into this grid.
+ *
+ * `projectType` used to be a closed enum with a safe default ('renovation')
+ * to fall back on. It is a maintained list now (`db/schema/project-lists.ts`),
+ * so there is no member every deployment is guaranteed to keep -- the picker
+ * asks explicitly rather than silently landing on whichever type happens to
+ * still exist.
  */
 export function TemplateHeaderFields({
   idPrefix,
   name,
-  projectType,
+  projectTypeId,
+  projectTypes,
   description,
   disabled,
 }: {
   idPrefix: string;
   /** Absent when creating: a fresh template starts blank. */
   name?: string;
-  projectType?: string;
+  projectTypeId?: string;
+  /** Every project type, retired and voided included -- see `listOptions`. */
+  projectTypes: ListRowRef[];
   description?: string | null;
   disabled: boolean;
 }) {
@@ -42,11 +51,12 @@ export function TemplateHeaderFields({
       />
       <SelectField
         idPrefix={idPrefix}
-        name="projectType"
+        name="projectTypeId"
         label="Project type"
         required
-        defaultValue={projectType ?? 'renovation'}
-        options={PROJECT_TYPE_OPTIONS}
+        blankLabel={projectTypeId ? undefined : 'Choose a type of work'}
+        defaultValue={projectTypeId ?? ''}
+        options={listOptions(projectTypes, projectTypeId)}
         disabled={disabled}
       />
       <TextAreaField

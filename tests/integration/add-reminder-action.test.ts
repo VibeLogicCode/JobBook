@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { PROJECT_TYPE_IDS } from '@/db/seed/project-lists';
 
 /**
  * `revalidatePath` and `headers` are request-scoped Next APIs and there is no
@@ -131,7 +132,7 @@ beforeEach(async () => {
       customerId,
       projectNumber: 'P-0001',
       name: 'Basement finish',
-      projectType: 'basement',
+      projectTypeId: PROJECT_TYPE_IDS.basement,
       stage: 'quote_sent',
       siteAddressLine1: '12 Sample Street',
       siteCity: 'Sample City',

@@ -11,8 +11,9 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core';
 import { auditColumns, qty } from '@/db/columns';
-import { conditionMeasurementEnum, durationSourceEnum, projectTypeEnum } from '@/db/enums';
+import { conditionMeasurementEnum, durationSourceEnum } from '@/db/enums';
 import { costCodes } from '@/db/schema/customers';
+import { projectTypes } from '@/db/schema/project-lists';
 import { rateItems } from '@/db/schema/rates';
 import { trades } from '@/db/schema/vendor-lists';
 
@@ -38,11 +39,15 @@ import { trades } from '@/db/schema/vendor-lists';
 export const scheduleTemplates = pgTable('schedule_templates', {
   id: uuid('id').primaryKey().defaultRandom(),
   name: text('name').notNull(),
-  projectType: projectTypeEnum('project_type').notNull(),
+  /**
+   * Was `project_type_enum`; migration 0018 converted it to a maintained
+   * list (`db/schema/project-lists.ts`), the same as `scope_templates.project_type_id`.
+   */
+  projectTypeId: uuid('project_type_id').notNull().references(() => projectTypes.id),
   description: text('description'),
   isActive: boolean('is_active').notNull().default(true),
   ...auditColumns,
-});
+}, (t) => [index('schedule_templates_project_type_idx').on(t.projectTypeId)]);
 
 /**
  * One task in a template: a name, a duration rule, a predecessor and lag, and

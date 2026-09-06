@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
 import { db } from '@/db/client';
-import { customers, projects } from '@/db/schema';
+import { customers, leadSources, projects } from '@/db/schema';
 import type { FormResult } from '@/components/detail/form-state';
 import { FINISHED_STAGES } from '@/components/detail/labels';
 import { guard } from '@/lib/auth/guard';
@@ -28,6 +28,24 @@ const optionalText = (max: number) =>
     .optional()
     .transform((value) => (value === undefined || value === '' ? null : value));
 
+/**
+ * A blankable id, shaped rather than looked up here -- the action re-reads the
+ * row inside its own transaction regardless, because a lead source chosen
+ * when the form was rendered may be void by the time it is submitted.
+ */
+const optionalUuid = (message: string) =>
+  z
+    .string()
+    .trim()
+    .optional()
+    .transform((value) => value ?? '')
+    .refine(
+      (value) =>
+        value === '' || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value),
+      message,
+    )
+    .transform((value) => (value === '' ? null : value));
+
 const customerFields = z
   .object({
     name: z.string().trim().min(1, 'a customer needs a name').max(200, 'that name is too long'),
@@ -45,11 +63,7 @@ const customerFields = z
     altContactEmail: optionalText(200),
     altContactPhone: optionalText(40),
     customerType: z.enum(['residential', 'commercial'], 'choose residential or commercial'),
-    leadSource: z
-      .enum(['call', 'email', 'referral', 'website', 'repeat', 'other'])
-      .optional()
-      .or(z.literal(''))
-      .transform((value) => (value === '' || value === undefined ? null : value)),
+    leadSourceId: optionalUuid('is not a lead source on the list'),
     // An unticked checkbox is absent from the FormData entirely, which is the
     // only reason this is a presence test rather than a boolean parse.
     isTaxExempt: z
@@ -95,6 +109,28 @@ function failureText(error: unknown): string {
 }
 
 /**
+ * Whether a chosen lead source may be written -- read inside the writing
+ * transaction rather than trusted from the form, because the picker was
+ * rendered before this source might have been voided. Retired is allowed, for
+ * the same reason `projectTypeProblem` in `app/projects/actions.ts` allows it.
+ */
+async function leadSourceProblem(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  leadSourceId: string | null,
+): Promise<string | null> {
+  if (leadSourceId === null) return null;
+  const [row] = await tx
+    .select({ recordStatus: leadSources.recordStatus })
+    .from(leadSources)
+    .where(eq(leadSources.id, leadSourceId));
+  if (!row) return 'that lead source is not on the list';
+  if (row.recordStatus === 'void') {
+    return 'that lead source is void, so it cannot be recorded on a new customer';
+  }
+  return null;
+}
+
+/**
  * Jobs that are still live for this customer.
  *
  * Voiding the customer is refused while any of these stands: the quotes and
@@ -128,12 +164,17 @@ export async function createCustomer(
     const allowed = await guard('quote:write');
     if (!allowed.ok) return { ok: false, error: allowed.error };
 
-    const [row] = await db
-      .insert(customers)
-      .values(parsed.data)
-      .returning({ id: customers.id });
-    if (!row) return { ok: false, error: 'the customer was not saved' };
-    id = row.id;
+    id = await db.transaction(async (tx) => {
+      const problem = await leadSourceProblem(tx, parsed.data.leadSourceId);
+      if (problem) throw new Error(problem);
+
+      const [row] = await tx
+        .insert(customers)
+        .values(parsed.data)
+        .returning({ id: customers.id });
+      if (!row) throw new Error('the customer was not saved');
+      return row.id;
+    });
   } catch (error) {
     return { ok: false, error: failureText(error) };
   }
@@ -167,7 +208,11 @@ export async function updateCustomer(
       return { ok: false, error: 'this customer is void and cannot be edited' };
     }
 
-    await db.update(customers).set(parsed.data).where(eq(customers.id, id.data.id));
+    await db.transaction(async (tx) => {
+      const problem = await leadSourceProblem(tx, parsed.data.leadSourceId);
+      if (problem) throw new Error(problem);
+      await tx.update(customers).set(parsed.data).where(eq(customers.id, id.data.id));
+    });
   } catch (error) {
     return { ok: false, error: failureText(error) };
   }

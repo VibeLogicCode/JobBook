@@ -5,7 +5,8 @@ import { useActionState, useState } from 'react';
 import { Button, buttonClass } from '@/components/ui/Button';
 import { Field, FieldGroup, FormError, SelectField } from '@/components/detail/Fields';
 import type { FormAction } from '@/components/detail/form-state';
-import { CUSTOMER_TYPES, PROJECT_TYPES, PROJECT_STAGES } from '@/components/detail/labels';
+import { CUSTOMER_TYPES, PROJECT_STAGES } from '@/components/detail/labels';
+import { listOptions, type ListRowRef } from '@/app/settings/project-lists';
 
 /** Matches SENTINEL_NEW in the action. */
 const NEW = '__new';
@@ -28,7 +29,7 @@ export interface OpportunityOption {
 export interface TemplateOption {
   id: string;
   name: string;
-  projectType: string;
+  projectTypeName: string;
 }
 
 const options = (labels: Record<string, string>) =>
@@ -53,6 +54,7 @@ export function StartQuoteForm({
   customers,
   opportunities,
   templates,
+  projectTypes,
   defaultProvince,
   preselectedCustomerId,
 }: {
@@ -60,6 +62,8 @@ export function StartQuoteForm({
   customers: CustomerOption[];
   opportunities: OpportunityOption[];
   templates: TemplateOption[];
+  /** Every project type, for the new-opportunity picker below. */
+  projectTypes: ListRowRef[];
   /**
    * From `organization.province`. The column has no database default on
    * purpose: one there would hardcode a tenant's region.
@@ -166,10 +170,10 @@ export function StartQuoteForm({
             />
             <SelectField
               label="Type of work"
-              name="newOpportunityType"
+              name="newOpportunityTypeId"
               required
-              options={options(PROJECT_TYPES)}
-              defaultValue="renovation"
+              placeholder="Choose a type of work"
+              options={listOptions(projectTypes)}
             />
             <Field
               label="Site street"
@@ -201,10 +205,7 @@ export function StartQuoteForm({
             { value: '', label: 'Blank quote — no lines' },
             ...templates.map((template) => ({
               value: template.id,
-              label: `${template.name} (${
-                PROJECT_TYPES[template.projectType as keyof typeof PROJECT_TYPES] ??
-                template.projectType
-              })`,
+              label: `${template.name} (${template.projectTypeName})`,
             })),
           ]}
         />

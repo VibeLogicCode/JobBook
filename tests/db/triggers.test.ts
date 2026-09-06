@@ -1,5 +1,6 @@
 import { and, eq, sql } from 'drizzle-orm';
 import { beforeEach, describe, expect, it } from 'vitest';
+import { PROJECT_TYPE_IDS } from '@/db/seed/project-lists';
 import { db } from '@/db/client';
 import { auditLog, customers, projects, stageHistory } from '@/db/schema';
 
@@ -91,7 +92,7 @@ describe('stage history trigger', () => {
         customerId: customer.id,
         projectNumber: 'P-0001',
         name: 'Basement finish',
-        projectType: 'basement',
+        projectTypeId: PROJECT_TYPE_IDS.basement,
         stage,
       })
       .returning();

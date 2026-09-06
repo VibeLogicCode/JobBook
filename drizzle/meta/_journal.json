@@ -127,6 +127,13 @@
       "when": 1788653591016,
       "tag": "0017_icy_bloodscream",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1788663263879,
+      "tag": "0018_zippy_rick_jones",
+      "breakpoints": true
     }
   ]
 }

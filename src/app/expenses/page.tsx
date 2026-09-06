@@ -634,6 +634,15 @@ export default async function ExpensesPage({
     <div className="px-4 py-4 sm:px-6">
       <PageHeader
         className="mb-4"
+        // Only when the list is narrowed to one job (`?project=…`): reached
+        // from the pipeline that way, this screen is that job's spend and
+        // says so; reached from the rail with no filter it belongs to nobody
+        // in particular, and a parent link here would invent one.
+        parent={
+          chosenProject
+            ? { href: `/projects/${chosenProject.id}`, label: `${chosenProject.number} · ${chosenProject.name}` }
+            : undefined
+        }
         title="Expenses"
         description="What each job actually cost: the receipts, the subcontractors, and the driving."
         actions={

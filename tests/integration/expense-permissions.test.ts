@@ -1,5 +1,6 @@
 import { eq, sql } from 'drizzle-orm';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { PROJECT_TYPE_IDS } from '@/db/seed/project-lists';
 
 /**
  * Who may write to the expense ledger.
@@ -127,7 +128,7 @@ beforeEach(async () => {
       customerId: customer!.id,
       projectNumber: 'P-9101',
       name: 'Basement finish',
-      projectType: 'basement',
+      projectTypeId: PROJECT_TYPE_IDS.basement,
     })
     .returning();
   projectId = project!.id;

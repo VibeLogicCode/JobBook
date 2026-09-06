@@ -74,7 +74,7 @@ async function main() {
       .insert(scopeTemplates)
       .values({
         name: template.name,
-        projectType: template.projectType,
+        projectTypeId: template.projectTypeId,
         description: template.description,
       })
       .returning();

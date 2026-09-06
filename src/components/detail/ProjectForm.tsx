@@ -5,14 +5,15 @@ import { useActionState, useEffect, useRef } from 'react';
 import { Button, buttonClass } from '@/components/ui/Button';
 import { Field, FieldGroup, FormError, SelectField } from '@/components/detail/Fields';
 import type { FormAction, FormResult } from '@/components/detail/form-state';
-import { CONTRACT_TYPES, PROJECT_TYPES } from '@/components/detail/labels';
+import { CONTRACT_TYPES } from '@/components/detail/labels';
+import { listOptions, type ListRowRef } from '@/app/settings/project-lists';
 import { restoreInto } from '@/lib/forms/restore-values';
 
 export interface ProjectDraft {
   id?: string;
   customerId?: string | null;
   name?: string | null;
-  projectType?: string | null;
+  projectTypeId?: string | null;
   contractType?: string | null;
   siteAddressLine1?: string | null;
   siteCity?: string | null;
@@ -46,11 +47,14 @@ const options = (labels: Record<string, string>) =>
 export function ProjectFields({
   project,
   customers,
+  projectTypes,
   defaultProvince,
   showRealisedDates = false,
 }: {
   project?: ProjectDraft;
   customers: { id: string; name: string; companyName: string | null }[];
+  /** Every project type, retired and voided included -- see `listOptions`. */
+  projectTypes: ListRowRef[];
   /**
    * From `organization.province`. No database default on the column on
    * purpose: a default there would hardcode one tenant's region.
@@ -83,10 +87,11 @@ export function ProjectFields({
         />
         <SelectField
           label="Type"
-          name="projectType"
+          name="projectTypeId"
           required
-          options={options(PROJECT_TYPES)}
-          defaultValue={project?.projectType ?? 'renovation'}
+          placeholder={project?.projectTypeId ? undefined : 'Choose a type of work'}
+          options={listOptions(projectTypes, project?.projectTypeId)}
+          defaultValue={project?.projectTypeId ?? ''}
         />
         <SelectField
           label="Contract type"
@@ -189,6 +194,7 @@ export function ProjectForm({
   action,
   project,
   customers,
+  projectTypes,
   defaultProvince,
   cancelHref,
   submitLabel,
@@ -197,6 +203,7 @@ export function ProjectForm({
   action: FormAction;
   project?: ProjectDraft;
   customers: { id: string; name: string; companyName: string | null }[];
+  projectTypes: ListRowRef[];
   defaultProvince: string;
   cancelHref: string;
   submitLabel: string;
@@ -228,6 +235,7 @@ export function ProjectForm({
       <ProjectFields
         project={project}
         customers={customers}
+        projectTypes={projectTypes}
         defaultProvince={defaultProvince}
         showRealisedDates={showRealisedDates}
       />

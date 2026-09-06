@@ -672,15 +672,11 @@ export default async function SchedulePage({
     <div className="px-4 py-4 sm:px-6">
       <PageHeader
         className="mb-4"
-        eyebrow={
-          <span className="flex flex-wrap items-center gap-2">
-            <Link href={`/projects/${project.id}`} className="underline">
-              {project.projectNumber}
-            </Link>
-            <span className="text-muted">{project.name}</span>
-            {project.recordStatus === 'void' ? <Pill tone="negative">Void</Pill> : null}
-          </span>
-        }
+        parent={{
+          href: `/projects/${project.id}`,
+          label: `${project.projectNumber} · ${project.name}`,
+        }}
+        eyebrow={project.recordStatus === 'void' ? <Pill tone="negative">Void</Pill> : null}
         title="Schedule"
         description="A task can wait on one other task; move it and everything behind shifts too."
         actions={

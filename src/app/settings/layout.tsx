@@ -1,4 +1,4 @@
-import { SETTINGS_SECTIONS } from '@/app/settings/nav';
+import { SETTINGS_GROUPS } from '@/app/settings/nav';
 import { SettingsNav } from '@/components/settings/SettingsNav';
 import { PageHeader } from '@/components/ui/PageHeader';
 
@@ -22,7 +22,7 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
 
       <div className="flex flex-col gap-4 sm:flex-row sm:gap-6">
         <div className="sm:w-56 sm:shrink-0">
-          <SettingsNav items={SETTINGS_SECTIONS} />
+          <SettingsNav groups={SETTINGS_GROUPS} />
         </div>
         <div className="min-w-0 flex-1">{children}</div>
       </div>

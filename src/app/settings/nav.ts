@@ -1,103 +1,125 @@
-import type { NavItem } from '@/components/settings/SettingsNav';
+import type { NavGroup } from '@/components/settings/SettingsNav';
 
 /**
- * The sections, in the order the owner meets them: who the company is, how to
- * reach it, where it is in the world, what it owes, what it prints, what it
- * charges, how it categorises what it spends, and who may touch any of it.
+ * The settings sections, grouped under three headings -- the owner's own
+ * words for what was becoming a flat list of thirteen, soon to be fifteen:
+ * *"settings is getting crowded with trade types, tax rates, cost codes, line
+ * groups — should we group them under something?"*
  *
- * Cost codes sit here rather than beside the rate list because the two are
- * different kinds of thing on the same subject. The rate list is worked on --
- * a supplier moves a price and an item changes that afternoon. The cost code
- * list is a decision about how this company reports itself, made once, changed
- * rarely, and read by every job for years afterwards. That is the same shape
- * as the tax rates and the users already on this nav, and it is why the entry
- * sits directly under Tax rates.
+ * Three groups, not a hub page and not new routes -- every section keeps its
+ * own URL, and grouping is a heading in the sidebar (`SettingsNav`) and a
+ * heading above the same cards on `/settings` (`page.tsx` reads this same
+ * array, so the two cannot disagree about which section is in which group).
  *
- * Vendor types and trades sit immediately after it, in that order, because
- * they are the same kind of thing -- taxonomies the working screens are built
- * against -- and because the second is only meaningful in terms of the first:
- * a trade is asked of a vendor only when its TYPE says the vendor performs
- * work. Reading them the other way round is reading the answer before the
- * question.
+ * - **The company** -- who it is, how to reach it, where it is, what it owes,
+ *   what it prints. Facts about the company itself, changed rarely.
+ * - **Lists** -- every taxonomy a working screen is built against: rates,
+ *   codes, types, trades, groups, project types, lead sources. Tax rates
+ *   moves here from "the company" for the reason financial and legal keeps
+ *   the tax REGISTRATION number and not the rate table: a registration number
+ *   is a fact about the company, and a rate is a row you add to, exactly like
+ *   a cost code or a trade.
+ * - **Access and automation** -- who may touch any of it, and the one setting
+ *   that writes rows on its own rather than merely deciding what a document
+ *   says.
  *
- * Line groups sits right after them, one more taxonomy in the same run: what a
- * cost code is to the owner's own books, a line group is to the customer's
- * copy of the quote -- the heading a block of lines prints under. It does not
- * depend on vendor types or trades and they do not depend on it; it sits here
- * because a picker somebody hunts for a list looks in the run of lists, not
- * because the order among these three means anything.
- *
- * Reminder rules sit last of the lists, immediately before Users, because they
- * are the only setting in this area that WRITES rows on its own. Everything
- * above decides what a document says when somebody makes one; this decides
- * what the machine puts in front of him at seven on a Tuesday whether he asked
- * or not. It is the entry an owner comes looking for when the list has started
- * making noise, which is the only moment anybody opens it.
+ * Project types and lead sources land at the end of Lists rather than
+ * reshuffling the taxonomies already there, for the same reason line groups
+ * did: the order among a run of lists means nothing, and a picker somebody
+ * hunts a list for looks in the run, not at its position within it.
  */
-export const SETTINGS_SECTIONS: NavItem[] = [
+export const SETTINGS_GROUPS: NavGroup[] = [
   {
-    href: '/settings/identity',
-    label: 'Identity and branding',
-    summary: 'The names, the owner, and the accent colour every document carries.',
+    heading: 'The company',
+    items: [
+      {
+        href: '/settings/identity',
+        label: 'Identity and branding',
+        summary: 'The names, the owner, and the accent colour every document carries.',
+      },
+      {
+        href: '/settings/contact',
+        label: 'Contact',
+        summary: 'The address and contact block printed on quotes.',
+      },
+      {
+        href: '/settings/locale',
+        label: 'Locale',
+        summary: 'Currency, language, timezone and area unit.',
+      },
+      {
+        href: '/settings/financial',
+        label: 'Financial and legal',
+        summary: 'Tax registration, fiscal year, holdback, payment terms, target margin.',
+      },
+      {
+        href: '/settings/documents',
+        label: 'Documents',
+        summary: 'Validity, terms and footer text.',
+      },
+    ],
   },
   {
-    href: '/settings/contact',
-    label: 'Contact',
-    summary: 'The address and contact block printed on quotes.',
+    heading: 'Lists',
+    items: [
+      {
+        href: '/settings/tax-rates',
+        label: 'Tax rates',
+        summary: 'Effective-dated rates. Editing one supersedes it, never overwrites it.',
+      },
+      {
+        href: '/settings/cost-codes',
+        label: 'Cost codes',
+        summary: 'How spend is categorised. Retiring one is not voiding it, and nothing is deleted.',
+      },
+      {
+        href: '/settings/vendor-types',
+        label: 'Vendor types',
+        summary: 'What kind of counterparty a vendor is, and which kinds count as subcontractors.',
+      },
+      {
+        href: '/settings/trades',
+        label: 'Trades',
+        summary: 'What kind of subcontractor somebody is. Retiring one never blanks the sub who has it.',
+      },
+      {
+        href: '/settings/line-groups',
+        label: 'Line groups',
+        summary: 'The section heading a quote prints. Retiring one never touches what already printed.',
+      },
+      {
+        href: '/settings/project-types',
+        label: 'Project types',
+        summary: 'What kind of work a job is. Retiring one never blanks the job that has it.',
+      },
+      {
+        href: '/settings/lead-sources',
+        label: 'Lead sources',
+        summary: 'How a customer found you. Retiring one never blanks the customer who has it.',
+      },
+    ],
   },
   {
-    href: '/settings/locale',
-    label: 'Locale',
-    summary: 'Currency, language, timezone and area unit.',
-  },
-  {
-    href: '/settings/financial',
-    label: 'Financial and legal',
-    summary: 'Tax registration, fiscal year, holdback, payment terms, target margin.',
-  },
-  {
-    href: '/settings/documents',
-    label: 'Documents',
-    summary: 'Validity, terms and footer text.',
-  },
-  {
-    href: '/settings/tax-rates',
-    label: 'Tax rates',
-    summary: 'Effective-dated rates. Editing one supersedes it, never overwrites it.',
-  },
-  {
-    href: '/settings/cost-codes',
-    label: 'Cost codes',
-    summary: 'How spend is categorised. Retiring one is not voiding it, and nothing is deleted.',
-  },
-  {
-    href: '/settings/vendor-types',
-    label: 'Vendor types',
-    summary: 'What kind of counterparty a vendor is, and which kinds count as subcontractors.',
-  },
-  {
-    href: '/settings/trades',
-    label: 'Trades',
-    summary: 'What kind of subcontractor somebody is. Retiring one never blanks the sub who has it.',
-  },
-  {
-    href: '/settings/line-groups',
-    label: 'Line groups',
-    summary: 'The section heading a quote prints. Retiring one never touches what already printed.',
-  },
-  {
-    href: '/settings/reminder-rules',
-    label: 'Reminder rules',
-    summary: 'What the hourly job decides to chase you about. Off is not gone, and never was.',
-  },
-  {
-    href: '/settings/users',
-    label: 'Users',
-    summary: 'Who has an account, and what their role permits.',
-  },
-  {
-    href: '/settings/sync',
-    label: 'SharePoint mirror',
-    summary: 'Optional, off by default, one-way, and not a restore path.',
+    heading: 'Access and automation',
+    items: [
+      {
+        href: '/settings/reminder-rules',
+        label: 'Reminder rules',
+        summary: 'What the hourly job decides to chase you about. Off is not gone, and never was.',
+      },
+      {
+        href: '/settings/users',
+        label: 'Users',
+        summary: 'Who has an account, and what their role permits.',
+      },
+      {
+        href: '/settings/sync',
+        label: 'SharePoint mirror',
+        summary: 'Optional, off by default, one-way, and not a restore path.',
+      },
+    ],
   },
 ];
+
+/** The flat list, for anything that genuinely has no use for the grouping. */
+export const SETTINGS_SECTIONS = SETTINGS_GROUPS.flatMap((group) => group.items);

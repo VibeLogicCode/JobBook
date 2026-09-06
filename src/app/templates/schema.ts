@@ -59,17 +59,14 @@ export const qtySourceField = z.enum([
   'manual',
 ]);
 
-export const projectTypeField = z.enum([
-  'custom_home',
-  'basement',
-  'renovation',
-  'kitchen',
-  'bathroom',
-  'addition',
-  'commercial_ti',
-  'water_leak',
-  'other',
-]);
+/**
+ * A project type is a row on `project_types` now (`db/schema/project-lists.ts`),
+ * not a closed enum -- so this validates the SHAPE of an id, and the action
+ * re-reads the row inside its own transaction regardless, because a type that
+ * was on the list when the form was rendered may be retired or void by the
+ * time it is submitted.
+ */
+export const projectTypeIdField = z.uuid('choose a type of work');
 
 /**
  * Where a quantity comes from, in the words a person uses.
@@ -87,22 +84,6 @@ export const QTY_SOURCE_OPTIONS = [
   { value: 'fixed', label: 'A fixed quantity' },
   { value: 'manual', label: 'Typed on the quote' },
 ];
-
-export const PROJECT_TYPE_OPTIONS = [
-  { value: 'custom_home', label: 'Custom home' },
-  { value: 'basement', label: 'Basement' },
-  { value: 'renovation', label: 'Renovation' },
-  { value: 'kitchen', label: 'Kitchen' },
-  { value: 'bathroom', label: 'Bathroom' },
-  { value: 'addition', label: 'Addition' },
-  { value: 'commercial_ti', label: 'Commercial tenant improvement' },
-  { value: 'water_leak', label: 'Water leak' },
-  { value: 'other', label: 'Other' },
-];
-
-export const PROJECT_TYPE_LABELS: Record<string, string> = Object.fromEntries(
-  PROJECT_TYPE_OPTIONS.map((option) => [option.value, option.label]),
-);
 
 export const QTY_SOURCE_LABELS: Record<string, string> = Object.fromEntries(
   QTY_SOURCE_OPTIONS.map((option) => [option.value, option.label]),

@@ -1,48 +1,24 @@
-import type {
-  contractTypeEnum, customerTypeEnum, leadSourceEnum, projectStageEnum, projectTypeEnum,
-} from '@/db/enums';
+import type { contractTypeEnum, customerTypeEnum, projectStageEnum } from '@/db/enums';
 import type { Tone } from '@/components/ui/Pill';
 
 /**
  * Enum values to the words a person reads.
  *
- * The database stores `commercial_ti` because SharePoint mirrors these as text
- * and a renamed member would break every sync; a screen still has to say
- * "Commercial tenant improvement". Mapped here, once, rather than
- * `replace('_', ' ')` at each call site -- that only ever fixes the first
- * underscore, which is why `time_and_material` read as "time and_material".
+ * `LEAD_SOURCES` and `PROJECT_TYPES` used to live here as `Record<enum, string>`
+ * maps. Both are maintained lists now (`db/schema/project-lists.ts`,
+ * `/settings/lead-sources`, `/settings/project-types`) -- the database already
+ * stores the display name on the row, so a screen reads `row.name` straight off
+ * the table it joined rather than translating a code through a map that would
+ * need a deploy to gain a member.
  */
 
 type CustomerType = (typeof customerTypeEnum.enumValues)[number];
-type LeadSource = (typeof leadSourceEnum.enumValues)[number];
-type ProjectType = (typeof projectTypeEnum.enumValues)[number];
 type ContractType = (typeof contractTypeEnum.enumValues)[number];
 export type ProjectStage = (typeof projectStageEnum.enumValues)[number];
 
 export const CUSTOMER_TYPES: Record<CustomerType, string> = {
   residential: 'Residential',
   commercial: 'Commercial',
-};
-
-export const LEAD_SOURCES: Record<LeadSource, string> = {
-  call: 'Phone call',
-  email: 'Email',
-  referral: 'Referral',
-  website: 'Website',
-  repeat: 'Repeat customer',
-  other: 'Other',
-};
-
-export const PROJECT_TYPES: Record<ProjectType, string> = {
-  custom_home: 'Custom home',
-  basement: 'Basement',
-  renovation: 'Renovation',
-  kitchen: 'Kitchen',
-  bathroom: 'Bathroom',
-  addition: 'Addition',
-  commercial_ti: 'Commercial tenant improvement',
-  water_leak: 'Water damage',
-  other: 'Other',
 };
 
 export const CONTRACT_TYPES: Record<ContractType, string> = {

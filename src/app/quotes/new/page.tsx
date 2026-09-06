@@ -1,6 +1,6 @@
 import { and, asc, count, eq, inArray } from 'drizzle-orm';
 import { db } from '@/db/client';
-import { customers, organization, projects, quotes, scopeTemplates } from '@/db/schema';
+import { customers, organization, projects, projectTypes, quotes, scopeTemplates } from '@/db/schema';
 import { startQuote } from '@/app/quotes/new/actions';
 import { StartQuoteForm } from '@/app/quotes/new/StartQuoteForm';
 import { Panel } from '@/components/detail/Panel';
@@ -25,7 +25,7 @@ export default async function NewQuotePage({
 
   const [org] = await db.select().from(organization).where(eq(organization.id, 1));
 
-  const [customerList, opportunityRows, templateList] = await Promise.all([
+  const [customerList, opportunityRows, templateList, projectTypeList] = await Promise.all([
     db
       .select({ id: customers.id, name: customers.name, companyName: customers.companyName })
       .from(customers)
@@ -50,11 +50,21 @@ export default async function NewQuotePage({
       .select({
         id: scopeTemplates.id,
         name: scopeTemplates.name,
-        projectType: scopeTemplates.projectType,
+        projectTypeName: projectTypes.name,
       })
       .from(scopeTemplates)
+      .innerJoin(projectTypes, eq(scopeTemplates.projectTypeId, projectTypes.id))
       .where(and(eq(scopeTemplates.recordStatus, 'active'), eq(scopeTemplates.isActive, true)))
       .orderBy(asc(scopeTemplates.name)),
+
+    // Every project type, for the new-opportunity picker. Only active,
+    // non-void ones: this is a brand-new opportunity, so there is no existing
+    // value to append a retired option for, unlike the picker on an edit form.
+    db
+      .select({ id: projectTypes.id, name: projectTypes.name, isActive: projectTypes.isActive, recordStatus: projectTypes.recordStatus })
+      .from(projectTypes)
+      .where(eq(projectTypes.recordStatus, 'active'))
+      .orderBy(asc(projectTypes.sortOrder), asc(projectTypes.name)),
   ]);
 
   // How many quotes already sit on each opportunity, so the picker can say so.
@@ -105,6 +115,7 @@ export default async function NewQuotePage({
           customers={customerList}
           opportunities={opportunityList}
           templates={templateList}
+          projectTypes={projectTypeList}
           defaultProvince={org?.province ?? ''}
           preselectedCustomerId={preselected}
         />

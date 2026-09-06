@@ -1,5 +1,6 @@
 import { eq, sql } from 'drizzle-orm';
 import { beforeEach, describe, expect, it } from 'vitest';
+import { PROJECT_TYPE_IDS } from '@/db/seed/project-lists';
 import { db } from '@/db/client';
 import { customers, projects, quoteLines, quotes, quoteTaxes } from '@/db/schema';
 
@@ -21,7 +22,7 @@ async function seedProject() {
       customerId: customer!.id,
       projectNumber: 'P-0001',
       name: 'Basement finish',
-      projectType: 'basement',
+      projectTypeId: PROJECT_TYPE_IDS.basement,
       stage: 'quoting',
     })
     .returning();

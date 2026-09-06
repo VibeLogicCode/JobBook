@@ -5,6 +5,7 @@ import { organization } from '@/db/schema';
 import { logoDataUri } from '@/lib/documents/branding';
 import { loadQuote } from '@/lib/quote/load';
 import { formatCents, formatQty, formatRate } from '@/lib/money/format';
+import { PageParentLink } from '@/components/ui/PageHeader';
 
 export const dynamic = 'force-dynamic';
 
@@ -51,6 +52,15 @@ export default async function PrintQuote({ params }: { params: Promise<{ id: str
   return (
     <div className="doc">
       <style>{DOCUMENT_CSS}</style>
+
+      {/* Screen-only: staff open this exact URL to preview what will render,
+          and had no way back to the quote from it. `PageParentLink` already
+          carries its own `no-print`, which is the whole point here -- this
+          document goes to a customer, who must never receive a link back
+          into the application. */}
+      <div className="no-print mb-3">
+        <PageParentLink href={`/quotes/${quote.id}`} label={`${quote.quoteNumber} · ${quote.projectName}`} />
+      </div>
 
       <header className="letterhead">
         <div>

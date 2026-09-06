@@ -1,5 +1,6 @@
 import { desc, eq, sql } from 'drizzle-orm';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { PROJECT_TYPE_IDS } from '@/db/seed/project-lists';
 
 /**
  * `revalidatePath`, `headers` and `redirect` are request-scoped Next APIs and
@@ -27,7 +28,7 @@ import { db } from '@/db/client';
 import {
   customerInvoices, customers, documentSequences, organization, projects, quotes, taxRates, users,
 } from '@/db/schema';
-import { issueCustomerInvoice } from '@/app/billing/[projectId]/actions';
+import { issueCustomerInvoice } from '@/app/projects/[id]/billing/actions';
 
 /**
  * Figures that divide cleanly, so a wrong answer is obvious rather than
@@ -170,7 +171,7 @@ beforeEach(async () => {
       customerId: customer!.id,
       projectNumber: 'P-0001',
       name: 'Work under contract',
-      projectType: 'basement',
+      projectTypeId: PROJECT_TYPE_IDS.basement,
       stage: 'in_progress',
     })
     .returning();
@@ -183,7 +184,7 @@ beforeEach(async () => {
       customerId: customer!.id,
       projectNumber: 'P-0002',
       name: 'Nothing won yet',
-      projectType: 'basement',
+      projectTypeId: PROJECT_TYPE_IDS.basement,
       stage: 'quote_sent',
     })
     .returning();
@@ -525,7 +526,7 @@ describe('the invoice the action writes', () => {
       percent: '45',
       issueDate: ISSUE,
     });
-    expect(destination).toBe(`/billing/${jobId}?issued=INV-2026-0001`);
+    expect(destination).toBe(`/projects/${jobId}/billing?issued=INV-2026-0001`);
   });
 
   it('refuses a date that is not one, because the date decides which rates applied', async () => {

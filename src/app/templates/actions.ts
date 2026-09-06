@@ -19,10 +19,11 @@ import {
 import {
   fixedQtyField,
   multiplierField,
-  projectTypeField,
+  projectTypeIdField,
   qtySourceField,
   timesPhrase,
 } from '@/app/templates/schema';
+import { projectTypeProblem } from '@/lib/project-lists/guards';
 
 /**
  * Scope templates: the standardisation the product exists for.
@@ -38,15 +39,16 @@ import {
 
 const templateLabels = {
   name: 'Name',
-  projectType: 'Project type',
+  projectTypeId: 'Project type',
   description: 'Description',
 };
 
 const createSchema = z.object({
   name: requiredText(200),
-  projectType: projectTypeField,
+  projectTypeId: projectTypeIdField,
   description: optionalText(1000),
 });
+
 
 export async function createTemplate(
   _previous: ActionResult | null,
@@ -57,6 +59,9 @@ export async function createTemplate(
 
   const parsed = createSchema.safeParse(formValues(formData));
   if (!parsed.success) return invalid(parsed.error, templateLabels);
+
+  const problem = await projectTypeProblem(db, parsed.data.projectTypeId);
+  if (problem) return refused(problem);
 
   const [created] = await db
     .insert(scopeTemplates)
@@ -94,6 +99,9 @@ export async function createScheduleTemplate(
   const parsed = createSchema.safeParse(formValues(formData));
   if (!parsed.success) return invalid(parsed.error, templateLabels);
 
+  const problem = await projectTypeProblem(db, parsed.data.projectTypeId);
+  if (problem) return refused(problem);
+
   const [created] = await db
     .insert(scheduleTemplates)
     .values({ ...parsed.data, createdBy: guard.actor.id })
@@ -116,6 +124,9 @@ export async function updateTemplate(
   const parsed = updateSchema.safeParse(formValues(formData));
   if (!parsed.success) return invalid(parsed.error, templateLabels);
   const { id, ...patch } = parsed.data;
+
+  const problem = await projectTypeProblem(db, patch.projectTypeId);
+  if (problem) return refused(problem);
 
   const rows = await db
     .update(scopeTemplates)

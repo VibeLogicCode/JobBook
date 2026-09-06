@@ -1,7 +1,7 @@
 import { and, asc, eq } from 'drizzle-orm';
 import { notFound } from 'next/navigation';
 import { db } from '@/db/client';
-import { organization, rateItems, scopeTemplateItems, scopeTemplates } from '@/db/schema';
+import { organization, projectTypes, rateItems, scopeTemplateItems, scopeTemplates } from '@/db/schema';
 import { can, resolveActor } from '@/app/settings/actor';
 import { addTemplateLine, setTemplateActive, updateTemplate } from '@/app/templates/actions';
 import { timesPhrase } from '@/app/templates/schema';
@@ -50,6 +50,13 @@ export default async function TemplateDetailPage({
 
   const [org] = await db.select().from(organization).where(eq(organization.id, 1));
   const areaUnit = org?.areaUnit ?? 'sqft';
+
+  // Every project type, retired and voided included -- this template's own
+  // may not be offered to new work any more, and it still has to render.
+  const projectTypeRows = await db
+    .select()
+    .from(projectTypes)
+    .orderBy(asc(projectTypes.sortOrder), asc(projectTypes.name));
 
   const wireLines: WireTemplateLine[] = lines.map(({ line, item }) => ({
     id: line.id,
@@ -132,7 +139,8 @@ export default async function TemplateDetailPage({
                   <TemplateHeaderFields
                     idPrefix="template"
                     name={template.name}
-                    projectType={template.projectType}
+                    projectTypeId={template.projectTypeId}
+                    projectTypes={projectTypeRows}
                     description={template.description}
                     disabled={!allowed}
                   />

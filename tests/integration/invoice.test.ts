@@ -1,5 +1,6 @@
 import { and, asc, eq, sql } from 'drizzle-orm';
 import { beforeEach, describe, expect, it } from 'vitest';
+import { PROJECT_TYPE_IDS } from '@/db/seed/project-lists';
 import { db } from '@/db/client';
 import {
   customerInvoiceTaxes, customerInvoices, customers, holdbackLedger, organization, projects,
@@ -68,7 +69,7 @@ beforeEach(async () => {
       customerId: customerId,
       projectNumber: 'P-0001',
       name: 'Lower level fit-out',
-      projectType: 'basement',
+      projectTypeId: PROJECT_TYPE_IDS.basement,
       stage: 'in_progress',
     })
     .returning();

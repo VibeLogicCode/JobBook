@@ -1,5 +1,6 @@
 import { eq, sql } from 'drizzle-orm';
 import { beforeEach, describe, expect, it } from 'vitest';
+import { PROJECT_TYPE_IDS } from '@/db/seed/project-lists';
 import { db } from '@/db/client';
 import { assignments, customers, projects, scheduleTasks, users, vendors } from '@/db/schema';
 
@@ -52,7 +53,7 @@ async function seedTask(name = 'Framing', start = '2026-03-02', end = '2026-03-1
       customerId: customer!.id,
       projectNumber: `P-${Math.floor(Math.random() * 100000)}`,
       name: 'Sample job',
-      projectType: 'renovation',
+      projectTypeId: PROJECT_TYPE_IDS.renovation,
     })
     .returning();
   const [task] = await db

@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { asc, eq } from 'drizzle-orm';
 import { db } from '@/db/client';
-import { customers, organization } from '@/db/schema';
+import { customers, organization, projectTypes } from '@/db/schema';
 import { createProject } from '@/app/projects/actions';
 import { Panel } from '@/components/detail/Panel';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -28,6 +28,14 @@ export default async function NewProjectPage({
     .orderBy(asc(customers.name));
 
   const preselected = customerList.some((row) => row.id === customer) ? customer : undefined;
+
+  // Only active, non-void: this is a brand-new opportunity, so there is no
+  // existing value to append a retired option for.
+  const projectTypeList = await db
+    .select({ id: projectTypes.id, name: projectTypes.name, isActive: projectTypes.isActive, recordStatus: projectTypes.recordStatus })
+    .from(projectTypes)
+    .where(eq(projectTypes.recordStatus, 'active'))
+    .orderBy(asc(projectTypes.sortOrder), asc(projectTypes.name));
 
   return (
     <div className="grid max-w-4xl gap-4 px-4 py-4 sm:px-6">
@@ -59,6 +67,7 @@ export default async function NewProjectPage({
             action={createProject}
             project={preselected ? { customerId: preselected } : undefined}
             customers={customerList}
+            projectTypes={projectTypeList}
             // The site province defaults from the organization record. The
             // column has no database default on purpose: one there would
             // hardcode a tenant's region into every deployment.

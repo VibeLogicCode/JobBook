@@ -1,5 +1,6 @@
 import { eq, sql } from 'drizzle-orm';
 import { beforeEach, describe, expect, it } from 'vitest';
+import { PROJECT_TYPE_IDS } from '@/db/seed/project-lists';
 import { db } from '@/db/client';
 import { costCodes, customers, expenseTaxes, expenses, organization, projects, vendors } from '@/db/schema';
 
@@ -69,7 +70,7 @@ async function seedProject() {
       customerId: customer!.id,
       projectNumber: 'P-9001',
       name: 'Basement finish',
-      projectType: 'basement',
+      projectTypeId: PROJECT_TYPE_IDS.basement,
     })
     .returning();
   return project!;

@@ -5,7 +5,8 @@ import { useActionState, useEffect, useRef, useState } from 'react';
 import { Button, buttonClass } from '@/components/ui/Button';
 import { CheckField, Field, FieldGroup, FormError, SelectField } from '@/components/detail/Fields';
 import type { FormAction, FormResult } from '@/components/detail/form-state';
-import { CUSTOMER_TYPES, LEAD_SOURCES } from '@/components/detail/labels';
+import { CUSTOMER_TYPES } from '@/components/detail/labels';
+import { listOptions, type ListRowRef } from '@/app/settings/project-lists';
 import { restoreInto } from '@/lib/forms/restore-values';
 
 export interface CustomerDraft {
@@ -23,7 +24,7 @@ export interface CustomerDraft {
   altContactEmail?: string | null;
   altContactPhone?: string | null;
   customerType?: string | null;
-  leadSource?: string | null;
+  leadSourceId?: string | null;
   isTaxExempt?: boolean;
   taxExemptNumber?: string | null;
   taxExemptReason?: string | null;
@@ -43,9 +44,12 @@ const options = (labels: Record<string, string>) =>
  */
 export function CustomerFields({
   customer,
+  leadSources,
   defaultProvince,
 }: {
   customer?: CustomerDraft;
+  /** Every lead source, retired and voided included -- see `listOptions`. */
+  leadSources: ListRowRef[];
   /**
    * From `organization.province`. The column carries no database default on
    * purpose -- defaulting it to a province in the schema would hardcode one
@@ -86,10 +90,10 @@ export function CustomerFields({
         />
         <SelectField
           label="Lead source"
-          name="leadSource"
+          name="leadSourceId"
           placeholder="Not recorded"
-          options={options(LEAD_SOURCES)}
-          defaultValue={customer?.leadSource ?? ''}
+          options={listOptions(leadSources, customer?.leadSourceId)}
+          defaultValue={customer?.leadSourceId ?? ''}
         />
       </FieldGroup>
 
@@ -217,12 +221,14 @@ export function CustomerFields({
 export function CustomerForm({
   action,
   customer,
+  leadSources,
   defaultProvince,
   cancelHref,
   submitLabel,
 }: {
   action: FormAction;
   customer?: CustomerDraft;
+  leadSources: ListRowRef[];
   defaultProvince: string;
   cancelHref: string;
   submitLabel: string;
@@ -250,7 +256,7 @@ export function CustomerForm({
 
       <FormError error={state && !state.ok ? state.error : null} />
 
-      <CustomerFields customer={customer} defaultProvince={defaultProvince} />
+      <CustomerFields customer={customer} leadSources={leadSources} defaultProvince={defaultProvince} />
 
       <div className="flex flex-wrap gap-2">
         <Button type="submit" size="lg" pending={pending} pendingLabel="Saving…">

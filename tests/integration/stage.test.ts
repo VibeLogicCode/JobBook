@@ -1,5 +1,6 @@
 import { asc, eq, sql } from 'drizzle-orm';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { PROJECT_TYPE_IDS } from '@/db/seed/project-lists';
 
 /**
  * `revalidatePath` and `headers` are request-scoped Next APIs and there is no
@@ -83,7 +84,7 @@ beforeEach(async () => {
       customerId: customer!.id,
       projectNumber: 'P-0001',
       name: 'Nothing won yet',
-      projectType: 'basement',
+      projectTypeId: PROJECT_TYPE_IDS.basement,
       stage: 'quote_sent',
     })
     .returning();
@@ -95,7 +96,7 @@ beforeEach(async () => {
       customerId: customer!.id,
       projectNumber: 'P-0002',
       name: 'Work under contract',
-      projectType: 'basement',
+      projectTypeId: PROJECT_TYPE_IDS.basement,
       stage: 'won',
     })
     .returning();

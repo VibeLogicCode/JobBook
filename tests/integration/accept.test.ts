@@ -1,5 +1,6 @@
 import { and, asc, eq, sql } from 'drizzle-orm';
 import { beforeEach, describe, expect, it } from 'vitest';
+import { PROJECT_TYPE_IDS } from '@/db/seed/project-lists';
 import { db } from '@/db/client';
 import {
   costCodes, customers, organization, projects, quoteLines, quotes, rateItems,
@@ -61,7 +62,7 @@ beforeEach(async () => {
       customerId: customer!.id,
       projectNumber: 'P-0001',
       name: 'Lower level fit-out',
-      projectType: 'basement',
+      projectTypeId: PROJECT_TYPE_IDS.basement,
       stage: 'quote_sent',
     })
     .returning();
@@ -118,7 +119,7 @@ beforeEach(async () => {
 
   const [template] = await db
     .insert(scopeTemplates)
-    .values({ name: 'Lower Level', projectType: 'basement' })
+    .values({ name: 'Lower Level', projectTypeId: PROJECT_TYPE_IDS.basement })
     .returning();
   templateId = template!.id;
 

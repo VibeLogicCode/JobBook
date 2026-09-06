@@ -17,3 +17,4 @@ export * from '@/db/schema/schedule-templates';
 export * from '@/db/schema/assignments';
 export * from '@/db/schema/vendor-lists';
 export * from '@/db/schema/line-groups';
+export * from '@/db/schema/project-lists';

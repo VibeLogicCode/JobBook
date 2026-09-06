@@ -1,9 +1,8 @@
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 import { boolean, date, index, integer, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { auditColumns } from '@/db/columns';
-import {
-  contractTypeEnum, customerTypeEnum, leadSourceEnum, projectStageEnum, projectTypeEnum,
-} from '@/db/enums';
+import { contractTypeEnum, customerTypeEnum, projectStageEnum } from '@/db/enums';
+import { leadSources, projectTypes } from '@/db/schema/project-lists';
 
 export const customers = pgTable('customers', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -25,7 +24,12 @@ export const customers = pgTable('customers', {
   altContactEmail: text('alt_contact_email'),
   altContactPhone: text('alt_contact_phone'),
   customerType: customerTypeEnum('customer_type').notNull(),
-  leadSource: leadSourceEnum('lead_source'),
+  /**
+   * How this customer found the company. Nullable: not knowing is a real and
+   * common state, unlike a project's type. Was `lead_source_enum`; migration
+   * 0018 converted it to a maintained list (`db/schema/project-lists.ts`).
+   */
+  leadSourceId: uuid('lead_source_id').references(() => leadSources.id),
   // Exemption is stored with its number and reason: the number belongs on the
   // document, and an unexplained exemption is an audit gap.
   isTaxExempt: boolean('is_tax_exempt').notNull().default(false),
@@ -33,7 +37,7 @@ export const customers = pgTable('customers', {
   taxExemptReason: text('tax_exempt_reason'),
   notes: text('notes'),
   ...auditColumns,
-});
+}, (t) => [index('customers_lead_source_idx').on(t.leadSourceId)]);
 
 export const projects = pgTable('projects', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -44,7 +48,12 @@ export const projects = pgTable('projects', {
   siteCity: text('site_city'),
   siteProvince: text('site_province'),
   sitePostalCode: text('site_postal_code'),
-  projectType: projectTypeEnum('project_type').notNull(),
+  /**
+   * What kind of work this is. Was `project_type_enum`; migration 0018
+   * converted it to a maintained list (`db/schema/project-lists.ts`) so the
+   * owner can add "Deck" without a deploy.
+   */
+  projectTypeId: uuid('project_type_id').notNull().references(() => projectTypes.id),
   contractType: contractTypeEnum('contract_type'),
   stage: projectStageEnum('stage').notNull().default('lead'),
   // Scheduled and actual are separate columns so slippage stays measurable
@@ -63,7 +72,10 @@ export const projects = pgTable('projects', {
   // quotes on the project (spec 5.6); storing it too would give two sources of
   // truth from day one.
   ...auditColumns,
-}, (t) => [uniqueIndex('projects_number_unique').on(t.projectNumber)]);
+}, (t) => [
+  uniqueIndex('projects_number_unique').on(t.projectNumber),
+  index('projects_project_type_idx').on(t.projectTypeId),
+]);
 
 /**
  * Trigger-populated stage transitions. Time in stage is derived from these

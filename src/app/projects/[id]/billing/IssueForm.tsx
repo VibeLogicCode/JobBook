@@ -1,7 +1,7 @@
 'use client';
 
 import { useActionState } from 'react';
-import { issueCustomerInvoice } from '@/app/billing/[projectId]/actions';
+import { issueCustomerInvoice } from '@/app/projects/[id]/billing/actions';
 import { CheckField, FormError, TextAreaField } from '@/components/detail/Fields';
 import { Button } from '@/components/ui/Button';
 import { formatCents } from '@/lib/money/format';

@@ -18,6 +18,7 @@ import {
   updateScheduleTemplateSchema,
   voidTemplateTaskFields,
 } from '@/app/templates/schedule/schema';
+import { projectTypeProblem } from '@/lib/project-lists/guards';
 
 /**
  * The schedule template's write side -- spec
@@ -80,6 +81,11 @@ export async function updateScheduleTemplate(
   const parsed = updateScheduleTemplateSchema.safeParse(formValues(formData));
   if (!parsed.success) return invalid(parsed.error, TEMPLATE_LABELS);
   const { id, ...patch } = parsed.data;
+
+  // Read rather than trusted from the form: the picker was rendered before
+  // this type might have been voided.
+  const problem = await projectTypeProblem(db, patch.projectTypeId);
+  if (problem) return refused(problem);
 
   const rows = await db
     .update(scheduleTemplates)

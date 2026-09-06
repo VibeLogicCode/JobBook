@@ -14,6 +14,7 @@ import {
   type ProjectStage,
   stagesOpenTo,
 } from '@/components/detail/labels';
+import { projectTypeProblem } from '@/lib/project-lists/guards';
 
 const optionalText = (max: number) =>
   z
@@ -40,13 +41,7 @@ const projectFields = z
   .object({
     customerId: z.string().uuid('choose a customer'),
     name: z.string().trim().min(1, 'this needs a name').max(200, 'that name is too long'),
-    projectType: z.enum(
-      [
-        'custom_home', 'basement', 'renovation', 'kitchen', 'bathroom',
-        'addition', 'commercial_ti', 'water_leak', 'other',
-      ],
-      'choose a type of work',
-    ),
+    projectTypeId: z.uuid('choose a type of work'),
     contractType: z
       .enum(['lump_sum', 'unit_price', 'cost_plus', 'time_and_material'])
       .optional()
@@ -122,6 +117,7 @@ function failureText(error: unknown): string {
   return error instanceof Error ? error.message : 'that change failed';
 }
 
+
 export async function createProject(
   _state: FormResult | null,
   formData: FormData,
@@ -146,6 +142,9 @@ export async function createProject(
     // The number is allocated inside the same transaction as the insert, so a
     // job that fails to save does not burn a number out of the series.
     id = await db.transaction(async (tx) => {
+      const problem = await projectTypeProblem(tx, parsed.data.projectTypeId);
+      if (problem) throw new Error(problem);
+
       const projectNumber = await allocateDocumentNumber(tx, 'project');
       const [row] = await tx
         .insert(projects)
@@ -188,7 +187,11 @@ export async function updateProject(
       return { ok: false, error: 'this job is void and cannot be edited' };
     }
 
-    await db.update(projects).set(parsed.data).where(eq(projects.id, id.data.id));
+    await db.transaction(async (tx) => {
+      const problem = await projectTypeProblem(tx, parsed.data.projectTypeId);
+      if (problem) throw new Error(problem);
+      await tx.update(projects).set(parsed.data).where(eq(projects.id, id.data.id));
+    });
   } catch (error) {
     return { ok: false, error: failureText(error) };
   }

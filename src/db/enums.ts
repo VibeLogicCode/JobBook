@@ -15,13 +15,6 @@ export const recordStatusEnum = pgEnum('record_status', ['active', 'void']);
 
 export const roleEnum = pgEnum('role', ['owner', 'admin', 'bookkeeper']);
 export const customerTypeEnum = pgEnum('customer_type', ['residential', 'commercial']);
-export const leadSourceEnum = pgEnum('lead_source', [
-  'call', 'email', 'referral', 'website', 'repeat', 'other',
-]);
-export const projectTypeEnum = pgEnum('project_type', [
-  'custom_home', 'basement', 'renovation', 'kitchen',
-  'bathroom', 'addition', 'commercial_ti', 'water_leak', 'other',
-]);
 export const projectStageEnum = pgEnum('project_stage', [
   'lead', 'site_visit', 'quoting', 'quote_sent', 'won',
   'lost', 'in_progress', 'complete', 'on_hold',

@@ -1,6 +1,7 @@
 import { inArray } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { rateItems, scheduleTemplates, scheduleTemplateTasks, trades } from '@/db/schema';
+import { PROJECT_TYPE_IDS } from '@/db/seed/project-lists';
 import { seedVendorLists } from '@/db/seed/vendor-lists';
 
 /**
@@ -184,7 +185,7 @@ export async function seedScheduleTemplates(): Promise<void> {
     .values({
       id: BASEMENT_FINISH_SCHEDULE_TEMPLATE_ID,
       name: 'Basement finish',
-      projectType: 'basement',
+      projectTypeId: PROJECT_TYPE_IDS.basement,
       description: 'Permit through drywall, one washroom -- the worked example for the template editor.',
     })
     .onConflictDoNothing();

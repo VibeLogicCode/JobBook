@@ -1,5 +1,6 @@
 import { and, eq, sql } from 'drizzle-orm';
 import { beforeEach, describe, expect, it } from 'vitest';
+import { PROJECT_TYPE_IDS } from '@/db/seed/project-lists';
 import { db } from '@/db/client';
 import {
   activities, auditLog, customers, organization, projects, quotes, reminderRules, reminders, users,
@@ -132,7 +133,7 @@ beforeEach(async () => {
       customerId,
       projectNumber: 'P-0001',
       name: 'Basement finish',
-      projectType: 'basement',
+      projectTypeId: PROJECT_TYPE_IDS.basement,
       stage: 'quote_sent',
       siteAddressLine1: '12 Sample Street',
       siteCity: 'Sample City',

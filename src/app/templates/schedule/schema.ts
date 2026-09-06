@@ -1,12 +1,12 @@
 import { z } from 'zod';
 import { parseQtyToMilli } from '@/lib/money/format';
 import { optionalInt, optionalText, requiredInt, requiredText } from '@/app/settings/validate';
-// Read-only reuse of the quote template's project-type vocabulary. The two
+// Read-only reuse of the quote template's project-type validator. The two
 // template kinds share nothing else (section 4 of the design doc is explicit
 // that they are two tables, not one with a `kind`), but a project type is a
-// project type regardless of which template names it, and a second enum here
-// would drift from this one the first time a type was renamed.
-import { projectTypeField } from '@/app/templates/schema';
+// project type regardless of which template names it, and a second copy here
+// would drift from this one the first time its shape changed.
+import { projectTypeIdField } from '@/app/templates/schema';
 
 /**
  * Field builders for the schedule template screen -- the template's own
@@ -19,18 +19,18 @@ import { projectTypeField } from '@/app/templates/schema';
  * and this file must not edit that one to change that.
  */
 
-export { projectTypeField };
+export { projectTypeIdField };
 
 export const TEMPLATE_LABELS: Record<string, string> = {
   name: 'Name',
-  projectType: 'Project type',
+  projectTypeId: 'Project type',
   description: 'Description',
 };
 
 export const updateScheduleTemplateSchema = z.object({
   id: z.string().uuid(),
   name: requiredText(200),
-  projectType: projectTypeField,
+  projectTypeId: projectTypeIdField,
   description: optionalText(1000),
 });
 

@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm';
 import { beforeEach, describe, expect, it } from 'vitest';
+import { PROJECT_TYPE_IDS } from '@/db/seed/project-lists';
 import { db } from '@/db/client';
 import { costCodes, customers, projects } from '@/db/schema';
 
@@ -67,7 +68,7 @@ describe('projects', () => {
         customerId: customer.id,
         projectNumber: 'P-0001',
         name: 'Basement finish',
-        projectType: 'basement',
+        projectTypeId: PROJECT_TYPE_IDS.basement,
         stage: 'lead',
         scheduledStart: '2026-09-01',
         scheduledEnd: '2026-11-15',
@@ -82,7 +83,7 @@ describe('projects', () => {
     const base = {
       customerId: customer.id,
       name: 'X',
-      projectType: 'basement' as const,
+      projectTypeId: PROJECT_TYPE_IDS.basement,
       stage: 'lead' as const,
     };
     await db.insert(projects).values({ ...base, projectNumber: 'P-0001' });
@@ -107,7 +108,7 @@ describe('projects', () => {
         customerId: customer.id,
         projectNumber: 'P-0002',
         name: 'Addition',
-        projectType: 'addition',
+        projectTypeId: PROJECT_TYPE_IDS.addition,
         substantialPerformanceDate: '2026-10-01',
         certificatePublishedDate: '2026-10-06',
       })

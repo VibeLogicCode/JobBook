@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import { db } from '@/db/client';
-import { customers, organization, projects, quotes } from '@/db/schema';
+import { customers, leadSources, organization, projects, quotes } from '@/db/schema';
 import { buttonClass } from '@/components/ui/Button';
 import { Notice } from '@/components/ui/Notice';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -19,7 +19,7 @@ import { LogActivityForm } from '@/components/timeline/LogActivityForm';
 import { Timeline } from '@/components/timeline/Timeline';
 import { listTimeline } from '@/lib/reminders/repository';
 import {
-  CUSTOMER_TYPES, LEAD_SOURCES, PROJECT_STAGES, isLiveStage, stageTone,
+  CUSTOMER_TYPES, PROJECT_STAGES, isLiveStage, stageTone,
 } from '@/components/detail/labels';
 
 export const dynamic = 'force-dynamic';
@@ -44,6 +44,17 @@ export default async function CustomerPage({
   if (!customer) notFound();
 
   const [org] = await db.select().from(organization).where(eq(organization.id, 1));
+
+  // Every lead source, retired and voided included -- this customer's own may
+  // no longer be offered to new work, and it still has to render and resolve
+  // in the edit sheet's picker.
+  const leadSourceList = await db
+    .select()
+    .from(leadSources)
+    .orderBy(asc(leadSources.sortOrder), asc(leadSources.name));
+  const leadSourceName = customer.leadSourceId
+    ? (leadSourceList.find((row) => row.id === customer.leadSourceId)?.name ?? null)
+    : null;
 
   const jobs = await db
     .select({
@@ -122,7 +133,7 @@ export default async function CustomerPage({
         description={
           <>
             {customer.companyName ?? 'No company recorded'}
-            {customer.leadSource ? ` · ${LEAD_SOURCES[customer.leadSource]}` : ''}
+            {leadSourceName ? ` · ${leadSourceName}` : ''}
           </>
         }
         actions={
@@ -182,7 +193,7 @@ export default async function CustomerPage({
           submitLabel="Save customer"
           discardPrompt="Throw away the changes to this customer? Nothing has been saved yet."
         >
-          <CustomerFields customer={customer} defaultProvince={org?.province ?? ''} />
+          <CustomerFields customer={customer} leadSources={leadSourceList} defaultProvince={org?.province ?? ''} />
         </EditSheet>
       ) : null}
 

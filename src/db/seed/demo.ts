@@ -1,3 +1,5 @@
+import { LEAD_SOURCE_IDS, PROJECT_TYPE_IDS } from '@/db/seed/project-lists';
+
 /**
  * Demo tenant.
  *
@@ -161,7 +163,7 @@ interface DemoTemplateItem {
 
 interface DemoTemplate {
   name: string;
-  projectType: 'basement' | 'bathroom' | 'kitchen' | 'renovation' | 'custom_home' | 'addition';
+  projectTypeId: string;
   description: string;
   items: DemoTemplateItem[];
 }
@@ -169,7 +171,7 @@ interface DemoTemplate {
 export const DEMO_TEMPLATES: DemoTemplate[] = [
   {
     name: 'Basement Finish — Standard',
-    projectType: 'basement' as const,
+    projectTypeId: PROJECT_TYPE_IDS.basement,
     description: 'Full basement finish: framing through flooring, one washroom.',
     items: [
       { code: 'GEN-01', source: 'fixed' as const, group: 'General', multiplier: 10000n, fixedQty: 1000n },
@@ -193,7 +195,7 @@ export const DEMO_TEMPLATES: DemoTemplate[] = [
   },
   {
     name: 'Bathroom Renovation',
-    projectType: 'bathroom' as const,
+    projectTypeId: PROJECT_TYPE_IDS.bathroom,
     description: 'Single washroom gut and rebuild.',
     items: [
       { code: 'DEM-01', source: 'area' as const, group: 'Demolition', multiplier: 10000n },
@@ -212,7 +214,7 @@ export const DEMO_CUSTOMERS = [
   {
     name: 'Eleanor Vance',
     customerType: 'residential' as const,
-    leadSource: 'referral' as const,
+    leadSourceId: LEAD_SOURCE_IDS.referral,
     email: 'eleanor.vance@example.com',
     phone: '416-555-0188',
     addressLine1: '41 Kensington Avenue',
@@ -224,7 +226,7 @@ export const DEMO_CUSTOMERS = [
     projects: [
       {
         name: 'Kensington basement finish',
-        projectType: 'basement' as const,
+        projectTypeId: PROJECT_TYPE_IDS.basement,
         contractType: 'lump_sum' as const,
         stage: 'quoting' as const,
         siteAddressLine1: '41 Kensington Avenue',
@@ -240,7 +242,7 @@ export const DEMO_CUSTOMERS = [
   {
     name: 'Dara Okonkwo',
     customerType: 'residential' as const,
-    leadSource: 'website' as const,
+    leadSourceId: LEAD_SOURCE_IDS.website,
     phone: '905-555-0117',
     addressLine1: '12 Rowanwood Court',
     city: 'Milton',
@@ -249,7 +251,7 @@ export const DEMO_CUSTOMERS = [
     projects: [
       {
         name: 'Main bathroom renovation',
-        projectType: 'bathroom' as const,
+        projectTypeId: PROJECT_TYPE_IDS.bathroom,
         contractType: 'lump_sum' as const,
         stage: 'quote_sent' as const,
         siteAddressLine1: '12 Rowanwood Court',
@@ -266,7 +268,7 @@ export const DEMO_CUSTOMERS = [
     name: 'Halton Community Housing',
     companyName: 'Halton Community Housing Corp.',
     customerType: 'commercial' as const,
-    leadSource: 'repeat' as const,
+    leadSourceId: LEAD_SOURCE_IDS.repeat,
     email: 'facilities@halton-housing.example',
     phone: '905-555-0160',
     city: 'Burlington',
@@ -275,7 +277,7 @@ export const DEMO_CUSTOMERS = [
     projects: [
       {
         name: 'Unit 214 bathroom refit',
-        projectType: 'bathroom' as const,
+        projectTypeId: PROJECT_TYPE_IDS.bathroom,
         contractType: 'unit_price' as const,
         stage: 'won' as const,
         siteAddressLine1: '900 Lakeshore Road, Unit 214',
