@@ -17,6 +17,25 @@ beforeEach(async () => {
     truncate table audit_log, expense_taxes, expenses, stage_history, projects,
       cost_codes, vendors, customers restart identity cascade
   `);
+  /**
+   * The company row, created here rather than assumed.
+   *
+   * This file reads `organization` for the mileage rate, and did not create it
+   * -- so it passed only while some earlier file happened to leave one behind.
+   * `tests/integration/files.test.ts` truncates `organization` in its last
+   * test, and the day the order changed this file did not fail on the
+   * assertion it was making: its setup threw, every remaining test in the file
+   * silently never ran, and the suite reported ninety-eight fewer tests
+   * passing rather than one failing.
+   *
+   * A test that depends on another file's leftovers is not a test. Creating
+   * what it needs is the fix; `on conflict do nothing` because a file that
+   * runs after a truncate and a file that runs after a seed must both work.
+   */
+  await db
+    .insert(organization)
+    .values({ id: 1, legalName: 'Sample Contracting Ltd', displayName: 'Sample Contracting' })
+    .onConflictDoNothing();
 });
 
 /**
