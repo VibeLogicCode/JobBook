@@ -30,10 +30,38 @@ export async function tenantToday(tx: Tx): Promise<string> {
  */
 export function addDays(isoDate: string, days: number): string {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(isoDate);
-  if (!match) throw new Error(`expected an ISO date, received ${isoDate}`);
+  if (!match || !isCalendarDate(isoDate)) {
+    throw new Error(`expected an ISO date, received ${isoDate}`);
+  }
   const [, year, month, day] = match;
   const base = Date.UTC(Number(year), Number(month) - 1, Number(day));
   return new Date(base + days * 86_400_000).toISOString().slice(0, 10);
+}
+
+/**
+ * Is this a date that EXISTS, as opposed to one merely shaped like a date?
+ *
+ * The shape check on its own is not a validation, and it fails in the
+ * dangerous direction. `Date.UTC(2026, 12, 40)` does not complain -- JavaScript
+ * rolls the surplus over and returns 2027-02-09 -- so `2026-13-40` matched
+ * `\d{4}-\d{2}-\d{2}`, did arithmetic, and produced an answer fourteen months
+ * from the one it was asked about. Nothing threw.
+ *
+ * The round trip is the test: take the date apart, put it back together, and
+ * see whether it is still the same string. A date that exists survives
+ * unchanged; one that rolled over comes back as the day it rolled over to.
+ *
+ * It lives beside `addDays` because that is the function it protects, and
+ * because the quote engine must not import from the schedule to validate a
+ * date. `lib/schedule/calendar.ts` re-exports it for the callers that found it
+ * there first.
+ */
+export function isCalendarDate(isoDate: string): boolean {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(isoDate);
+  if (!match) return false;
+  const [, year, month, day] = match;
+  const stamp = Date.UTC(Number(year), Number(month) - 1, Number(day));
+  return new Date(stamp).toISOString().slice(0, 10) === isoDate;
 }
 
 /** The calendar year of an ISO date, for the document series. */

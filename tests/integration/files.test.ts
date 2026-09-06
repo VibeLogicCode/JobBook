@@ -552,10 +552,34 @@ describe('replacing the logo', () => {
     expect(row?.recordStatus).toBe('active');
   });
 
+  /**
+   * This test empties `organization`, and put nothing back.
+   *
+   * That is how `tests/db/expenses.test.ts` came to pass by luck: it read the
+   * company row without creating one, so it worked only while this file
+   * happened to run after it. When the order changed, that file did not fail an
+   * assertion -- its setup threw, ninety-eight tests in it silently never ran,
+   * and the suite reported fewer passes rather than one failure. A green suite
+   * that quietly shrank is worse than a red one.
+   *
+   * That file now seeds its own row. This one restores what it removes anyway,
+   * because the next file to read `organization` without creating one should
+   * not have to discover this the same way.
+   */
   it('reports no organization row rather than pointing at nothing', async () => {
     await db.execute(sql`truncate table organization restart identity cascade`);
-    const stored = await storeLogo(upload(GENUINE_PNG, 'logo.png'));
-    if (!stored.ok) throw new Error('fixture upload failed');
-    expect(await pointLogoAt(stored.file.id, ACTOR)).toBeNull();
+    try {
+      const stored = await storeLogo(upload(GENUINE_PNG, 'logo.png'));
+      if (!stored.ok) throw new Error('fixture upload failed');
+      expect(await pointLogoAt(stored.file.id, ACTOR)).toBeNull();
+    } finally {
+      // `finally`, so a failing assertion above still leaves the database as it
+      // found it. A cleanup that only runs on success is a cleanup that skips
+      // exactly when it is needed.
+      await db
+        .insert(organization)
+        .values({ id: 1, legalName: 'Sample Contracting Ltd', displayName: 'Sample Contracting' })
+        .onConflictDoNothing();
+    }
   });
 });

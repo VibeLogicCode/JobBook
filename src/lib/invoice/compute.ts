@@ -13,6 +13,7 @@ import type {
   JobBillingState,
 } from '@/lib/invoice/types';
 import type { TaxRateInput } from '@/lib/quote/tax';
+import { isCalendarDate } from '@/lib/quote/dates';
 
 /**
  * The single entry point for pricing a customer invoice.
@@ -294,7 +295,11 @@ function assertRequestShape(request: InvoiceRequest): void {
  * can still be refused.
  */
 function assertIsoDate(value: string): void {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+  // `isCalendarDate` rather than the shape alone: 2026-13-40 matches the
+  // pattern, and a date that does not exist would match no rate here for
+  // exactly the same reason a malformed one does not -- silently, and as a
+  // zero-tax invoice.
+  if (!isCalendarDate(value)) {
     throw new Error(`expected an ISO date, received ${value}`);
   }
 }
