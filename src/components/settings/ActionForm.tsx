@@ -5,7 +5,7 @@ import { useFormStatus } from 'react-dom';
 import type { ActionResult, FormAction } from '@/app/settings/result';
 import { Button } from '@/components/ui/Button';
 import { Notice } from '@/components/ui/Notice';
-import { SAVED_EVENT } from '@/components/ui/saved-event';
+import { REFUSED_EVENT, SAVED_EVENT } from '@/components/ui/saved-event';
 import { restoreInto } from '@/lib/forms/restore-values';
 
 /**
@@ -105,7 +105,17 @@ export function ActionForm({
 
     // A refusal is not a reason to lose the typing. Runs after React's own
     // reset, which is what makes this a restore rather than a race.
-    if (state && !state.ok) restoreInto(form, submitted.current);
+    //
+    // `REFUSED_EVENT` fires before the restore, not after: a listener outside
+    // this form (`SheetButton`, today) only needs to know a submit was
+    // refused, and firing it first means it never has to reason about how
+    // `restoreInto` reached the values it will read.
+    if (state && !state.ok) {
+      form.dispatchEvent(
+        new CustomEvent(REFUSED_EVENT, { bubbles: true, detail: { message: state.error } }),
+      );
+      restoreInto(form, submitted.current);
+    }
   }, [state, resetOnSuccess]);
 
   return (

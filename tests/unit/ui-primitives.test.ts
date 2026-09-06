@@ -2,6 +2,7 @@ import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { buttonClass } from '@/components/ui/Button';
+import { isDirty, openBaseline, refused, submitted } from '@/components/ui/dirty-baseline';
 import { fillPercent } from '@/components/ui/ProgressBar';
 
 const UI_DIR = path.resolve(import.meta.dirname, '../../src/components/ui');
@@ -54,6 +55,67 @@ describe('buttonClass', () => {
 
   it('appends the caller class last so it can override', () => {
     expect(buttonClass('primary', { className: 'ml-auto' }).endsWith('ml-auto')).toBe(true);
+  });
+});
+
+describe('the dirty baseline SheetButton drives from DOM events', () => {
+  // No DOM appears anywhere here: `openBaseline`/`submitted`/`refused`/
+  // `isDirty` are plain functions over strings, which is the whole point of
+  // pulling them out of `SheetButton` -- this suite runs in `environment:
+  // 'node'` with no renderer, so a component-level test of the actual bug
+  // is not available, and a rule about event ORDER is worth a test that does
+  // not need one.
+
+  it('is not dirty right after the sheet opens', () => {
+    const baseline = openBaseline('name=Framing');
+    expect(isDirty(baseline, 'name=Framing')).toBe(false);
+  });
+
+  it('is dirty once the live fields diverge from the open-time snapshot', () => {
+    const baseline = openBaseline('name=Framing');
+    expect(isDirty(baseline, 'name=Framing (revised)')).toBe(true);
+  });
+
+  it('THE BUG: without the fix, a refusal reads as clean', () => {
+    // This is the fault on record: `submitted` alone re-baselines the
+    // instant a submit fires, before anything knows the server will refuse
+    // it. `ActionForm`'s `restoreInto` then puts the typed value back onto
+    // the field -- to the exact string `submitted` already captured -- so a
+    // dismissal compared the live fields against themselves and always found
+    // them equal, no matter that nothing was ever saved.
+    const opened = openBaseline('name=Framing');
+    const atSubmit = submitted(opened, 'name=Framing (revised)');
+    const liveAfterRestore = 'name=Framing (revised)'; // what restoreInto put back
+    expect(isDirty(atSubmit, liveAfterRestore)).toBe(false); // the bug, demonstrated
+  });
+
+  it('THE FIX: a refused submit leaves the sheet dirty', () => {
+    const opened = openBaseline('name=Framing');
+    const atSubmit = submitted(opened, 'name=Framing (revised)');
+    const afterRefusal = refused(atSubmit);
+    const liveAfterRestore = 'name=Framing (revised)'; // restoreInto puts the typed value back
+    // A dismissal now compares the restored field against the sheet's
+    // OPEN-time value, not against the value the failed submit captured --
+    // so it reads as dirty and a discard prompt asks, exactly as it would
+    // have before any submit was attempted.
+    expect(isDirty(afterRefusal, liveAfterRestore)).toBe(true);
+  });
+
+  it('rolls back only the submit being refused, not further', () => {
+    // A second attempt, refused a second time, must not unwind all the way
+    // to the sheet's original open-time value if the person had already
+    // fixed part of the form in between -- only the one submit in flight is
+    // undone.
+    const opened = openBaseline('name=Framing');
+    const firstAttempt = refused(submitted(opened, 'name=Framing (typo)'));
+    const secondAttempt = refused(submitted(firstAttempt, 'name=Framing (fixed)'));
+    expect(secondAttempt).toEqual(opened);
+    expect(isDirty(secondAttempt, 'name=Framing (fixed)')).toBe(true);
+  });
+
+  it('a refusal with no submit in flight is a no-op', () => {
+    const opened = openBaseline('name=Framing');
+    expect(refused(opened)).toEqual(opened);
   });
 });
 

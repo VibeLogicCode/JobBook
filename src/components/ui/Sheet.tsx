@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { X } from 'lucide-react';
-import { SAVED_EVENT } from '@/components/ui/saved-event';
+import { REFUSED_EVENT, SAVED_EVENT } from '@/components/ui/saved-event';
+import { isDirty, openBaseline, refused, submitted, type DirtyBaseline } from '@/components/ui/dirty-baseline';
 import { Button, type ButtonVariant } from '@/components/ui/Button';
 
 /**
@@ -342,8 +343,12 @@ export function SheetButton({
 }) {
   const [open, setOpen] = useState(false);
   const bodyRef = useRef<HTMLDivElement | null>(null);
-  /** What the fields held when the sheet opened, or when it was last submitted. */
-  const baseline = useRef('');
+  /**
+   * What counts as "clean" right now, and what it falls back to if the submit
+   * in flight is refused. See `dirty-baseline.ts` for the rule this follows
+   * and why it is not simply "the fields as they were when the sheet opened".
+   */
+  const baseline = useRef<DirtyBaseline>(openBaseline(''));
 
   /**
    * Taken after the children have mounted, which is what this effect being in
@@ -351,7 +356,7 @@ export function SheetButton({
    * time it runs, so the reading is of real fields rather than of nothing.
    */
   useEffect(() => {
-    if (open) baseline.current = fieldSnapshot(bodyRef.current);
+    if (open) baseline.current = openBaseline(fieldSnapshot(bodyRef.current));
   }, [open]);
 
   /**
@@ -379,8 +384,23 @@ export function SheetButton({
     return () => body.removeEventListener(SAVED_EVENT, close);
   }, [open]);
 
+  /**
+   * The other half of the fix above: undo the submit handler's guess once a
+   * refusal proves it wrong, so the sheet is exactly as dirty as it was
+   * before that submit was ever attempted.
+   */
+  useEffect(() => {
+    const body = bodyRef.current;
+    if (!open || !body) return;
+    const rollback = () => {
+      baseline.current = refused(baseline.current);
+    };
+    body.addEventListener(REFUSED_EVENT, rollback);
+    return () => body.removeEventListener(REFUSED_EVENT, rollback);
+  }, [open]);
+
   function requestClose() {
-    const dirty = fieldSnapshot(bodyRef.current) !== baseline.current;
+    const dirty = isDirty(baseline.current, fieldSnapshot(bodyRef.current));
     if (discardPrompt && dirty && !window.confirm(discardPrompt)) return;
     setOpen(false);
   }
@@ -394,13 +414,23 @@ export function SheetButton({
       {open ? (
         <Sheet label={label} title={title} subtitle={subtitle} size={size} onClose={requestClose}>
           {/* A submit is a save, so what was typed stops being unsaved work and
-              the guard above has to stop asking about it. Caught on the way up
-              from whichever form inside fired it, because this shell holds no
-              form of its own and the children are server-rendered. A submit
-              the server then REFUSES leaves the values on screen and the
-              guard quiet about them -- the error says so, in the sheet, and
-              the row itself is unchanged either way. */}
-          <div ref={bodyRef} onSubmit={() => { baseline.current = fieldSnapshot(bodyRef.current); }}>
+              the guard above has to stop asking about it -- that is the
+              common case, and it is assumed here, synchronously, before
+              anything downstream knows whether the server will agree.
+              Caught on the way up from whichever form inside fired it,
+              because this shell holds no form of its own and the children
+              are server-rendered. When the server instead REFUSES, the
+              `REFUSED_EVENT` listener above rolls this guess back to what it
+              was before the submit, so the guard is exactly as it would have
+              been had the submit never happened -- the error shows, the
+              typed values are still there (`ActionForm`'s `restoreInto`), and
+              a dismissal after this still asks. */}
+          <div
+            ref={bodyRef}
+            onSubmit={() => {
+              baseline.current = submitted(baseline.current, fieldSnapshot(bodyRef.current));
+            }}
+          >
             {children}
           </div>
         </Sheet>

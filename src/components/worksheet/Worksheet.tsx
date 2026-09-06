@@ -24,6 +24,7 @@ import {
 } from '@/components/worksheet/keyboard';
 import { MarginGauge } from '@/components/worksheet/MarginGauge';
 import { RegenerateDialog, ScopeSheet } from '@/components/worksheet/ScopeSheet';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Sheet } from '@/components/ui/Sheet';
 import type {
   WireLine,
@@ -71,6 +72,25 @@ export function Worksheet({
   const [measuring, setMeasuring] = useState(false);
   const [confirmingRegenerate, setConfirmingRegenerate] = useState(false);
   const [raising, setRaising] = useState(false);
+  /** The line a trash press wants to void, held here rather than in the row
+   *  itself so the confirmation renders once, outside the `<table>` -- a
+   *  `Sheet` is a fixed-position overlay, and a `<tbody>` may only contain
+   *  `<tr>`s. */
+  const [voidingLine, setVoidingLine] = useState<WireLine | null>(null);
+  /**
+   * Which header status button is asking to be confirmed.
+   *
+   * `'sent'` and `'accepted'` are the two that reach the customer -- sending
+   * IS telling them the price, and accepting a change order is agreeing to
+   * charge for it, and neither has an undo button in this product. Declining
+   * has one, in effect: `reviseQuote` accepts a `declined` quote and writes a
+   * fresh draft from it, which is exactly what happens when a customer who
+   * said no changes their mind. `Acceptance.tsx`'s own decline button already
+   * skips a confirmation for that reason; this keeps the same answer for the
+   * header's decline button rather than inventing a second opinion about the
+   * same fact.
+   */
+  const [confirmingStatus, setConfirmingStatus] = useState<'sent' | 'accepted' | null>(null);
 
   const editable = quote.status === 'draft' && quote.recordStatus === 'active';
   // A change order amends work the customer has already accepted. A quote still
@@ -182,7 +202,7 @@ export function Worksheet({
               <Button
                 variant="secondary"
                 disabled={pending}
-                onClick={() => run(() => setQuoteStatus({ quoteId: quote.id, status: 'sent' }))}
+                onClick={() => setConfirmingStatus('sent')}
               >
                 Mark sent
               </Button>
@@ -204,12 +224,7 @@ export function Worksheet({
                     accepting it neither wins the job nor puts anything else
                     out of the running. So it keeps the one-click control. */}
                 {quote.kind === 'change_order' ? (
-                  <Button
-                    disabled={pending}
-                    onClick={() =>
-                      run(() => setQuoteStatus({ quoteId: quote.id, status: 'accepted' }))
-                    }
-                  >
+                  <Button disabled={pending} onClick={() => setConfirmingStatus('accepted')}>
                     Accepted
                   </Button>
                 ) : null}
@@ -217,7 +232,11 @@ export function Worksheet({
                     below, next to converting, because won and lost are one
                     decision and splitting them put the two answers at
                     opposite ends of a long document. A change order has no
-                    such band, so it keeps its control here. */}
+                    such band, so it keeps its control here.
+
+                    No confirmation on this one -- see `confirmingStatus`
+                    above for why declining is the one status change that
+                    does not ask first. */}
                 {quote.kind === 'change_order' ? (
                   <Button
                     variant="secondary"
@@ -354,6 +373,7 @@ export function Worksheet({
                 pending={pending}
                 onEdit={setEditing}
                 onCommit={run}
+                onVoid={setVoidingLine}
                 quoteId={quote.id}
               />
             ))}
@@ -366,6 +386,7 @@ export function Worksheet({
                 pending={pending}
                 onEdit={setEditing}
                 onCommit={run}
+                onVoid={setVoidingLine}
                 quoteId={quote.id}
                 optional
               />
@@ -431,6 +452,51 @@ export function Worksheet({
           pending={pending}
           onClose={() => setRaising(false)}
           onRaise={raise}
+        />
+      ) : null}
+
+      {voidingLine ? (
+        <ConfirmDialog
+          label={`Void ${voidingLine.description}`}
+          title="Void this line?"
+          detail={`${voidingLine.description}, ${formatCents(
+            voidingLine.isIncluded ? voidingLine.lineTotalCents : voidingLine.displayPriceCents,
+          )} — voided, not deleted. It stays on the record and the total recalculates.`}
+          confirmLabel="Void line"
+          confirmPendingLabel="Voiding…"
+          pending={pending}
+          onClose={() => setVoidingLine(null)}
+          onConfirm={() => {
+            run(() => voidLine({ quoteId: quote.id, lineId: voidingLine.id }));
+            setVoidingLine(null);
+          }}
+        />
+      ) : null}
+
+      {confirmingStatus ? (
+        <ConfirmDialog
+          label={
+            confirmingStatus === 'sent'
+              ? `Mark ${quote.quoteNumber} sent`
+              : `Mark ${quote.quoteNumber} accepted`
+          }
+          title={
+            confirmingStatus === 'sent' ? 'Mark this quote sent?' : 'Mark this change order accepted?'
+          }
+          detail={
+            confirmingStatus === 'sent'
+              ? `${quote.quoteNumber} — records that it went to the customer.`
+              : `${quote.quoteNumber} — the amended price stands. Changing it again takes a new change order.`
+          }
+          confirmLabel={confirmingStatus === 'sent' ? 'Mark sent' : 'Mark accepted'}
+          confirmPendingLabel="Marking…"
+          destructive={false}
+          pending={pending}
+          onClose={() => setConfirmingStatus(null)}
+          onConfirm={() => {
+            run(() => setQuoteStatus({ quoteId: quote.id, status: confirmingStatus }));
+            setConfirmingStatus(null);
+          }}
         />
       ) : null}
     </div>
@@ -530,6 +596,7 @@ function GroupRows({
   optional = false,
   onEdit,
   onCommit,
+  onVoid,
 }: {
   group: string;
   lines: WireLine[];
@@ -539,6 +606,7 @@ function GroupRows({
   optional?: boolean;
   onEdit: (line: WireLine) => void;
   onCommit: (action: () => Promise<{ ok: true } | { ok: false; error: string }>) => void;
+  onVoid: (line: WireLine) => void;
 }) {
   // Available upgrades start closed. They are not part of the price the
   // customer is being quoted, and open by default they push the trade the owner
@@ -588,6 +656,7 @@ function GroupRows({
               optional={optional}
               onEdit={onEdit}
               onCommit={onCommit}
+              onVoid={onVoid}
             />
           ))
         : null}
@@ -603,6 +672,7 @@ function LineRow({
   optional,
   onEdit,
   onCommit,
+  onVoid,
 }: {
   line: WireLine;
   editable: boolean;
@@ -611,6 +681,7 @@ function LineRow({
   optional: boolean;
   onEdit: (line: WireLine) => void;
   onCommit: (action: () => Promise<{ ok: true } | { ok: false; error: string }>) => void;
+  onVoid: (line: WireLine) => void;
 }) {
   const isPercent = line.calcMode === 'percent';
   const amount = optional ? line.displayPriceCents : line.lineTotalCents;
@@ -670,7 +741,7 @@ function LineRow({
             className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-control text-muted hover:bg-negative-soft hover:text-negative-soft-fg disabled:opacity-60"
             onClick={(event) => {
               event.stopPropagation();
-              onCommit(() => voidLine({ quoteId, lineId: line.id }));
+              onVoid(line);
             }}
           >
             <Trash2 size={15} aria-hidden />
