@@ -61,6 +61,12 @@ export interface WireQuote {
   optionalTotalCents: number;
   targetMarginBp: number | null;
   areaUnit: string;
+  /**
+   * The project's commercial arrangement, not the quote's own field -- a
+   * quote has no opinion on this, it only prints what the project was told.
+   * Null means undecided, which the print document must never guess at.
+   */
+  contractType: 'lump_sum' | 'unit_price' | 'cost_plus' | 'time_and_material' | null;
 }
 
 export interface WireRateItem {

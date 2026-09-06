@@ -61,10 +61,26 @@ const schema = z
     newCustomerPhone: trimmedOptional(40),
     newCustomerEmail: trimmedOptional(200),
     newCustomerType: z.enum(['residential', 'commercial']).optional(),
+    // Optional in every case, unlike the type above: not knowing how a
+    // customer found the company is a real and common state, not a gap to
+    // force shut before the quote can start.
+    newCustomerLeadSourceId: z
+      .string()
+      .uuid()
+      .optional()
+      .or(z.literal(''))
+      .transform((value) => (value === '' || value === undefined ? null : value)),
 
     opportunityChoice: z.string().min(1, 'choose an opportunity'),
     newOpportunityName: trimmedOptional(200),
     newOpportunityTypeId: z.string().uuid().optional(),
+    // Optional for the same reason it is on the opportunity form proper: a
+    // quote must not be blocked on a commercial decision nobody has made yet.
+    newOpportunityContractType: z
+      .enum(['lump_sum', 'unit_price', 'cost_plus', 'time_and_material'])
+      .optional()
+      .or(z.literal(''))
+      .transform((value) => (value === '' || value === undefined ? null : value)),
     siteAddressLine1: trimmedOptional(200),
     siteCity: trimmedOptional(120),
     siteProvince: trimmedOptional(40),
@@ -149,6 +165,7 @@ export async function startQuote(
             customerType: input.newCustomerType!,
             phone: input.newCustomerPhone,
             email: input.newCustomerEmail,
+            leadSourceId: input.newCustomerLeadSourceId,
             createdBy: allowed.actor.id,
           })
           .returning({ id: customers.id });
@@ -203,6 +220,7 @@ export async function startQuote(
           projectNumber,
           name: input.newOpportunityName!,
           projectTypeId: input.newOpportunityTypeId!,
+          contractType: input.newOpportunityContractType,
           siteAddressLine1: input.siteAddressLine1,
           siteCity: input.siteCity,
           siteProvince: input.siteProvince,

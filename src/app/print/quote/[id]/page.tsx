@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { Fragment } from 'react';
 import { eq } from 'drizzle-orm';
 import { notFound } from 'next/navigation';
 import { db } from '@/db/client';
@@ -6,6 +7,7 @@ import { organization } from '@/db/schema';
 import { logoDataUri } from '@/lib/documents/branding';
 import { loadQuote } from '@/lib/quote/load';
 import { formatCents, formatQty, formatRate } from '@/lib/money/format';
+import { CONTRACT_TYPES } from '@/components/detail/labels';
 import { PageParentLink } from '@/components/ui/PageHeader';
 
 export const dynamic = 'force-dynamic';
@@ -70,6 +72,32 @@ export default async function PrintQuote({ params }: { params: Promise<{ id: str
 
   const heading = quote.kind === 'change_order' ? 'Change Order' : 'Quotation';
 
+  /**
+   * What the customer is allowed to see is the project's commercial
+   * arrangement, not a quote-level toggle: `contract_type` lives on the
+   * project because it does not change quote to quote, and this document
+   * has never read it before now.
+   *
+   * A lump sum is one price for a scope -- itemising it invites a customer to
+   * argue one line and cherry-pick items out of what was priced as a whole,
+   * which is the opposite of what a fixed price is for. `time_and_material`,
+   * `cost_plus` and `unit_price` are the reverse: the customer pays for what
+   * is actually used, so the rate and the amount per line IS the
+   * arrangement, and today's per-trade grouping is not enough to show it.
+   *
+   * A project where nobody has decided yet keeps rendering exactly as this
+   * document always has -- grouped, with amounts -- because a null is a fact
+   * that has not been recorded, never a guess that it must mean lump sum.
+   */
+  const isLumpSum = quote.contractType === 'lump_sum';
+  const isFullDetail =
+    quote.contractType === 'time_and_material' ||
+    quote.contractType === 'cost_plus' ||
+    quote.contractType === 'unit_price';
+
+  /** Same conversion `tax.rateTenThou` uses below: a `percent` line's rate IS the percentage, ten-thousandths scaled. */
+  const percentOf = (rateTenThou: string) => `${(Number(rateTenThou) / 100).toFixed(2)}%`;
+
   return (
     <div className="doc">
       <style>{DOCUMENT_CSS}</style>
@@ -123,6 +151,15 @@ export default async function PrintQuote({ params }: { params: Promise<{ id: str
                 <th>Valid until</th>
                 <td className="num">{quote.validUntil}</td>
               </tr>
+              {/* Absent rather than "Not decided": the row a customer reads is a
+                  legal-ish document, and a blank fact does not belong on it --
+                  it belongs in the application, where somebody can still set it. */}
+              {quote.contractType ? (
+                <tr>
+                  <th>Contract type</th>
+                  <td>{CONTRACT_TYPES[quote.contractType]}</td>
+                </tr>
+              ) : null}
             </tbody>
           </table>
         </div>
@@ -143,34 +180,123 @@ export default async function PrintQuote({ params }: { params: Promise<{ id: str
         </div>
       </section>
 
-      <table className="lines">
-        <thead>
-          <tr>
-            <th>Scope of work</th>
-            <th className="num right">Amount</th>
-          </tr>
-        </thead>
-        <tbody>
-          {[...groups.entries()].map(([group, groupLines]) => (
-            <tr key={group}>
-              <td>
-                <strong>{group}</strong>
-                <ul>
-                  {groupLines.map((line) => (
-                    <li key={line.id}>
+      {isLumpSum ? (
+        // No Amount column at all: a lump sum is one price for the whole
+        // scope, and a dollar figure beside any single row -- even a
+        // per-trade sum -- is something to argue down or cherry-pick out of
+        // what was priced as a whole. Quantity and unit stay, because they
+        // describe the work rather than price it.
+        <table className="lines">
+          <thead>
+            <tr>
+              <th>Scope of work</th>
+            </tr>
+          </thead>
+          <tbody>
+            {[...groups.entries()].map(([group, groupLines]) => (
+              <tr key={group}>
+                <td>
+                  <strong>{group}</strong>
+                  <ul>
+                    {groupLines.map((line) => (
+                      <li key={line.id}>
+                        {line.description}
+                        {line.calcMode === 'qty' ? (
+                          <span className="num">
+                            {' — '}
+                            {formatQty(BigInt(line.qtyMilli))} {line.unitLabel}
+                          </span>
+                        ) : null}
+                        {/* An allowance is a placeholder the final bill can still
+                            true up against, not a price this scope was fixed at --
+                            the one figure that stays even though every other row's
+                            amount does not. */}
+                        {line.isAllowance ? (
+                          <span className="num"> (allowance {formatCents(line.lineTotalCents)})</span>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ul>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : isFullDetail ? (
+        // Every line on its own row with its rate and its amount: on
+        // time-and-material, cost-plus and unit-price work the customer pays
+        // for what was actually used, so seeing the rate and the amount per
+        // line IS the arrangement -- the per-trade sum below is not enough.
+        <table className="lines">
+          <thead>
+            <tr>
+              <th>Scope of work</th>
+              <th className="num right">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            {[...groups.entries()].map(([group, groupLines]) => (
+              <Fragment key={group}>
+                <tr className="group-header">
+                  <td colSpan={2}>
+                    <strong>{group}</strong>
+                  </td>
+                </tr>
+                {groupLines.map((line) => (
+                  <tr key={line.id}>
+                    <td>
                       {line.description}
                       {line.isAllowance ? ' (allowance)' : ''}
-                    </li>
-                  ))}
-                </ul>
-              </td>
-              <td className="num right">
-                {formatCents(groupLines.reduce((sum, line) => sum + line.lineTotalCents, 0))}
-              </td>
+                      {line.calcMode === 'qty' ? (
+                        <span className="num">
+                          {' — '}
+                          {formatQty(BigInt(line.qtyMilli))} {line.unitLabel} ×{' '}
+                          {formatRate(BigInt(line.unitPriceTenThou))}
+                        </span>
+                      ) : line.calcMode === 'percent' ? (
+                        <span className="num">{' — '}{percentOf(line.unitPriceTenThou)}</span>
+                      ) : null}
+                    </td>
+                    <td className="num right">{formatCents(line.lineTotalCents)}</td>
+                  </tr>
+                ))}
+              </Fragment>
+            ))}
+          </tbody>
+        </table>
+      ) : (
+        // Undecided prints exactly as this document always has: a null
+        // contract type is a fact nobody has recorded yet, never a guess that
+        // it must mean lump sum.
+        <table className="lines">
+          <thead>
+            <tr>
+              <th>Scope of work</th>
+              <th className="num right">Amount</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {[...groups.entries()].map(([group, groupLines]) => (
+              <tr key={group}>
+                <td>
+                  <strong>{group}</strong>
+                  <ul>
+                    {groupLines.map((line) => (
+                      <li key={line.id}>
+                        {line.description}
+                        {line.isAllowance ? ' (allowance)' : ''}
+                      </li>
+                    ))}
+                  </ul>
+                </td>
+                <td className="num right">
+                  {formatCents(groupLines.reduce((sum, line) => sum + line.lineTotalCents, 0))}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
 
       <table className="totals">
         <tbody>
@@ -295,6 +421,10 @@ table.lines { width: 100%; border-collapse: collapse; margin-top: 3mm; }
 table.lines thead th { text-align: left; border-bottom: 1pt solid #16162b; padding: 2mm 0; font-size: 9pt; text-transform: uppercase; letter-spacing: 0.06em; }
 table.lines td { border-bottom: 0.5pt solid #e2e2ef; padding: 2.5mm 0; vertical-align: top; break-inside: avoid; }
 table.lines ul { margin: 1mm 0 0 4mm; padding: 0; color: #5a5a72; font-size: 9.5pt; }
+/* The per-trade heading row in full-detail mode: a break before the group's
+   own lines, not another priced row, so it carries no bottom border. */
+table.lines tr.group-header td { border-bottom: none; padding: 3mm 0 0.5mm; }
+table.lines tr.group-header:first-child td { padding-top: 0; }
 .right { text-align: right; }
 table.totals { width: 70mm; margin-left: auto; margin-top: 4mm; border-collapse: collapse; }
 table.totals th { text-align: left; font-weight: 400; color: #5a5a72; padding: 1mm 0; font-size: 9.5pt; }

@@ -1,6 +1,8 @@
 import { and, asc, count, eq, inArray } from 'drizzle-orm';
 import { db } from '@/db/client';
-import { customers, organization, projects, projectTypes, quotes, scopeTemplates } from '@/db/schema';
+import {
+  customers, leadSources, organization, projects, projectTypes, quotes, scopeTemplates,
+} from '@/db/schema';
 import { startQuote } from '@/app/quotes/new/actions';
 import { StartQuoteForm } from '@/app/quotes/new/StartQuoteForm';
 import { Panel } from '@/components/detail/Panel';
@@ -25,7 +27,7 @@ export default async function NewQuotePage({
 
   const [org] = await db.select().from(organization).where(eq(organization.id, 1));
 
-  const [customerList, opportunityRows, templateList, projectTypeList] = await Promise.all([
+  const [customerList, opportunityRows, templateList, projectTypeList, leadSourceList] = await Promise.all([
     db
       .select({ id: customers.id, name: customers.name, companyName: customers.companyName })
       .from(customers)
@@ -65,6 +67,15 @@ export default async function NewQuotePage({
       .from(projectTypes)
       .where(eq(projectTypes.recordStatus, 'active'))
       .orderBy(asc(projectTypes.sortOrder), asc(projectTypes.name)),
+
+    // Every lead source, for the new-customer picker. Same reasoning as
+    // project types above: a brand-new customer has no existing value that
+    // could be a retired one, so only active rows are ever offered.
+    db
+      .select({ id: leadSources.id, name: leadSources.name, isActive: leadSources.isActive, recordStatus: leadSources.recordStatus })
+      .from(leadSources)
+      .where(eq(leadSources.recordStatus, 'active'))
+      .orderBy(asc(leadSources.sortOrder), asc(leadSources.name)),
   ]);
 
   // How many quotes already sit on each opportunity, so the picker can say so.
@@ -116,6 +127,7 @@ export default async function NewQuotePage({
           opportunities={opportunityList}
           templates={templateList}
           projectTypes={projectTypeList}
+          leadSources={leadSourceList}
           defaultProvince={org?.province ?? ''}
           preselectedCustomerId={preselected}
         />

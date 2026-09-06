@@ -5,7 +5,7 @@ import { useActionState, useState } from 'react';
 import { Button, buttonClass } from '@/components/ui/Button';
 import { Field, FieldGroup, FormError, SelectField } from '@/components/detail/Fields';
 import type { FormAction } from '@/components/detail/form-state';
-import { CUSTOMER_TYPES, PROJECT_STAGES } from '@/components/detail/labels';
+import { CONTRACT_TYPES, CUSTOMER_TYPES, PROJECT_STAGES } from '@/components/detail/labels';
 import { listOptions, type ListRowRef } from '@/app/settings/project-lists';
 
 /** Matches SENTINEL_NEW in the action. */
@@ -55,6 +55,7 @@ export function StartQuoteForm({
   opportunities,
   templates,
   projectTypes,
+  leadSources,
   defaultProvince,
   preselectedCustomerId,
 }: {
@@ -64,6 +65,8 @@ export function StartQuoteForm({
   templates: TemplateOption[];
   /** Every project type, for the new-opportunity picker below. */
   projectTypes: ListRowRef[];
+  /** Every lead source, for the new-customer picker below. */
+  leadSources: ListRowRef[];
   /**
    * From `organization.province`. The column has no database default on
    * purpose: one there would hardcode a tenant's region.
@@ -128,6 +131,13 @@ export function StartQuoteForm({
             />
             <Field label="Phone" name="newCustomerPhone" type="tel" maxLength={40} />
             <Field label="Email" name="newCustomerEmail" type="email" maxLength={200} />
+            <SelectField
+              label="Lead source"
+              name="newCustomerLeadSourceId"
+              placeholder="Not decided"
+              options={listOptions(leadSources)}
+              hint="How they found us."
+            />
           </>
         ) : null}
       </FieldGroup>
@@ -174,6 +184,13 @@ export function StartQuoteForm({
               required
               placeholder="Choose a type of work"
               options={listOptions(projectTypes)}
+            />
+            <SelectField
+              label="Contract type"
+              name="newOpportunityContractType"
+              placeholder="Not decided"
+              options={options(CONTRACT_TYPES)}
+              hint="Decides what the printed quote shows."
             />
             <Field
               label="Site street"

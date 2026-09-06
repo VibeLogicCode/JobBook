@@ -32,6 +32,7 @@ export const loadQuote = cache(async (quoteId: string): Promise<{
     .select({
       quote: quotes,
       projectName: projects.name,
+      contractType: projects.contractType,
       siteAddressLine1: projects.siteAddressLine1,
       siteCity: projects.siteCity,
       customerName: customers.name,
@@ -104,6 +105,7 @@ export const loadQuote = cache(async (quoteId: string): Promise<{
       // clock passes it.
       expired: row.quote.validUntil < today,
       projectName: row.projectName,
+      contractType: row.contractType,
       customerName: row.customerName,
       siteAddress: site,
       areaSqftMilli: row.quote.areaSqftMilli?.toString() ?? null,
