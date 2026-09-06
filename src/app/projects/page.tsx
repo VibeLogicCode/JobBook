@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { and, asc, eq, inArray, not, sql, type SQL } from 'drizzle-orm';
 import { db } from '@/db/client';
@@ -21,6 +22,8 @@ import { tenantToday } from '@/lib/quote/dates';
 import { listReminders } from '@/lib/reminders/repository';
 
 export const dynamic = 'force-dynamic';
+
+export const metadata: Metadata = { title: 'Pipeline' };
 
 /**
  * The stage dropdown, grouped the way the two halves of a project's life

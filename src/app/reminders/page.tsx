@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { db } from '@/db/client';
 import { Card } from '@/components/ui/Card';
@@ -9,6 +10,8 @@ import { tenantToday } from '@/lib/quote/dates';
 import { listReminders } from '@/lib/reminders/repository';
 
 export const dynamic = 'force-dynamic';
+
+export const metadata: Metadata = { title: 'Reminders' };
 
 /**
  * Who to call.

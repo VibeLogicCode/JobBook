@@ -1,6 +1,8 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { eq } from 'drizzle-orm';
+import { cache } from 'react';
 import { db } from '@/db/client';
 import { customers, organization, projects } from '@/db/schema';
 import { IssueForm } from '@/app/projects/[id]/billing/IssueForm';
@@ -85,6 +87,40 @@ const INVOICE_STATUS: Record<InvoiceSummary['status'], { label: string; tone: To
   paid: { label: 'Paid', tone: 'positive' },
 };
 
+/**
+ * The job this contract is billed against. `cache()`-wrapped so
+ * `generateMetadata` and the page share this one read.
+ */
+const loadBillingJob = cache(async (projectId: string) => {
+  const [job] = await db
+    .select({
+      project: projects,
+      customerName: customers.name,
+      customerCompany: customers.companyName,
+    })
+    .from(projects)
+    .innerJoin(customers, eq(projects.customerId, customers.id))
+    .where(eq(projects.id, projectId));
+
+  return job ?? null;
+});
+
+/** "Billing", not the job's name first: every job's billing tab reads the same, and the job it belongs to is the part that changes. */
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}): Promise<Metadata> {
+  const { id } = await params;
+  if (!UUID.test(id)) return { title: 'Billing' };
+  try {
+    const job = await loadBillingJob(id);
+    return { title: job ? `Billing — ${job.project.projectNumber}` : 'Billing' };
+  } catch {
+    return { title: 'Billing' };
+  }
+}
+
 export default async function BillingPage({
   params,
   searchParams,
@@ -99,15 +135,7 @@ export default async function BillingPage({
 
   const { kind: rawKind, percent: rawPercent, issue: rawIssue, issued } = await searchParams;
 
-  const [job] = await db
-    .select({
-      project: projects,
-      customerName: customers.name,
-      customerCompany: customers.companyName,
-    })
-    .from(projects)
-    .innerJoin(customers, eq(projects.customerId, customers.id))
-    .where(eq(projects.id, projectId));
+  const job = await loadBillingJob(projectId);
   if (!job) notFound();
   const { project } = job;
 

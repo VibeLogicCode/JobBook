@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { and, asc, eq } from 'drizzle-orm';
 import { db } from '@/db/client';
@@ -12,6 +13,8 @@ import { CUSTOMER_TYPES } from '@/components/detail/labels';
 import { normalizeSearch, searchCondition } from '@/lib/list/search';
 
 export const dynamic = 'force-dynamic';
+
+export const metadata: Metadata = { title: 'People' };
 
 const TYPE_OPTIONS = Object.entries(CUSTOMER_TYPES).map(([value, label]) => ({ value, label }));
 

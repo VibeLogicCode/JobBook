@@ -1,7 +1,8 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { and, eq } from 'drizzle-orm';
 import { db } from '@/db/client';
-import { customers, organization, projects, quotes } from '@/db/schema';
+import { customers, projects, quotes } from '@/db/schema';
 import { buttonClass } from '@/components/ui/Button';
 import { Card, CardBody, CardFooter, CardHeader } from '@/components/ui/Card';
 import { MetricCard } from '@/components/ui/MetricCard';
@@ -9,12 +10,25 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { Money } from '@/components/ui/Money';
 import { Pill, statusTone } from '@/components/ui/Pill';
 import { ReminderList } from '@/components/reminders/ReminderList';
+import { loadOrganization } from '@/lib/organization/load';
 import { formatCents } from '@/lib/money/format';
 import { tenantToday } from '@/lib/quote/dates';
 import { listReminders, type ReminderRow } from '@/lib/reminders/repository';
 import { NEEDS_ATTENTION, urgencyOf } from '@/components/reminders/urgency';
 
 export const dynamic = 'force-dynamic';
+
+/**
+ * A page at the same route segment as the root layout is the one place its
+ * title template does not apply (Next's own rule), so the tenant name is
+ * built in here rather than left to the layout. `loadOrganization` is the
+ * same `cache()`-wrapped read the layout and the page body both use, so this
+ * costs nothing extra.
+ */
+export async function generateMetadata(): Promise<Metadata> {
+  const org = await loadOrganization();
+  return { title: org ? `Today — ${org.displayName}` : 'Today' };
+}
 
 /** What the panel will show before it starts asking to be scrolled. */
 /**
@@ -26,7 +40,7 @@ export const dynamic = 'force-dynamic';
 const PANEL_ROWS = 5;
 
 export default async function TodayPage() {
-  const [org] = await db.select().from(organization).where(eq(organization.id, 1));
+  const org = await loadOrganization();
 
   if (!org) {
     return (

@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { loadSettings } from '@/app/settings/load';
 import { SETTINGS_GROUPS } from '@/app/settings/nav';
@@ -5,6 +6,8 @@ import { Notice } from '@/components/ui/Notice';
 import { Section } from '@/components/settings/Section';
 
 export const dynamic = 'force-dynamic';
+
+export const metadata: Metadata = { title: 'Setup' };
 
 export default async function SettingsIndexPage() {
   const context = await loadSettings('settings.read');

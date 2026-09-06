@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { and, asc, eq, sql } from 'drizzle-orm';
 import Link from 'next/link';
 import { db } from '@/db/client';
@@ -21,6 +22,8 @@ import { SheetButton } from '@/components/ui/Sheet';
 import { AmountCell, TableWrap } from '@/components/ui/Table';
 
 export const dynamic = 'force-dynamic';
+
+export const metadata: Metadata = { title: 'Templates' };
 
 type Kind = 'quote' | 'schedule';
 

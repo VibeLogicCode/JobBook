@@ -1,5 +1,7 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { cache } from 'react';
 import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { customers, organization, projects, projectTypes, quotes, stageHistory } from '@/db/schema';
@@ -29,20 +31,12 @@ export const dynamic = 'force-dynamic';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-export default async function ProjectPage({
-  params,
-  searchParams,
-}: {
-  params: Promise<{ id: string }>;
-  searchParams: Promise<{ edit?: string }>;
-}) {
-  const { id } = await params;
-  const { edit } = await searchParams;
-
-  // A malformed id is a wrong URL, not a server fault. Postgres rejects a
-  // non-uuid outright, so without this the answer to a typo is a 500.
-  if (!UUID.test(id)) notFound();
-
+/**
+ * The job, its customer and its derived contract value -- the one query this
+ * page runs to know what it is showing. `cache()`-wrapped so `generateMetadata`
+ * and the page below share this single read instead of running it twice.
+ */
+const loadProjectRecord = cache(async (id: string) => {
   const [job] = await db
     .select({
       project: projects,
@@ -70,6 +64,44 @@ export default async function ProjectPage({
     .innerJoin(customers, eq(projects.customerId, customers.id))
     .innerJoin(projectTypes, eq(projects.projectTypeId, projectTypes.id))
     .where(eq(projects.id, id));
+
+  return job ?? null;
+});
+
+/**
+ * Record first, tenant last: the job's number and name, so a tab on this
+ * job's record reads apart from its schedule and its billing, open beside it.
+ */
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}): Promise<Metadata> {
+  const { id } = await params;
+  if (!UUID.test(id)) return { title: 'Job' };
+  try {
+    const job = await loadProjectRecord(id);
+    return { title: job ? `${job.project.projectNumber} — ${job.project.name}` : 'Job' };
+  } catch {
+    return { title: 'Job' };
+  }
+}
+
+export default async function ProjectPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ edit?: string }>;
+}) {
+  const { id } = await params;
+  const { edit } = await searchParams;
+
+  // A malformed id is a wrong URL, not a server fault. Postgres rejects a
+  // non-uuid outright, so without this the answer to a typo is a 500.
+  if (!UUID.test(id)) notFound();
+
+  const job = await loadProjectRecord(id);
 
   if (!job) notFound();
   const { project } = job;

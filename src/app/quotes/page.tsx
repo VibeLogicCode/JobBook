@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { and, desc, eq, inArray, lt, not, or, sql, type SQL } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
@@ -12,6 +13,8 @@ import { AmountCell, TableWrap } from '@/components/ui/Table';
 import { normalizeSearch, searchCondition } from '@/lib/list/search';
 
 export const dynamic = 'force-dynamic';
+
+export const metadata: Metadata = { title: 'Quotes' };
 
 /**
  * The statuses a person reads as a live document, and the ones that are over.

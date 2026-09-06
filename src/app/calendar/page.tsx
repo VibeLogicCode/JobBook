@@ -58,20 +58,14 @@ const REFUSAL = 'Your role can read this schedule but not change it.';
 const NOBODY = 'nobody';
 
 /**
- * The browser tab, which every screen in this product currently shares.
- *
- * The tenant's name stays in it, per the layout's rule that everything
- * user-visible comes from the organization record -- this only says which of
- * that tenant's screens is open, because the owner works with the schedule and
- * a job's own page in two tabs and neither one could be told from the other.
+ * The tab's own name. The tenant name is no longer repeated here -- the root
+ * layout's title template appends it to every page's title, so a page that
+ * added it too would print it twice.
  */
-export async function generateMetadata(): Promise<Metadata> {
-  const [org] = await db.select({ displayName: organization.displayName }).from(organization);
-  return {
-    title: org ? `Calendar — ${org.displayName}` : 'Calendar',
-    description: 'Every job’s schedule by the day, and who is booked in two places at once.',
-  };
-}
+export const metadata: Metadata = {
+  title: 'Calendar',
+  description: 'Every job’s schedule by the day, and who is booked in two places at once.',
+};
 
 /** A search parameter as one value. A repeated parameter is the first one. */
 function one(raw: string | string[] | undefined): string {
@@ -137,7 +131,7 @@ export default async function CalendarPage({
   const openTaskId = one(query.task);
 
   const [org] = await db
-    .select({ locale: organization.locale, displayName: organization.displayName })
+    .select({ locale: organization.locale })
     .from(organization);
   const locale = org?.locale ?? 'en-CA';
   const day = dayFormatter(locale);

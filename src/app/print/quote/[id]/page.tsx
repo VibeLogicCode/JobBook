@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { eq } from 'drizzle-orm';
 import { notFound } from 'next/navigation';
 import { db } from '@/db/client';
@@ -8,6 +9,26 @@ import { formatCents, formatQty, formatRate } from '@/lib/money/format';
 import { PageParentLink } from '@/components/ui/PageHeader';
 
 export const dynamic = 'force-dynamic';
+
+/**
+ * The quote number, and nothing else -- this title becomes the saved
+ * filename in some browsers, and a customer must never see an internal id
+ * or a job name that was not written for them. `loadQuote` is
+ * `cache()`-wrapped, so this shares its one read with the page below.
+ */
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}): Promise<Metadata> {
+  const { id } = await params;
+  try {
+    const data = await loadQuote(id);
+    return { title: data ? data.quote.quoteNumber : 'Quote' };
+  } catch {
+    return { title: 'Quote' };
+  }
+}
 
 /**
  * The customer-facing document.

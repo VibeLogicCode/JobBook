@@ -1,6 +1,8 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { and, asc, desc, eq, sql } from 'drizzle-orm';
+import { cache } from 'react';
 import { db } from '@/db/client';
 import { customers, leadSources, organization, projects, quotes } from '@/db/schema';
 import { buttonClass } from '@/components/ui/Button';
@@ -26,6 +28,28 @@ export const dynamic = 'force-dynamic';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/** `cache()`-wrapped so `generateMetadata` and the page share this one read. */
+const loadCustomerRecord = cache(async (id: string) => {
+  const [customer] = await db.select().from(customers).where(eq(customers.id, id));
+  return customer ?? null;
+});
+
+/** The customer's own name, with nothing else to disambiguate it. */
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}): Promise<Metadata> {
+  const { id } = await params;
+  if (!UUID.test(id)) return { title: 'Customer' };
+  try {
+    const customer = await loadCustomerRecord(id);
+    return { title: customer ? customer.name : 'Customer' };
+  } catch {
+    return { title: 'Customer' };
+  }
+}
+
 export default async function CustomerPage({
   params,
   searchParams,
@@ -40,7 +64,7 @@ export default async function CustomerPage({
   // non-uuid outright, so without this the answer to a typo is a 500.
   if (!UUID.test(id)) notFound();
 
-  const [customer] = await db.select().from(customers).where(eq(customers.id, id));
+  const customer = await loadCustomerRecord(id);
   if (!customer) notFound();
 
   const [org] = await db.select().from(organization).where(eq(organization.id, 1));

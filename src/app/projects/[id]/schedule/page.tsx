@@ -1,6 +1,8 @@
+import type { Metadata } from 'next';
 import { and, asc, eq, gte, inArray, isNull, lte, ne } from 'drizzle-orm';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { cache } from 'react';
 import { db } from '@/db/client';
 import {
   assignments,
@@ -112,6 +114,40 @@ function andList(items: readonly string[]): string {
 }
 
 /**
+ * The job this schedule belongs to -- just enough to name it. `cache()`-wrapped
+ * so `generateMetadata` and the page share this read rather than doubling it.
+ */
+const loadScheduleProject = cache(async (projectId: string) => {
+  const [project] = await db
+    .select({
+      id: projects.id,
+      projectNumber: projects.projectNumber,
+      name: projects.name,
+      stage: projects.stage,
+      recordStatus: projects.recordStatus,
+    })
+    .from(projects)
+    .where(eq(projects.id, projectId));
+
+  return project ?? null;
+});
+
+/** "Schedule", not the job's name first: every job's schedule tab reads the same, and the job it belongs to is the part that changes. */
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}): Promise<Metadata> {
+  const { id } = await params;
+  try {
+    const project = await loadScheduleProject(id);
+    return { title: project ? `Schedule — ${project.projectNumber}` : 'Schedule' };
+  } catch {
+    return { title: 'Schedule' };
+  }
+}
+
+/**
  * The order the work happens in, for one job.
  *
  * **A list ordered by planned date, and no Gantt.** Spec 5.2 cut the timeline
@@ -155,16 +191,7 @@ export default async function SchedulePage({
   const showVoided = one(query.voided) === '1';
   const view = readScheduleView(one(query.view));
 
-  const [project] = await db
-    .select({
-      id: projects.id,
-      projectNumber: projects.projectNumber,
-      name: projects.name,
-      stage: projects.stage,
-      recordStatus: projects.recordStatus,
-    })
-    .from(projects)
-    .where(eq(projects.id, projectId));
+  const project = await loadScheduleProject(projectId);
 
   if (!project) notFound();
 

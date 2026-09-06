@@ -1,5 +1,7 @@
+import type { Metadata } from 'next';
 import { and, asc, eq } from 'drizzle-orm';
 import { notFound } from 'next/navigation';
+import { cache } from 'react';
 import { db } from '@/db/client';
 import { organization, projectTypes, rateItems, scopeTemplateItems, scopeTemplates } from '@/db/schema';
 import { can, resolveActor } from '@/app/settings/actor';
@@ -18,6 +20,27 @@ import { SheetButton } from '@/components/ui/Sheet';
 
 export const dynamic = 'force-dynamic';
 
+/** `cache()`-wrapped so `generateMetadata` and the page share this one read. */
+const loadScopeTemplate = cache(async (id: string) => {
+  const [template] = await db.select().from(scopeTemplates).where(eq(scopeTemplates.id, id));
+  return template ?? null;
+});
+
+/** The template's own name, its home screen already having said what kind it is. */
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}): Promise<Metadata> {
+  const { id } = await params;
+  try {
+    const template = await loadScopeTemplate(id);
+    return { title: template && template.recordStatus !== 'void' ? template.name : 'Template' };
+  } catch {
+    return { title: 'Template' };
+  }
+}
+
 export default async function TemplateDetailPage({
   params,
 }: {
@@ -27,7 +50,7 @@ export default async function TemplateDetailPage({
   const state = await resolveActor();
   const allowed = state.actor ? can(state.actor.role, 'scopeTemplates.edit') : false;
 
-  const [template] = await db.select().from(scopeTemplates).where(eq(scopeTemplates.id, id));
+  const template = await loadScopeTemplate(id);
   if (!template || template.recordStatus === 'void') notFound();
 
   const lines = await db

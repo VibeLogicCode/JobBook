@@ -1,5 +1,7 @@
+import type { Metadata } from 'next';
 import { and, asc, eq, ne } from 'drizzle-orm';
 import { notFound } from 'next/navigation';
+import { cache } from 'react';
 import { db } from '@/db/client';
 import {
   costCodes,
@@ -28,6 +30,27 @@ import { Pill } from '@/components/ui/Pill';
 import { SheetButton } from '@/components/ui/Sheet';
 
 export const dynamic = 'force-dynamic';
+
+/** `cache()`-wrapped so `generateMetadata` and the page share this one read. */
+const loadScheduleTemplate = cache(async (id: string) => {
+  const [template] = await db.select().from(scheduleTemplates).where(eq(scheduleTemplates.id, id));
+  return template ?? null;
+});
+
+/** The template's own name, its home screen already having said what kind it is. */
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}): Promise<Metadata> {
+  const { id } = await params;
+  try {
+    const template = await loadScheduleTemplate(id);
+    return { title: template && template.recordStatus !== 'void' ? template.name : 'Template' };
+  } catch {
+    return { title: 'Template' };
+  }
+}
 
 /**
  * The schedule template editor -- section 5 of
@@ -60,7 +83,7 @@ export default async function ScheduleTemplateDetailPage({
   const allowed = state.actor ? can(state.actor.role, 'rates:edit') : false;
   const mayVoid = state.actor ? can(state.actor.role, 'record:void') : false;
 
-  const [template] = await db.select().from(scheduleTemplates).where(eq(scheduleTemplates.id, id));
+  const template = await loadScheduleTemplate(id);
   if (!template || template.recordStatus === 'void') notFound();
 
   const taskRows = await db

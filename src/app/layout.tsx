@@ -1,9 +1,7 @@
 import type { Metadata, Viewport } from 'next';
-import { eq } from 'drizzle-orm';
-import { db } from '@/db/client';
-import { organization } from '@/db/schema';
 import { ThemeScript } from '@/components/theme/theme-script';
 import { AppShell } from '@/components/ui/AppShell';
+import { loadOrganization } from '@/lib/organization/load';
 import './globals.css';
 
 export const dynamic = 'force-dynamic';
@@ -11,11 +9,20 @@ export const dynamic = 'force-dynamic';
 /**
  * The browser tab carries the tenant's name, not the product's. Everything
  * user-visible comes from the organization record (spec 2.1).
+ *
+ * A `template` rather than a flat string: every route below now sets its own
+ * `title` (the record or the list it shows), and this is where the tenant
+ * name gets appended so a page never has to repeat it. Record first, tenant
+ * last -- browsers truncate from the right, and the tenant name is the part
+ * that reads the same in every tab.
  */
 export async function generateMetadata(): Promise<Metadata> {
   const org = await loadOrganization();
   return {
-    title: org ? `${org.displayName} — Quotes` : 'Setup required',
+    title: {
+      template: org ? `%s — ${org.displayName}` : '%s',
+      default: org?.displayName ?? 'Setup required',
+    },
     description: org?.tagline ?? undefined,
   };
 }
@@ -26,17 +33,6 @@ export const viewport: Viewport = {
   // The worksheet is used one-handed in a truck; pinch-zoom stays available.
   maximumScale: 5,
 };
-
-async function loadOrganization() {
-  try {
-    const [row] = await db.select().from(organization).where(eq(organization.id, 1));
-    return row ?? null;
-  } catch {
-    // A missing database is a setup problem, not a crash: the shell still
-    // renders so the person can read the message telling them what to do.
-    return null;
-  }
-}
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const org = await loadOrganization();

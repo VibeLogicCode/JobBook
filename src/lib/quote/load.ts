@@ -1,3 +1,4 @@
+import { cache } from 'react';
 import { and, asc, eq } from 'drizzle-orm';
 import { db } from '@/db/client';
 import {
@@ -16,13 +17,17 @@ import type { LineInput } from '@/lib/quote/types';
  * but two display values are not stored: the grossed-up price of an excluded
  * upgrade, and the sum of those upgrades. Both are recomputed here, read-only,
  * so an optional line prints the figure the customer would actually be charged.
+ *
+ * `cache()`, because both `/quotes/[id]` and `/print/quote/[id]` call this
+ * once for `generateMetadata` (the tab title) and once for the page itself --
+ * without it, opening a quote would run this whole read twice.
  */
-export async function loadQuote(quoteId: string): Promise<{
+export const loadQuote = cache(async (quoteId: string): Promise<{
   quote: WireQuote;
   lines: WireLine[];
   taxes: WireTax[];
   rateItems: WireRateItem[];
-} | null> {
+} | null> => {
   const [row] = await db
     .select({
       quote: quotes,
@@ -148,4 +153,4 @@ export async function loadQuote(quoteId: string): Promise<{
       sellRateTenThou: item.sellRateTenThou.toString(),
     })),
   };
-}
+});

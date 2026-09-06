@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { and, asc, eq, ne, sql } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { costCodes, organization, trades, vendorTypes, vendors } from '@/db/schema';
@@ -31,6 +32,8 @@ import { TableWrap } from '@/components/ui/Table';
 import { normalizeSearch, searchCondition } from '@/lib/list/search';
 
 export const dynamic = 'force-dynamic';
+
+export const metadata: Metadata = { title: 'Vendors' };
 
 const REFUSAL = 'Your role can read the vendor list but not change it.';
 

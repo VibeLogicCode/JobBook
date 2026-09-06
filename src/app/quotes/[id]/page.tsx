@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { eq } from 'drizzle-orm';
 import { notFound } from 'next/navigation';
 import { db } from '@/db/client';
@@ -11,6 +12,26 @@ import { Worksheet } from '@/components/worksheet/Worksheet';
 import { loadQuote } from '@/lib/quote/load';
 
 export const dynamic = 'force-dynamic';
+
+/**
+ * Record first, tenant last: the quote number is what tells two open tabs
+ * on the same job apart. `loadQuote` is `cache()`-wrapped, so this and the
+ * page below share one read rather than paying for it twice.
+ */
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}): Promise<Metadata> {
+  const { id } = await params;
+  try {
+    const data = await loadQuote(id);
+    if (!data) return { title: 'Quote' };
+    return { title: `${data.quote.quoteNumber} — ${data.quote.projectName}` };
+  } catch {
+    return { title: 'Quote' };
+  }
+}
 
 export default async function QuotePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;

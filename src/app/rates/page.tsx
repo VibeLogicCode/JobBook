@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { asc, eq } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { costCodes, rateItems } from '@/db/schema';
@@ -23,6 +24,8 @@ import { formatBasisPoints, formatRate } from '@/lib/money/format';
 import { marginBasisPoints } from '@/lib/money/scale';
 
 export const dynamic = 'force-dynamic';
+
+export const metadata: Metadata = { title: 'Rates' };
 
 const REFUSAL = 'Your role can read the rate list but not change it.';
 
