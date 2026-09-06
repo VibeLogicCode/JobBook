@@ -8,7 +8,7 @@ import { vendors } from '@/db/schema/vendors';
 /**
  * WHO is doing a scheduled task (spec 5.1).
  *
- * `schedule_tasks.trade` says a task needs a framer. This says which framer,
+ * `schedule_tasks.trade_id` says a task needs a framer. This says which framer,
  * and it is the row without which no calendar can ever answer the question the
  * owner actually asked -- *"who is scheduled on what day, internal resource,
  * me, vendor"*. A trade string cannot answer it, because two jobs both needing

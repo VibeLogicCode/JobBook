@@ -42,7 +42,7 @@ import { Reveal } from '@/components/ui/Reveal';
 export interface EditableTask {
   id: string;
   name: string;
-  trade: string | null;
+  tradeId: string | null;
   costCodeId: string | null;
   predecessorTaskId: string | null;
   notes: string | null;
@@ -68,13 +68,15 @@ export function TaskFields({
   idPrefix,
   task,
   disabled,
+  tradeOptions,
   costCodeOptions,
   predecessorOptions,
 }: {
   idPrefix: string;
   /** Absent when adding: every field renders empty. */
-  task?: Pick<EditableTask, 'name' | 'trade' | 'costCodeId' | 'predecessorTaskId'>;
+  task?: Pick<EditableTask, 'name' | 'tradeId' | 'costCodeId' | 'predecessorTaskId'>;
   disabled: boolean;
+  tradeOptions: Option[];
   costCodeOptions: Option[];
   predecessorOptions: Option[];
 }) {
@@ -90,12 +92,13 @@ export function TaskFields({
         disabled={disabled}
         hint="What you would call it on the phone — excavation, rough-in, drywall."
       />
-      <TextField
+      <SelectField
         idPrefix={idPrefix}
-        name="trade"
+        name="tradeId"
         label="Trade"
-        maxLength={120}
-        defaultValue={task?.trade}
+        defaultValue={task?.tradeId ?? ''}
+        options={tradeOptions}
+        blankLabel="None"
         disabled={disabled}
         hint="Which trade this needs — the subcontractor is named with assignments, not here."
       />
@@ -130,6 +133,7 @@ export function TaskFields({
 
 export function TaskEditor({
   task,
+  tradeOptions,
   costCodeOptions,
   predecessorOptions,
   locale,
@@ -139,6 +143,7 @@ export function TaskEditor({
   above,
 }: {
   task: EditableTask;
+  tradeOptions: Option[];
   costCodeOptions: Option[];
   predecessorOptions: Option[];
   /** The tenant's own locale, so the move preview reads in the dates he uses. */
@@ -211,6 +216,7 @@ export function TaskEditor({
               idPrefix={`edit-${task.id}`}
               task={task}
               disabled={disabled}
+              tradeOptions={tradeOptions}
               costCodeOptions={costCodeOptions}
               predecessorOptions={predecessorOptions}
             />

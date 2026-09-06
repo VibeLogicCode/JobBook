@@ -8,8 +8,10 @@ import {
   organization,
   projects,
   scheduleTasks,
+  trades,
 } from '@/db/schema';
 import { resolveActor } from '@/app/settings/actor';
+import { listOptionLabel } from '@/app/settings/vendor-lists';
 import { assigneeKey } from '@/app/projects/[id]/schedule/clashes';
 import { dayFormatter, type Assignee } from '@/app/projects/[id]/schedule/schema';
 import { can } from '@/lib/auth/permissions';
@@ -156,7 +158,10 @@ export default async function CalendarPage({
       plannedStart: scheduleTasks.plannedStart,
       plannedEnd: scheduleTasks.plannedEnd,
       isMilestone: scheduleTasks.isMilestone,
-      trade: scheduleTasks.trade,
+      // The name, not the id -- `CalendarTask.trade` is a display string, and a
+      // retired trade still has to resolve here: retiring is a statement about
+      // new work, not about the task that already named it.
+      trade: trades.name,
       projectId: projects.id,
       projectNumber: projects.projectNumber,
       projectName: projects.name,
@@ -165,6 +170,7 @@ export default async function CalendarPage({
     })
     .from(scheduleTasks)
     .innerJoin(projects, eq(projects.id, scheduleTasks.projectId))
+    .leftJoin(trades, eq(trades.id, scheduleTasks.tradeId))
     .leftJoin(
       assignments,
       and(
@@ -478,6 +484,7 @@ export default async function CalendarPage({
         >
           <TaskEditor
             task={open.task}
+            tradeOptions={open.tradeOptions}
             costCodeOptions={open.costCodeOptions}
             predecessorOptions={open.predecessorOptions}
             locale={locale}
@@ -523,6 +530,7 @@ async function loadOpenTask(
 ): Promise<{
   task: typeof scheduleTasks.$inferSelect;
   project: { id: string; projectNumber: string; name: string; recordStatus: string };
+  tradeOptions: Option[];
   costCodeOptions: Option[];
   predecessorOptions: Option[];
   onIt: string[];
@@ -530,7 +538,7 @@ async function loadOpenTask(
   const [task] = await db.select().from(scheduleTasks).where(eq(scheduleTasks.id, taskId));
   if (!task) return null;
 
-  const [[project], siblings, allCodes, onItRows] = await Promise.all([
+  const [[project], siblings, allCodes, allTrades, onItRows] = await Promise.all([
     db
       .select({
         id: projects.id,
@@ -557,6 +565,7 @@ async function loadOpenTask(
       .from(costCodes)
       .where(ne(costCodes.recordStatus, 'void'))
       .orderBy(asc(costCodes.code)),
+    db.select().from(trades).orderBy(asc(trades.sortOrder), asc(trades.name)),
     db
       .select({ vendorId: assignments.vendorId, userId: assignments.userId })
       .from(assignments)
@@ -571,6 +580,16 @@ async function loadOpenTask(
   ]);
 
   if (!project) return null;
+
+  // Active trades, plus this task's own if retiring left it off the list --
+  // the same rule `costCodeOptions` below draws for the same reason.
+  const tradeOptions: Option[] = allTrades
+    .filter((trade) => trade.isActive && trade.recordStatus === 'active')
+    .map((trade) => ({ value: trade.id, label: trade.name }));
+  const currentTrade = task.tradeId ? allTrades.find((trade) => trade.id === task.tradeId) : undefined;
+  if (currentTrade && !tradeOptions.some((option) => option.value === currentTrade.id)) {
+    tradeOptions.push({ value: currentTrade.id, label: listOptionLabel(currentTrade) });
+  }
 
   // The predecessor picker prints dates, so it reads in the tenant's own locale
   // rather than in the one this helper happened to be written in.
@@ -624,5 +643,5 @@ async function loadOpenTask(
     ),
   );
 
-  return { task, project, costCodeOptions, predecessorOptions, onIt };
+  return { task, project, tradeOptions, costCodeOptions, predecessorOptions, onIt };
 }

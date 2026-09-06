@@ -80,7 +80,7 @@ describe('dates on screen', () => {
 
 const newTask = {
   name: 'Framing',
-  trade: '',
+  tradeId: '',
   costCodeId: '',
   predecessorTaskId: '',
   notes: '',
@@ -113,7 +113,7 @@ describe('adding a task', () => {
 const editTask = {
   id: '3f6b4a2c-2f1e-4c8a-9b2d-5c1e7a9f0d31',
   name: 'Framing',
-  trade: '',
+  tradeId: '',
   costCodeId: '',
   predecessorTaskId: '',
   notes: '',
@@ -147,7 +147,7 @@ describe('editing a task', () => {
   it('keeps blank as NULL rather than the empty string', () => {
     const parsed = editTaskFields.safeParse(editTask);
     expect(parsed.success && parsed.data.actualStart).toBeNull();
-    expect(parsed.success && parsed.data.trade).toBeNull();
+    expect(parsed.success && parsed.data.tradeId).toBeNull();
   });
 });
 

@@ -8,10 +8,12 @@ import {
   organization,
   projects,
   scheduleTasks,
+  trades,
   users,
   vendors,
 } from '@/db/schema';
 import { resolveActor } from '@/app/settings/actor';
+import { listOptionLabel } from '@/app/settings/vendor-lists';
 import { can } from '@/lib/auth/permissions';
 import { formatCents } from '@/lib/money/format';
 import { addDays, tenantToday } from '@/lib/quote/dates';
@@ -240,6 +242,18 @@ export default async function SchedulePage({
     .orderBy(asc(costCodes.code));
 
   const codeById = new Map(allCodes.map((row) => [row.id, row]));
+
+  // Every trade, retired and voided included. A task already pointing at a
+  // retired one has to go on displaying it -- retiring "Roofing" must not
+  // blank the row -- and a select whose `defaultValue` matches no option
+  // silently shows the FIRST one instead, which the next save would then
+  // write back as the task's trade.
+  const allTrades = await db
+    .select()
+    .from(trades)
+    .orderBy(asc(trades.sortOrder), asc(trades.name));
+
+  const tradeById = new Map(allTrades.map((row) => [row.id, row]));
 
   /* -----------------------------------------------------------------------
      Who is on each task
@@ -493,6 +507,27 @@ export default async function SchedulePage({
   }
 
   /**
+   * The trades a task may be pointed at: the ones still on the list, plus
+   * whichever one this task already carries, marked.
+   *
+   * A retired trade is not offered to a task that is not already on it --
+   * retired means do not offer this on new work -- but it IS offered back to
+   * the task that is, for the reason `costCodeOptions` gives: a select whose
+   * `defaultValue` matches no option silently shows the first one instead.
+   */
+  function tradeOptions(row?: TaskRow): Option[] {
+    const options: Option[] = allTrades
+      .filter((trade) => trade.isActive && trade.recordStatus === 'active')
+      .map((trade) => ({ value: trade.id, label: trade.name }));
+
+    const current = row?.tradeId ? tradeById.get(row.tradeId) : undefined;
+    if (current && !options.some((option) => option.value === current.id)) {
+      options.push({ value: current.id, label: listOptionLabel(current) });
+    }
+    return options;
+  }
+
+  /**
    * What a task may be told to wait on.
    *
    * Everything live except itself and except anything that already reaches it
@@ -552,7 +587,10 @@ export default async function SchedulePage({
         plannedStart: scheduleTasks.plannedStart,
         plannedEnd: scheduleTasks.plannedEnd,
         isMilestone: scheduleTasks.isMilestone,
-        trade: scheduleTasks.trade,
+        // The name, not the id -- `CalendarTask.trade` is a display string, and
+        // a retired trade still has to resolve here the same way it does on
+        // this job's own table.
+        trade: trades.name,
         projectId: projects.id,
         projectNumber: projects.projectNumber,
         projectName: projects.name,
@@ -561,6 +599,7 @@ export default async function SchedulePage({
       })
       .from(scheduleTasks)
       .innerJoin(projects, eq(projects.id, scheduleTasks.projectId))
+      .leftJoin(trades, eq(trades.id, scheduleTasks.tradeId))
       .leftJoin(
         assignments,
         and(
@@ -665,6 +704,7 @@ export default async function SchedulePage({
                 <TaskFields
                   idPrefix="new-task"
                   disabled={!allowed}
+                  tradeOptions={tradeOptions()}
                   costCodeOptions={costCodeOptions()}
                   predecessorOptions={predecessorOptions()}
                 />
@@ -865,6 +905,7 @@ export default async function SchedulePage({
             {rows.map((row) => {
               const isVoid = row.recordStatus === 'void';
               const code = row.costCodeId ? codeById.get(row.costCodeId) : undefined;
+              const trade = row.tradeId ? tradeById.get(row.tradeId) : undefined;
               const predecessorName = row.predecessorTaskId
                 ? (nameById.get(row.predecessorTaskId) ?? 'a task that is no longer here')
                 : null;
@@ -877,7 +918,7 @@ export default async function SchedulePage({
                   <td data-label="Task">
                     {row.name}
                     <span className="block t-small text-subtle">
-                      {[row.trade, code ? `${code.code} — ${code.name}` : null]
+                      {[trade?.name, code ? `${code.code} — ${code.name}` : null]
                         .filter(Boolean)
                         .join(' · ') || 'No trade recorded'}
                     </span>
@@ -994,6 +1035,7 @@ export default async function SchedulePage({
                     >
                       <TaskEditor
                         task={row}
+                        tradeOptions={tradeOptions(row)}
                         costCodeOptions={costCodeOptions(row)}
                         predecessorOptions={predecessorOptions(row)}
                         locale={locale}
@@ -1029,6 +1071,7 @@ export default async function SchedulePage({
         >
           <TaskEditor
             task={openTask}
+            tradeOptions={tradeOptions(openTask)}
             costCodeOptions={costCodeOptions(openTask)}
             predecessorOptions={predecessorOptions(openTask)}
             locale={locale}

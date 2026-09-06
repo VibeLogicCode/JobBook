@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { and, asc, eq, ne, sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { db } from '@/db/client';
-import { assignments, costCodes, organization, projects, scheduleTasks, users, vendors } from '@/db/schema';
+import { assignments, costCodes, organization, projects, scheduleTasks, trades, users, vendors } from '@/db/schema';
 import { guard } from '@/lib/auth/guard';
 import { lagBetween } from '@/lib/schedule/calendar';
 import {
@@ -219,6 +219,32 @@ function predecessorProblem(
   return null;
 }
 
+/** The columns a chosen trade is judged on, and nothing else. */
+const TRADE_REF = { id: trades.id, name: trades.name, recordStatus: trades.recordStatus };
+
+/**
+ * Whether a trade may be pointed at, said in a sentence.
+ *
+ * Void is refused and retired is allowed, the same asymmetry `vendors/schema.ts`
+ * draws for a vendor's own trade. Retiring is a statement about NEW work: a
+ * task already pointing at "Roofing" goes on pointing at it, and re-saving a
+ * task for an unrelated reason must not force it off a trade that still
+ * stands just because the trade list is winding it down.
+ *
+ * Read inside the writing transaction, never off the form, for the reason
+ * `predecessorProblem` is: the picker was built before a trade voided since
+ * was voided.
+ */
+async function tradeProblem(tx: Tx, tradeId: string | null): Promise<string | null> {
+  if (tradeId === null) return null;
+  const [trade] = await tx.select(TRADE_REF).from(trades).where(eq(trades.id, tradeId));
+  if (!trade) return 'The trade you chose is not on the list.';
+  if (trade.recordStatus === 'void') {
+    return `${trade.name} is void, so new work should not be pointed at it. Choose a trade that still stands, or leave this blank.`;
+  }
+  return null;
+}
+
 /* -------------------------------------------------------------------------
    Adding a task
    ------------------------------------------------------------------------- */
@@ -283,10 +309,16 @@ export async function createTask(
         }
       }
 
+      const tradeIssue = await tradeProblem(tx, input.tradeId);
+      if (tradeIssue) {
+        problem = tradeIssue;
+        return;
+      }
+
       await tx.insert(scheduleTasks).values({
         projectId,
         name: input.name,
-        trade: input.trade,
+        tradeId: input.tradeId,
         costCodeId: input.costCodeId,
         plannedStart: input.plannedStart,
         plannedEnd: input.plannedEnd,
@@ -416,13 +448,19 @@ export async function updateTask(
         }
       }
 
+      const tradeIssue = await tradeProblem(tx, input.tradeId);
+      if (tradeIssue) {
+        problem = tradeIssue;
+        return;
+      }
+
       await tx
         .update(scheduleTasks)
         // No `updatedAt`: the trigger owns it. No planned dates: those move
         // through `moveTaskDates`, which shows what else goes with them first.
         .set({
           name: input.name,
-          trade: input.trade,
+          tradeId: input.tradeId,
           costCodeId: input.costCodeId,
           predecessorTaskId: input.predecessorTaskId,
           lagDays,

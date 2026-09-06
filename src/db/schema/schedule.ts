@@ -13,6 +13,7 @@ import {
 } from 'drizzle-orm/pg-core';
 import { auditColumns, rate } from '@/db/columns';
 import { costCodes, projects } from '@/db/schema/customers';
+import { trades } from '@/db/schema/vendor-lists';
 
 /**
  * The order the work happens in, per job (spec 5.1).
@@ -62,13 +63,24 @@ export const scheduleTasks = pgTable('schedule_tasks', {
    * WHICH TRADE this task needs, which is the half of the owner's ask this
    * table answers today.
    *
-   * Free text, and the same field `vendors.trade` is -- "framer", "drywall".
+   * A live foreign key into the same list `vendors.trade_id` and `crew.trade_id`
+   * already point at (migration 0014), rather than free text -- promoted from
+   * text by migration 0016 for the reason both of those are foreign keys: a
+   * schedule template (spec 5) has to carry a trade so the assignment picker
+   * can offer the right subcontractors, and it cannot do that against free text
+   * without the name drifting the first time a trade is renamed.
+   *
+   * Nullable, matching the column it replaces: a task with no single trade --
+   * "site cleanup" -- names none. A retired trade goes on resolving here, so
+   * retiring one does not blank every task that already named it; see the note
+   * on `trades.isActive`.
+   *
    * Naming the actual subcontractor is `assignments` (spec 5.1), which is step
    * 5 of the plan and a separate piece of work; a `vendor_id` here would be a
    * second place to say who is on a task, and the two would disagree the first
    * time somebody swapped a sub without opening both screens.
    */
-  trade: text('trade'),
+  tradeId: uuid('trade_id').references(() => trades.id),
   /**
    * The plan. NOT NULL, both of them, and that is stricter than spec 5.1 draws
    * it.
@@ -161,6 +173,8 @@ export const scheduleTasks = pgTable('schedule_tasks', {
    * the feature reads rather than one a report might.
    */
   index('schedule_tasks_predecessor_idx').on(t.predecessorTaskId),
+  /** The assignment picker's query: which trade a task needs. */
+  index('schedule_tasks_trade_idx').on(t.tradeId),
 
   // A task cannot finish before it starts. A one-day task has end = start.
   check('schedule_tasks_planned_order', sql`planned_end >= planned_start`),

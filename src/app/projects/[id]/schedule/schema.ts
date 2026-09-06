@@ -19,7 +19,7 @@ import type { Tone } from '@/components/ui/Pill';
 
 export const TASK_LABELS: Record<string, string> = {
   name: 'Task',
-  trade: 'Trade',
+  tradeId: 'Trade',
   costCodeId: 'Cost code',
   plannedStart: 'Starts',
   plannedEnd: 'Finishes',
@@ -70,7 +70,7 @@ const statusField = z.enum(TASK_STATUSES);
 /** Everything about a task except its planned dates. */
 const taskDetailFields = {
   name: requiredText(200),
-  trade: optionalText(120),
+  tradeId: optionalUuid,
   costCodeId: optionalUuid,
   predecessorTaskId: optionalUuid,
   notes: optionalText(2000),
