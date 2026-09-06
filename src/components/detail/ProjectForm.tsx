@@ -156,25 +156,33 @@ export function ProjectFields({
             name="actualStart"
             type="date"
             defaultValue={project?.actualStart ?? ''}
+            hint="The day work really began."
+            moreLabel="Why not just change the planned date?"
+            more="The planned dates above stay as they were. Keeping both is how you can look back and see that this job started three weeks late — overwrite the plan and that fact is gone, along with any chance of quoting the next one better."
           />
           <Field
             label="Actual end"
             name="actualEnd"
             type="date"
             defaultValue={project?.actualEnd ?? ''}
+            hint="The day work really finished."
           />
           <Field
             label="Substantial performance"
             name="substantialPerformanceDate"
             type="date"
-            hint="Starts the holdback release clock."
+            hint="Starts the clock on getting your holdback."
+            moreLabel="What counts as substantial performance?"
+            more="Roughly: the job is finished enough for the owner to use it for what it was built for, with only minor items left. It is a defined test under Ontario's Construction Act, not a judgement call, and there is a cost-to-complete threshold in the wording — worth checking with your lawyer on a job near the line. Filling this in is what makes the billing screen able to tell you when the money held back from you becomes yours to invoice."
             defaultValue={project?.substantialPerformanceDate ?? ''}
           />
           <Field
             label="Certificate published"
             name="certificatePublishedDate"
             type="date"
-            hint="The statutory clock runs from publication, not from the date certified."
+            hint="The day the certificate went out — not the day it was signed."
+            moreLabel="Why the published date and not the signed date?"
+            more="Once substantial performance is certified, the certificate has to be published. The statutory period runs from that publication. If the certificate sat on somebody's desk for a fortnight before it went out, using the signing date puts your holdback release two weeks earlier than it really is — which is the wrong direction to be wrong in."
             defaultValue={project?.certificatePublishedDate ?? ''}
           />
         </FieldGroup>

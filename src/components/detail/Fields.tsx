@@ -12,6 +12,8 @@
  * grid written tomorrow cannot reintroduce it.
  */
 
+import { Reveal } from '@/components/ui/Reveal';
+
 /**
  * Form primitives for the detail screens.
  *
@@ -39,17 +41,41 @@ function Legend({ label, required }: { label: string; required?: boolean }) {
 
 type InputProps = Omit<React.ComponentProps<'input'>, 'className'> & {
   label: string;
+  /** One short line, always visible, for somebody filling the box right now. */
   hint?: string;
   numeric?: boolean;
+  /**
+   * The longer explanation, behind a press.
+   *
+   * For a field where a reader could make an expensive WRONG decision without
+   * it -- a statutory date that starts a clock on money being released, say --
+   * and not for restating the label. Most fields should pass neither this nor
+   * a hint.
+   */
+  more?: React.ReactNode;
+  /** What the press says. Name the question the field actually raises. */
+  moreLabel?: string;
 };
 
-export function Field({ label, hint, numeric = false, ...input }: InputProps) {
-  return (
-    <label className="grid gap-1 self-start">
+export function Field({ label, hint, numeric = false, more, moreLabel, ...input }: InputProps) {
+  const control = (
+    <label className="grid gap-1">
       <Legend label={label} required={input.required} />
       <input {...input} className={`field min-h-11 ${numeric ? 'field-num' : ''}`.trim()} />
       {hint ? <span className="t-small text-subtle">{hint}</span> : null}
     </label>
+  );
+
+  // The disclosure sits BESIDE the label, never inside it. A `<details>` within
+  // a `<label>` is invalid, and worse than invalid: pressing the summary would
+  // also activate the field the label points at, so opening an explanation
+  // would put the cursor in a date box.
+  if (!more) return <div className="grid gap-1 self-start">{control}</div>;
+  return (
+    <div className="grid gap-1 self-start">
+      {control}
+      <Reveal label={moreLabel ?? 'What this means'}>{more}</Reveal>
+    </div>
   );
 }
 
