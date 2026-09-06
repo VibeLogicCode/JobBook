@@ -32,8 +32,48 @@
 name: scopeline
 
 services:
+  # ---------------------------------------------------------------------------
+  # Makes the four data folders, with the right owners, before anything starts.
+  #
+  # Docker DOES create a missing bind-mount source on its own -- but as
+  # root:root, and neither of the images that then have to write to it runs as
+  # root. So the folders appear, the containers start, and Postgres fails to
+  # initialise its data directory: an error that reads like a broken database
+  # rather than a permissions problem somebody could have fixed in a second.
+  #
+  # The alternative was three lines of `mkdir` and `chown` over SSH in the
+  # runbook. That is fine once and wrong for a product: every customer would do
+  # it, and the ones who skipped it would arrive as support.
+  #
+  # The uids are facts about the two images, not guesses -- 70 is `postgres` in
+  # postgres:16-alpine, 1001 is `pwuser` in this app's own image, which its
+  # Dockerfile switches to with `USER pwuser`. Check with:
+  #   docker run --rm --entrypoint sh scopeline:latest -c 'id -u'
+  #
+  # Uses the postgres image only because it is already being pulled; nothing
+  # here is Postgres-specific, and it keeps a NAS with no internet from needing
+  # a second download.
+  init-folders:
+    image: postgres:16-alpine
+    user: root
+    command:
+      - sh
+      - -c
+      - |
+        set -e
+        mkdir -p /host/db /host/files /host/backups /host/config
+        chown 70:70 /host/db
+        chown -R 1001:1001 /host/files /host/backups /host/config
+        echo "data folders ready"
+    volumes:
+      - ${SCOPELINE_DATA:-/volume1/docker/scopeline}:/host
+    restart: 'no'
+
   db:
     image: postgres:16-alpine
+    depends_on:
+      init-folders:
+        condition: service_completed_successfully
     environment:
       POSTGRES_USER: quote
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
@@ -53,6 +93,8 @@ services:
   app:
     image: scopeline:latest
     depends_on:
+      init-folders:
+        condition: service_completed_successfully
       db:
         condition: service_healthy
     environment:
@@ -147,6 +189,8 @@ services:
   backup:
     image: scopeline:latest
     depends_on:
+      init-folders:
+        condition: service_completed_successfully
       db:
         condition: service_healthy
     entrypoint: ['/usr/local/bin/backup-loop.sh']

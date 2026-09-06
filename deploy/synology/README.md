@@ -71,40 +71,29 @@ Look at **Package Center > Container Manager** (or Storage Manager) and set
 where yours is. Every path below hangs off it, and the examples say
 `/volume1/...` only because something has to be written down.
 
-## Creating the folders
+## The folders make themselves
 
-Do this before the first `up`, not after. Bind mounts (below) do not create
-missing parent directories reliably, and Postgres refuses to initialize into
-a directory it doesn't like the permissions on.
+Nothing to do here — an `init-folders` step in the compose file creates the
+four data directories and gives them the right owners before anything else
+starts, and every other service waits for it to finish.
 
-```sh
-sudo mkdir -p \
-  /volume1/docker/scopeline/db \
-  /volume1/docker/scopeline/files \
-  /volume1/docker/scopeline/backups \
-  /volume1/docker/scopeline/config
-```
+It exists because Docker's own behaviour is a trap. It *does* create a missing
+bind-mount source, but as `root:root`, and neither Postgres nor the app runs as
+root — so the folders appear, the containers start, and the database fails to
+initialise with an error that reads like a broken database rather than a
+permissions problem. Three lines of `mkdir` and `chown` over SSH would fix it,
+which is fine once and wrong for something installed more than once.
 
-These four map directly to `docker-compose.yml`'s bind mounts — deliberately
-**not** Docker named volumes. A named volume lives somewhere under
-`/var/lib/docker/volumes/` that File Station cannot browse and a Container
-Manager "reset project" can quietly take with it. A folder under
-`/volume1/docker/scopeline/` is one you can see, back up by hand, and find
-again in six months. The database directory (`db`) is the one that matters
-most — it is where every quote, customer and rate table actually lives.
+The four live under whatever `SCOPELINE_DATA` names:
 
-If containers later fail to start with permission errors on `/data/files`,
-`/data/backups` or `/data/config`, the app runs as a non-root user baked into
-the image (`pwuser`). Find its numeric ID and match the folder ownership to
-it:
+- `db` — every quote, customer and rate. **This is the one that matters.**
+- `files` — uploaded receipts and the letterhead logo
+- `backups` — where the backup job writes
+- `config` — what the setup wizard persists
 
-```sh
-sudo docker run --rm scopeline:latest id -u pwuser   # prints a number, e.g. 1000
-sudo chown -R 1000:1000 /volume1/docker/scopeline/files /volume1/docker/scopeline/backups /volume1/docker/scopeline/config
-```
-
-(Postgres's own image manages the ownership of `db` itself on first start —
-leave that one alone unless it specifically complains.)
+Bind mounts under a folder you chose, deliberately, rather than Docker named
+volumes: a named volume lives somewhere File Station cannot browse and a
+Container Manager "reset project" can quietly take with it.
 
 ## Configuring `.env`
 
