@@ -67,6 +67,20 @@ export interface WireQuote {
    * Null means undecided, which the print document must never guess at.
    */
   contractType: 'lump_sum' | 'unit_price' | 'cost_plus' | 'time_and_material' | null;
+  /**
+   * What this contract withholds, as a raw ten-thousandths string, or null.
+   *
+   * Here because the print document has to decide whether to say anything
+   * about holdback, and without it that decision was made from the
+   * ORGANIZATION default -- so a job withholding nothing told the customer
+   * that ten percent was being retained. Null means the contract withholds
+   * nothing, which is the meaning `lib/invoice/repository.ts` fixes.
+   *
+   * Not a cost, so it crosses to the browser without the concern the
+   * estimator design raises about `unitCostTenThou` and `marginBp`: this
+   * figure is printed on the customer's own document.
+   */
+  holdbackPctTenThou: string | null;
 }
 
 export interface WireRateItem {

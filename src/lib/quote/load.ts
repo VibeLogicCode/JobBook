@@ -106,6 +106,7 @@ export const loadQuote = cache(async (quoteId: string): Promise<{
       expired: row.quote.validUntil < today,
       projectName: row.projectName,
       contractType: row.contractType,
+    holdbackPctTenThou: row.quote.holdbackPctTenThou?.toString() ?? null,
       customerName: row.customerName,
       siteAddress: site,
       areaSqftMilli: row.quote.areaSqftMilli?.toString() ?? null,

@@ -9,6 +9,7 @@ import { loadQuote } from '@/lib/quote/load';
 import { formatCents, formatQty, formatRate } from '@/lib/money/format';
 import { CONTRACT_TYPES } from '@/components/detail/labels';
 import { PageParentLink } from '@/components/ui/PageHeader';
+import { holdbackNoticeFor } from '@/lib/quote/holdback-notice';
 
 export const dynamic = 'force-dynamic';
 
@@ -57,6 +58,7 @@ export default async function PrintQuote({ params }: { params: Promise<{ id: str
   const logo = await logoDataUri(org.logoFileId);
 
   const { quote, lines, taxes } = data;
+  const holdbackNotice = holdbackNoticeFor(quote.holdbackPctTenThou, org.holdbackTermsText);
   const included = lines.filter((line) => line.isIncluded);
   const upgrades = lines.filter((line) => !line.isIncluded);
 
@@ -354,11 +356,20 @@ export default async function PrintQuote({ params }: { params: Promise<{ id: str
         </section>
       ) : null}
 
-      {org.holdbackTermsText || org.paymentTermsText ? (
+      {/*
+        * The holdback paragraph is a function of THIS QUOTE, not of the
+        * organization's default. It printed unconditionally, so a job that
+        * withheld nothing still told the customer that ten percent was being
+        * retained from every payment -- while the settings screen that sets
+        * the default said the opposite in as many words. See
+        * `lib/quote/holdback-notice.ts` for why the rule is a tested function
+        * rather than a condition here.
+        */}
+      {holdbackNotice || org.paymentTermsText ? (
         <section className="terms">
           <h3>Payment</h3>
           {org.paymentTermsText ? <p>{org.paymentTermsText}</p> : null}
-          {org.holdbackTermsText ? <p>{org.holdbackTermsText}</p> : null}
+          {holdbackNotice ? <p>{holdbackNotice}</p> : null}
         </section>
       ) : null}
 

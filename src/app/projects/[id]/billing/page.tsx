@@ -289,6 +289,29 @@ export default async function BillingPage({
         />
       </div>
 
+      {/*
+        * A held balance with no way to bill it must SAY so.
+        *
+        * The engine bills `holdback_release` in full (`lib/invoice/compute.ts`)
+        * and the kind has a label on this very page, but no screen collects
+        * the figures a release needs -- so `issueCustomerInvoice` deliberately
+        * narrows its accepted kinds to progress and final rather than issue
+        * one with the rest silently defaulted. Correct, and it leaves this
+        * screen showing money withheld beside a form that cannot return it.
+        *
+        * Until the release form exists, the balance is at least not silent.
+        * An owner reading "Holdback held: $4,200" with no control is entitled
+        * to know whether he has missed a button or the button does not exist.
+        */}
+      {outstandingHoldbackCents > 0 ? (
+        <Notice tone="warning" title="This holdback cannot be released here yet">
+          {formatCents(outstandingHoldbackCents)} is withheld on this contract. The invoice kind
+          that returns it is built and priced, but the form that collects a release is part of
+          the payments work that is not finished, so this balance cannot be billed from this
+          screen today. It is recorded and it is not lost — nothing here writes it off.
+        </Notice>
+      ) : null}
+
       {billable ? (
         <Card>
           <CardHeader
