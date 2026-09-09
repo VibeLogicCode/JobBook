@@ -9,15 +9,36 @@ export const dynamic = 'force-dynamic';
 
 const OWNER_ONLY = 'Editing the contact block is reserved to an owner.';
 
-export default async function ContactSettingsPage() {
-  const context = await loadSettings('organization.edit');
+export default async function ContactSettingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ company?: string }>;
+}) {
+  /**
+   * Which company's letterhead this screen is editing.
+   *
+   * From the URL rather than from component state, because the form below
+   * is filled on the SERVER from one company's values -- so switching has
+   * to re-render it. A client-side switch that only changed a hidden field
+   * would leave one company's address on screen while the form saved to the
+   * other.
+   *
+   * Absent on a single-company installation, which is every one until
+   * somebody deliberately adds a second.
+   */
+  const { company } = await searchParams;
+  const context = await loadSettings('organization.edit', company ?? null);
   const org = context.org;
 
   // The customer table carries no province default of its own — a default
   // in the schema would be a guess about a country.
   return (
     <div className="flex flex-col gap-4">
-      <CompanyScopeNotice companyCount={context.companyCount} />
+      <CompanyScopeNotice
+        companies={context.companies}
+        companyId={context.companyId}
+        basePath="/settings/contact"
+      />
 
     <Section
       title="Contact"
@@ -28,9 +49,17 @@ export default async function ContactSettingsPage() {
       <ActionForm
         action={saveContact}
         submitLabel="Save contact details"
-        disabled={!context.allowed}
+        disabled={!context.allowed || context.companyId === null}
         disabledNote={readOnlyNote(context, OWNER_ONLY)}
       >
+        {/* Which company this form was filled from, so the record that saves
+              is the record that was rendered -- not whatever the server would
+              resolve seconds later, which is a different question. Absent on a
+              single-company install, where `patchOrganization` falls back to
+              the only one. */}
+        {context.companyId ? (
+          <input type="hidden" name="companyId" value={context.companyId} />
+        ) : null}
         <FieldGrid>
           <TextField
             name="addressLine1"

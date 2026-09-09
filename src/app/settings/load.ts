@@ -33,20 +33,29 @@ export interface SettingsContext {
   /** Null before first-run setup has written the single row. */
   org: Organization | null;
   /**
-   * How many companies this deployment issues documents as.
+   * The companies a company-scoped screen may edit, active only, in picker
+   * order.
    *
-   * `1` for every installation until somebody deliberately adds a second, and
-   * the four screens that edit COMPANY fields -- identity, contact, financial,
-   * documents -- say so when it is more, because with two companies the fields
-   * they show belong to neither. `patchOrganization` refuses those writes for
-   * the same reason, so the notice is what stops somebody typing into a form
-   * that will refuse them.
+   * Empty or one entry means there is nothing to choose and no selector is
+   * rendered -- a single-company installation has no such concept, which is
+   * the rule every appearance of companies in this product follows.
    *
-   * `/settings/locale` deliberately does NOT check it: currency, timezone and
-   * area unit are the deployment's, and two companies sharing one office
-   * cannot disagree about them.
+   * `/settings/locale` ignores this entirely: currency, timezone and area unit
+   * are the deployment's, and two companies sharing one office cannot disagree
+   * about what day it is.
    */
-  companyCount: number;
+  companies: Company[];
+  /**
+   * WHICH company `org`'s letterhead half came from, and which one a save will
+   * write to. Null before setup, or when a screen asked for one that has since
+   * been retired.
+   *
+   * The four company screens put this in a hidden field, so the record being
+   * saved is the record that was rendered -- not whatever `primaryOf` happens
+   * to resolve at submit time, which is a different question asked seconds
+   * later.
+   */
+  companyId: string | null;
   actor: Actor | null;
   /** Why there is no actor, for a screen that must say so rather than 500. */
   reason: string | null;
@@ -62,12 +71,35 @@ export interface SettingsContext {
  * not a control. The action re-checks, because a disabled attribute is a
  * property of one browser's DOM and nothing else.
  */
-export async function loadSettings(capability: Capability): Promise<SettingsContext> {
+/**
+ * What every settings page needs before it renders.
+ *
+ * `companyId` names which company's letterhead to show, and comes from the
+ * screen's own `?company=` parameter. Absent -- the ordinary case -- it is the
+ * single active company, or nothing when there is more than one and the screen
+ * has not chosen yet.
+ */
+export async function loadSettings(
+  capability: Capability,
+  companyId?: string | null,
+): Promise<SettingsContext> {
   const [row] = await db.select().from(organization).where(eq(organization.id, 1));
-  const company = primaryOf(await readCompanies());
-  const state = await resolveActor();
-
   const all = await readCompanies();
+  const active = all.filter((entry) => entry.isActive);
+
+  /**
+   * The named company when the screen asked for one and it is still issuing,
+   * otherwise the single active one, otherwise nothing.
+   *
+   * A named-but-retired company resolves to null rather than to the primary,
+   * so the screen shows its "pick a company" state instead of silently
+   * swapping which letterhead is on the form under somebody's cursor.
+   */
+  const company = companyId
+    ? (active.find((entry) => entry.id === companyId) ?? null)
+    : primaryOf(all);
+
+  const state = await resolveActor();
 
   return {
     /**
@@ -81,7 +113,8 @@ export async function loadSettings(capability: Capability): Promise<SettingsCont
      * presenting blank inputs as if nothing had been set.
      */
     org: row ? { ...row, ...(company ? companyFields(company) : {}) } : null,
-    companyCount: all.filter((entry) => entry.isActive).length,
+    companies: active,
+    companyId: company?.id ?? null,
     actor: state.actor,
     reason: state.reason,
     allowed: state.actor ? can(state.actor.role, capability) : false,
@@ -95,5 +128,27 @@ export async function loadSettings(capability: Capability): Promise<SettingsCont
  */
 export function readOnlyNote(context: SettingsContext, whatItTakes: string): string {
   if (!context.actor) return context.reason ?? 'This screen is read-only.';
+
+  /**
+   * The ROLE first, then the missing company.
+   *
+   * Both can be true at once -- the form is disabled when either is -- and the
+   * order decides which sentence somebody reads. Somebody whose role cannot
+   * edit this screen must read that, because choosing a company will not
+   * unblock them and "choose a company first" invites them to try and be
+   * refused anyway.
+   *
+   * The other way round matters too: "pick a company" is not a permission
+   * problem, and phrasing it as one would send somebody to ask an
+   * administrator for access they already have.
+   */
+  if (!context.allowed) {
+    return `Your role (${context.actor.role}) can read this but not change it. ${whatItTakes}`;
+  }
+
+  if (context.companyId === null && context.companies.length > 1) {
+    return 'Choose which company these details belong to before saving.';
+  }
+
   return `Your role (${context.actor.role}) can read this but not change it. ${whatItTakes}`;
 }

@@ -9,7 +9,7 @@ import { requireCapability } from '@/app/settings/actor';
 import { percentField } from '@/app/settings/percent-schema';
 import { parseRateToTenThou } from '@/lib/money/format';
 import { type ActionResult, refused, saved } from '@/app/settings/result';
-import { primaryOf, readCompanies } from '@/lib/company/load';
+import { resolveSettingsCompany } from '@/lib/company/settings-target';
 import {
   checkbox,
   formValues,
@@ -51,36 +51,82 @@ import {
  * `companies` later is carried across for free, and a deployment fact cannot
  * be smuggled into a company row by a typo.
  *
- * WITH TWO COMPANIES this refuses rather than guessing. Writing a legal name
- * or an HST number to whichever company sorted first would put it on the wrong
- * corporation's letterhead, and the person would have no way to tell from this
- * screen that it had happened. The per-company settings screens are where that
- * choice belongs.
+ * WHICH COMPANY comes from the form, not from a guess. The four screens that
+ * edit company fields carry a hidden `companyId` naming the company whose
+ * values they rendered, and this writes to that one. With a single company the
+ * field is still there and still names it -- there is no separate path for the
+ * common case, because two paths is how the rare one rots.
+ *
+ * A form that names NO company falls back to the single active one, and
+ * refuses when there is more than one. That is not a nicety: writing a legal
+ * name or an HST registration number to whichever company sorted first would
+ * put it on the wrong corporation's letterhead, and the person would have no
+ * way to tell from this screen that it had happened.
+ *
+ * The id is re-validated against the live list here rather than trusted from
+ * the form. A stale tab holds an id that may since have been retired, and this
+ * is a `'use server'` endpoint -- every export is callable, which
+ * `tests/ops/action-guards.test.ts` exists to remember.
  */
+/**
+ * The company a company-scoped form named, as a string or null.
+ *
+ * Read straight off the FormData rather than through each section's zod
+ * schema: it is not one of the fields being edited, it is which record is
+ * being edited, and adding it to five schemas would be five chances to leave
+ * it out of one. `patchOrganization` re-validates it against the live list.
+ */
+function namedCompany(formData: FormData): string | null {
+  const value = formData.get('companyId');
+  return typeof value === 'string' && value !== '' ? value : null;
+}
+
 async function patchOrganization(
   patch: Record<string, unknown>,
   message: string,
+  submittedCompanyId?: string | null,
 ): Promise<ActionResult> {
   const companyOwned = Object.fromEntries(
     Object.entries(patch).filter(([key]) => key in companies),
   );
 
   if (Object.keys(companyOwned).length > 0) {
-    const company = primaryOf(await readCompanies());
-    if (!company) {
-      return refused(
-        'This deployment has more than one company, so these fields have to say which one they ' +
-        'belong to. Edit them from that company’s own settings.',
-      );
-    }
-    await db.update(companies).set(companyOwned).where(eq(companies.id, company.id));
+    const target = await resolveSettingsCompany(submittedCompanyId ?? null);
+    if ('problem' in target) return refused(target.problem);
+    await db.update(companies).set(companyOwned).where(eq(companies.id, target.company.id));
   }
 
-  const rows = await db
-    .update(organization)
-    .set(patch)
-    .where(eq(organization.id, 1))
-    .returning({ id: organization.id });
+  /**
+   * The deployment's half, and it is often EMPTY now.
+   *
+   * `organization` gave up thirty-six columns, so identity, contact and
+   * documents submit patches with nothing left for this table -- and
+   * `.set({})` is not a no-op, it generates `update ... set  where ...`, which
+   * Postgres rejects as a syntax error. Every one of those three screens
+   * failed to save until this filter existed, which is what
+   * `tests/integration/per-company-settings.test.ts` was written and
+   * immediately caught.
+   *
+   * The row still has to be CONFIRMED to exist even when there is nothing to
+   * write to it, because "there is no organization record yet" is the honest
+   * refusal for a deployment that has not run setup -- and a company-only
+   * patch would otherwise report success on a database with no deployment row
+   * at all.
+   */
+  const deploymentOwned = Object.fromEntries(
+    Object.entries(patch).filter(([key]) => key in organization),
+  );
+
+  const rows = Object.keys(deploymentOwned).length > 0
+    ? await db
+        .update(organization)
+        .set(deploymentOwned)
+        .where(eq(organization.id, 1))
+        .returning({ id: organization.id })
+    : await db
+        .select({ id: organization.id })
+        .from(organization)
+        .where(eq(organization.id, 1));
 
   if (rows.length === 0) {
     return refused('There is no organization record yet. Run first-run setup before editing it.');
@@ -130,7 +176,7 @@ export async function saveIdentity(
   const parsed = identitySchema.safeParse(formValues(formData));
   if (!parsed.success) return invalid(parsed.error, identityLabels);
 
-  return patchOrganization(parsed.data, 'Identity and branding saved.');
+  return patchOrganization(parsed.data, 'Identity and branding saved.', namedCompany(formData));
 }
 
 // ---------------------------------------------------------------------------
@@ -190,7 +236,7 @@ export async function saveContact(
   const parsed = contactSchema.safeParse(formValues(formData));
   if (!parsed.success) return invalid(parsed.error, contactLabels);
 
-  return patchOrganization(parsed.data, 'Contact details saved.');
+  return patchOrganization(parsed.data, 'Contact details saved.', namedCompany(formData));
 }
 
 // ---------------------------------------------------------------------------
@@ -251,6 +297,9 @@ export async function saveLocale(
   const parsed = localeSchema.safeParse(formValues(formData));
   if (!parsed.success) return invalid(parsed.error, localeLabels);
 
+  // No company: currency, locale, timezone and area unit are the
+  // DEPLOYMENT's, and two companies sharing one office cannot disagree about
+  // what day it is. This screen has no company selector for the same reason.
   return patchOrganization(parsed.data, 'Locale saved.');
 }
 
@@ -387,6 +436,14 @@ export async function saveFinancial(
       targetMarginBp: targetMargin === null ? null : Number(targetMargin),
     },
     'Financial and legal settings saved.',
+    /**
+     * This screen writes to BOTH tables: the holdback fields, the tax
+     * registration and the target margin are the company's, and the mileage
+     * rate is the deployment's. `patchOrganization` splits the patch by which
+     * table owns each key, so one call handles both -- and the company id only
+     * decides where the company half lands.
+     */
+    namedCompany(formData),
   );
 }
 
@@ -416,5 +473,5 @@ export async function saveDocuments(
   const parsed = documentSchema.safeParse(formValues(formData));
   if (!parsed.success) return invalid(parsed.error, documentLabels);
 
-  return patchOrganization(parsed.data, 'Document settings saved.');
+  return patchOrganization(parsed.data, 'Document settings saved.', namedCompany(formData));
 }

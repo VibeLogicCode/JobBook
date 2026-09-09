@@ -46,9 +46,15 @@ beforeEach(async () => {
     legalName: 'Northgate Electric Ltd.',
     displayName: 'Northgate Electric',
     timezone: 'America/Toronto',
-    // 10% in ten-thousandths. The figure a contract job should carry and a
-    // service job must not.
-    defaultHoldbackPctTenThou: 100000n,
+    /**
+     * 10%, as 1000n.
+     *
+     * Ten-thousandths of the FRACTION, per `db/columns.ts`: 13% is 1300n. An
+     * earlier version of this file used 100000n and asserted 100000n -- self
+     * consistent, and a thousand percent. The figure a contract job should
+     * carry and a service job must not.
+     */
+    defaultHoldbackPctTenThou: 1000n,
     holdbackTermsText: 'A 10% statutory holdback is retained on each payment.',
     quoteValidityDays: 30,
   });
@@ -56,7 +62,7 @@ beforeEach(async () => {
   await db.insert(taxRates).values({
     companyId: FIRST_COMPANY_ID,
     label: 'HST',
-    rateTenThou: 130000n,
+    rateTenThou: 1300n,
     effectiveFrom: '2010-07-01',
     sortOrder: 1,
   });
@@ -141,7 +147,7 @@ describe('the holdback a new quote carries', () => {
   it('still writes it on a contract-type job', async () => {
     const { quoteId } = await createBlankQuote({ projectId: contractProjectId });
     const [row] = await db.select().from(quotes).where(eq(quotes.id, quoteId));
-    expect(row!.holdbackPctTenThou).toBe(100000n);
+    expect(row!.holdbackPctTenThou).toBe(1000n);
   });
 
   it('does the same through the template path', async () => {
@@ -220,7 +226,7 @@ describe('the flags come from the job, not the company', () => {
       .where(eq(companies.id, FIRST_COMPANY_ID));
 
     const [row] = await db.select().from(quotes).where(eq(quotes.id, quoteId));
-    expect(row!.holdbackPctTenThou).toBe(100000n);
+    expect(row!.holdbackPctTenThou).toBe(1000n);
     expect((await flagsForProject(db, contractProjectId)).holdback).toBe(true);
   });
 

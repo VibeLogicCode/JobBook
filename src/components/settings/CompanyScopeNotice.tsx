@@ -1,43 +1,87 @@
+import Link from 'next/link';
 import { Notice } from '@/components/ui/Notice';
+import { Pill } from '@/components/ui/Pill';
+import type { Company } from '@/lib/company/load';
 
 /**
- * Shown on the four settings screens that edit fields belonging to a COMPANY
- * rather than to the deployment: identity, contact, financial and documents.
+ * Which company's letterhead a company-scoped settings screen is editing.
  *
- * ---------------------------------------------------------------------------
- * WHY A NOTICE AND NOT A COMPANY PICKER
- * ---------------------------------------------------------------------------
- *
- * Because a picker here would be a per-company settings UI, which is real work
- * and a real design -- five screens times two companies, with a way to tell
- * which one you are editing at a glance, or the first mis-save puts one
- * corporation's HST number on the other's invoices.
- *
- * Until that exists, `patchOrganization` REFUSES to write these fields when
- * there is more than one company, rather than guessing which one they belong
- * to. That refusal is correct and it is also invisible until somebody has
- * typed into a form. This notice is what stops them typing.
- *
- * `/settings/locale` deliberately does not render it: currency, timezone and
- * area unit are the deployment's, and two companies sharing one office cannot
+ * Rendered by the four screens that edit COMPANY fields -- identity, contact,
+ * financial, documents. NOT by `/settings/locale`: currency, timezone and area
+ * unit are the deployment's, and two companies sharing one office cannot
  * disagree about what day it is.
+ *
+ * ---------------------------------------------------------------------------
+ * IT RENDERS NOTHING WHILE THERE IS ONE COMPANY
+ * ---------------------------------------------------------------------------
+ *
+ * Not a disabled select with one option and not a heading saying which company
+ * this is. A single-company installation has no such concept, and that rule
+ * holds everywhere companies appear in this product -- the job picker follows
+ * it too.
+ *
+ * ---------------------------------------------------------------------------
+ * LINKS, NOT A SELECT
+ * ---------------------------------------------------------------------------
+ *
+ * Because switching company has to be a NAVIGATION: the form below is filled
+ * from the server with one company's values, so changing the selection has to
+ * re-render it. A select that only changed a hidden field would leave the
+ * builder's address on screen while the form saved to the repair company --
+ * the exact mis-save this whole screen exists to prevent.
+ *
+ * Two companies is the expected case and five would be unusual, so a row of
+ * links is both smaller than a select and shows the choice without a click.
  */
-export function CompanyScopeNotice({ companyCount }: { companyCount: number }) {
-  if (companyCount <= 1) return null;
+export function CompanyScopeNotice({
+  companies,
+  companyId,
+  basePath,
+}: {
+  companies: Company[];
+  /** Null when more than one exists and none is chosen yet. */
+  companyId: string | null;
+  /** The screen's own path, e.g. `/settings/identity`. */
+  basePath: string;
+}) {
+  if (companies.length <= 1) return null;
 
   return (
-    <div className="mb-3">
-      <Notice tone="warning" title="These fields belong to one company, and there are two">
-        <p>
-          Every value on this screen prints on a document, so it has to say which company
-          issued it — and with more than one company this screen cannot know. Saving here is
-          refused rather than applied to a guess.
+    <div className="mb-4 flex flex-col gap-2">
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-2">
+        <span className="t-small font-semibold">Editing</span>
+        {companies.map((company) => {
+          const chosen = company.id === companyId;
+          return (
+            <Link
+              key={company.id}
+              href={`${basePath}?company=${company.id}`}
+              aria-current={chosen ? 'page' : undefined}
+              className="rounded-control hover:underline"
+            >
+              <Pill tone={chosen ? 'accent' : 'neutral'}>
+                {company.documentPrefix
+                  ? `${company.displayName} (${company.documentPrefix})`
+                  : company.displayName}
+              </Pill>
+            </Link>
+          );
+        })}
+      </div>
+
+      {companyId === null ? (
+        <Notice tone="warning" title="Pick a company first">
+          <p>
+            Every value on this screen prints on a document, so it has to say which company
+            issued it. Choose one above — the form will fill in with its details.
+          </p>
+        </Notice>
+      ) : (
+        <p className="t-small text-muted">
+          These values print on this company&rsquo;s quotes and invoices only. The other
+          company keeps its own.
         </p>
-        <p className="mt-2">
-          Per-company editing is not built yet. Until it is, a second company&rsquo;s
-          letterhead has to be set by whoever maintains the deployment.
-        </p>
-      </Notice>
+      )}
     </div>
   );
 }
