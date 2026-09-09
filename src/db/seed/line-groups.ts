@@ -1,4 +1,5 @@
 import { db } from '@/db/client';
+import { packHasSeededLists } from '@/db/seed/packs/marker';
 import { lineGroups } from '@/db/schema';
 
 /**
@@ -72,8 +73,34 @@ export async function seedLineGroups(): Promise<void> {
  */
 let pending: Promise<void> | null = null;
 
+/**
+ * Stands down once a trade pack has been loaded.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY THIS CHECK IS NOT OPTIONAL
+ * ---------------------------------------------------------------------------
+ *
+ * This list is seeded LAZILY, from the screens that read it, and that was
+ * right while the general-contracting list was the only list. With trade packs
+ * it silently undoes the owner's choice: an electrician who picked the
+ * electrical pack would have his short list quietly joined by the full
+ * general-contracting set the first time he opened one of these screens, and
+ * nothing on the page would say where those rows came from.
+ *
+ * So a pack marker means "the lists are already supplied". Any pack counts,
+ * `none` included -- somebody who chose to start empty said so, and appending
+ * to his list would be overruling him. `general` counts too and needs no
+ * special case: its pack ships these same rows with these same fixed ids, so
+ * the seed would be a no-op anyway.
+ *
+ * The memo is still set on the stand-down path, because the answer cannot
+ * change back: nothing un-loads a pack.
+ */
 export function ensureLineGroups(): Promise<void> {
-  pending ??= seedLineGroups().catch((error: unknown) => {
+  pending ??= (async () => {
+    if (await packHasSeededLists()) return;
+    await seedLineGroups();
+  })().catch((error: unknown) => {
     pending = null;
     throw error;
   });

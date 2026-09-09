@@ -36,7 +36,33 @@ yet gated at the forms — both are cosmetic-tier (a visible field that means
 nothing) rather than the wrong-number tier the other three flags are, and both
 want the same treatment as the dates.
 
-**Tasks 8, 9 and 10 — the trade packs — are not started.**
+**Tasks 8, 9 and 10 are done**, with three things worth carrying forward:
+
+**A circular import, inherent to the feature rather than accidental.** The lazy
+seeds must ASK whether a pack was loaded; the general pack must READ those
+seeds' own constants, because it IS those twelve trades and eleven line groups.
+Both directions are right, so the marker moved to `packs/marker.ts`, importing
+only the client and the settings table. The symptom was
+`ReferenceError: Cannot access 'f' before initialization` while collecting
+`/vendors` — which is what a module cycle looks like after bundling: no import
+named, no file blamed.
+
+**A first-run crash the tests caught.** Every pack table carries a second
+unique index my inserts ignored — `line_groups` and `trades` on `lower(name)`,
+`cost_codes` and `rate_items` on `code`. `Available upgrades` is in both the
+lazy line-group seed and every pack under different ids, so an installer who
+opened `/settings/line-groups` before reaching the trade step would have
+triggered the lazy seed and then failed the pack insert on the NAME index —
+inside the wizard's transaction, on somebody's first run. Now
+`onConflictDoNothing()` with no target, which skips rather than takes a row
+over.
+
+**The content caveat stands.** The four packs are a first draft by somebody who
+is not an electrician, plumber or HVAC contractor. The SHAPE is right — every
+one of these trades runs a service side and a construction side, which is why
+`posture` exists — and the codes, units and item lists are conventional rather
+than authoritative. Each pack says so in its own header. Ship GC plus one trade
+that has been read by somebody who does it, rather than four that have not.
 
 ---
 
@@ -593,7 +619,7 @@ git commit -m "feat: a job's forms carry only the fields its kind of work needs"
 
 ---
 
-## Task 8: The pack mechanism
+## Task 8: The pack mechanism — DONE
 
 **Files:**
 - Create: `src/db/seed/packs/types.ts`, `src/db/seed/packs/load.ts`
@@ -669,7 +695,7 @@ git commit -m "feat: a trade pack loads, retires what it does not want, and stay
 
 ---
 
-## Task 9: The four packs, as content
+## Task 9: The four packs, as content — DONE (drafted; see the caveat)
 
 **Files:**
 - Create: `src/db/seed/packs/{gc,electrical,plumbing,hvac,none}.ts`
@@ -696,7 +722,7 @@ git commit -m "feat: starter data for four trades, and a demo that follows its o
 
 ---
 
-## Task 10: The wizard asks
+## Task 10: The wizard asks — DONE
 
 **Files:**
 - Create: `src/app/setup/trade/page.tsx`

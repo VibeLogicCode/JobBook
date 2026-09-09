@@ -25,6 +25,7 @@ import {
   saveFinancialStep,
   saveFirstUserStep,
   saveLocaleStep,
+  saveTradeStep,
   saveTaxRateStep,
 } from '@/app/setup/actions';
 import { saveAccessStep } from '@/app/setup/access/actions';
@@ -76,6 +77,20 @@ const CONTACT = {
   altPhone: '',
   email: 'quotes@ravensworth.example',
   website: 'https://ravensworth.example',
+};
+
+/**
+ * The trade step's payload.
+ *
+ * `both` and `general`, which is the answer that changes least: every form is
+ * offered and the pack's types are the nine migration 0018 already created, so
+ * this step adds cost codes and rate items and retires nothing. A test that
+ * picked `electrical` here would silently retire eight project types under
+ * every other assertion in this file.
+ */
+const TRADE = {
+  workPosture: 'both',
+  trade: 'general',
 };
 
 const LOCALE = {
@@ -145,6 +160,7 @@ async function openGate() {
 async function runStepsThroughFinancial(): Promise<void> {
   expect(messageOf(await saveCompanyStep(null, form(COMPANY)))).toContain('created');
   expect((await saveContactStep(null, form(CONTACT))).ok).toBe(true);
+  expect((await saveTradeStep(null, form(TRADE))).ok).toBe(true);
   expect((await saveLocaleStep(null, form(LOCALE))).ok).toBe(true);
   expect((await saveFinancialStep(null, form(FINANCIAL))).ok).toBe(true);
 }
@@ -199,6 +215,7 @@ describe('the wizard refuses to run once a company exists', () => {
     // them refuse on validation instead, and prove nothing about the guard.
     const attempts = [
       [saveContactStep, CONTACT],
+      [saveTradeStep, TRADE],
       [saveLocaleStep, LOCALE],
       [saveFinancialStep, FINANCIAL],
       [saveTaxRateStep, TAX_RATE],
@@ -272,6 +289,10 @@ describe('each step persists independently', () => {
   it('stores the locale, which is what dates the first quote', async () => {
     await saveCompanyStep(null, form(COMPANY));
     await saveContactStep(null, form(CONTACT));
+    // The trade step sits between contact and locale, and every step refuses
+    // until the one before it is done -- which is the whole point of the
+    // wizard being an ORDER rather than a menu.
+    await saveTradeStep(null, form(TRADE));
     const result = await saveLocaleStep(null, form(LOCALE));
     expect(messageOf(result)).toContain(LOCALE.timezone);
 
@@ -355,7 +376,8 @@ describe('a partial setup can be resumed', () => {
     // A second, independent read is what a request after a browser crash does.
     const gate = await openGate();
     expect([...gate.completed].sort()).toEqual(['company', 'contact']);
-    expect(gate.resumeAt).toBe('locale');
+    // `trade` now, not `locale`: it is the next incomplete step in the order.
+    expect(gate.resumeAt).toBe('trade');
     expect(gate.org?.legalName).toBe(COMPANY.legalName);
 
     // And the half-built company is not mistaken for a live tenant.

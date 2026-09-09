@@ -6,6 +6,8 @@ import { z } from 'zod';
 import { db } from '@/db/client';
 import { companies, organization, taxRates, users } from '@/db/schema';
 import { FIRST_COMPANY_ID } from '@/lib/company/ids';
+import { loadPack } from '@/db/seed/packs/load';
+import { TRADE_LABELS } from '@/db/seed/packs/types';
 import { percentField } from '@/app/settings/percent-schema';
 import { type ActionResult, refused, saved } from '@/app/settings/result';
 import {
@@ -288,6 +290,71 @@ export async function saveContactStep(
   return persistStep('contact', async (tx, gate) => {
     await upsertOrganization(tx, parsed.data, null, gate);
     return saved('Contact details saved.');
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Step 3 — Your work: posture and trade
+// ---------------------------------------------------------------------------
+
+const tradeLabels = {
+  workPosture: 'Kind of work',
+  trade: 'Trade',
+};
+
+const tradeSchema = z.object({
+  workPosture: z.enum(['both', 'service', 'contract'], 'choose what kind of work you do'),
+  trade: z.enum(['general', 'electrical', 'plumbing', 'hvac', 'none'], 'choose a trade'),
+});
+
+/**
+ * Writes the company's posture and loads its trade pack.
+ *
+ * ---------------------------------------------------------------------------
+ * ONE TRANSACTION, AND THE ORDER WITHIN IT MATTERS
+ * ---------------------------------------------------------------------------
+ *
+ * The posture goes on the company first, then the pack loads. A half-applied
+ * step is the thing to avoid: the pack without the posture would leave a
+ * service-only electrician being offered his contract types, and the posture
+ * without the pack would leave him with the nine builder types and no rate
+ * book -- worse than either end state.
+ *
+ * `persistStep` already wraps this in the transaction that writes the step
+ * marker, so a failure anywhere leaves the step incomplete and re-runnable.
+ * `loadPack` is idempotent on fixed ids for exactly that case.
+ *
+ * ---------------------------------------------------------------------------
+ * THE TRADE IS RECORDED AND THEN GATES NOTHING
+ * ---------------------------------------------------------------------------
+ *
+ * The marker `loadPack` writes exists so the lazy vendor and line-group seeds
+ * know the lists are already supplied. No screen behaves differently because
+ * of the trade, and none should: the same electrician does service calls and
+ * full rewires.
+ */
+export async function saveTradeStep(
+  _previous: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  const parsed = tradeSchema.safeParse(formValues(formData));
+  if (!parsed.success) return invalid(parsed.error, tradeLabels);
+  const { workPosture, trade } = parsed.data;
+
+  return persistStep('trade', async (tx) => {
+    await tx
+      .update(companies)
+      .set({ workPosture })
+      .where(eq(companies.id, FIRST_COMPANY_ID));
+
+    await loadPack(tx, trade);
+
+    return saved(
+      trade === 'none'
+        ? 'Saved. Your lists are ready to fill in as you go.'
+        : `Saved. ${TRADE_LABELS[trade]} job types, cost codes and rate items are loaded — ` +
+          `put your own prices on them before you quote.`,
+    );
   });
 }
 

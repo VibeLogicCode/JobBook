@@ -24,6 +24,7 @@ import {
   saveFirstUserStep,
   saveLocaleStep,
   saveTaxRateStep,
+  saveTradeStep,
   acknowledgeEnvironmentStep,
 } from '@/app/setup/actions';
 import { saveAccessStep } from '@/app/setup/access/actions';
@@ -173,6 +174,16 @@ async function openGate() {
 async function runStepsThroughFirstUser(): Promise<void> {
   expect((await saveCompanyStep(null, form(COMPANY))).ok).toBe(true);
   expect((await saveContactStep(null, form(CONTACT))).ok).toBe(true);
+  /**
+   * `both` and `general`: the answer that changes least.
+   *
+   * This file is about the access step, so the trade step is walked past
+   * rather than exercised -- and `general` is chosen because its pack keeps
+   * all nine of migration 0018's project types, so nothing this file asserts
+   * later is standing on a list a pack quietly retired.
+   */
+  expect((await saveTradeStep(null, form({ workPosture: 'both', trade: 'general' }))).ok)
+    .toBe(true);
   expect((await saveLocaleStep(null, form(LOCALE))).ok).toBe(true);
   expect((await saveFinancialStep(null, form(FINANCIAL))).ok).toBe(true);
   expect((await saveTaxRateStep(null, form(TAX_RATE))).ok).toBe(true);

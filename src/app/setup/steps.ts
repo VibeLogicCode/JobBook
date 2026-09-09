@@ -27,6 +27,26 @@ export const SETUP_STEPS = [
     why: 'These print on the letterhead of every quote.',
   },
   {
+    /**
+     * ONE step for two questions, and after `company` rather than before it.
+     *
+     * Both, because they are one decision to the person answering -- "what
+     * kind of outfit is this" -- and because posture has to be known before
+     * the pack loads: a pack's rows are tagged by posture, so the pack cannot
+     * be filtered until the answer exists. Two screens would also let them be
+     * answered inconsistently, with a service-only company loading a pack
+     * whose contract types it will never see.
+     *
+     * After `company`, because that step creates the company row this one
+     * writes the posture to. Before `financial`, whose holdback fields are the
+     * first thing posture makes irrelevant.
+     */
+    slug: 'trade',
+    title: 'Your work',
+    summary: 'Service work, contract work or both — and your trade.',
+    why: 'This decides which forms you get and what your rate book starts with.',
+  },
+  {
     slug: 'locale',
     title: 'Locale',
     summary: 'Currency, language, timezone and area unit.',
