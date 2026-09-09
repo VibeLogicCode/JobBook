@@ -21,6 +21,7 @@ import {
   type RegenerateSummary,
 } from '@/lib/quote/regenerate';
 import type { ScopeInputs } from '@/lib/quote/template';
+import { unpricedProblem } from '@/lib/quote/unpriced';
 
 /**
  * Every action opens with two checks, in this order.
@@ -162,6 +163,14 @@ export async function addLine(input: z.input<typeof addSchema>): Promise<EditRes
 
     const [item] = await db.select().from(rateItems).where(eq(rateItems.id, rateItemId));
     if (!item) return { ok: false, error: 'that rate item no longer exists' };
+
+    // Refused here rather than by the picker that offered it. A rate item can
+    // be unpriced for a legitimate reason -- a starter pack ships codes and
+    // descriptions with no prices, deliberately -- and the mistake is putting
+    // one on a quote, where it would contribute nothing and, under the default
+    // print mode, not appear at all.
+    const unpriced = unpricedProblem(item);
+    if (unpriced) return { ok: false, error: unpriced };
 
     const qtyMilli = parseQtyToMilli(qty) ?? 1000n;
 

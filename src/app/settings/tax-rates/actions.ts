@@ -1,6 +1,6 @@
 'use server';
 
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { db } from '@/db/client';
@@ -18,6 +18,7 @@ import {
   requiredText,
 } from '@/app/settings/validate';
 import { addDays } from '@/lib/quote/dates';
+import { overlapProblem } from '@/lib/quote/tax-overlap';
 
 /**
  * Tax rates: versioned by effective date, never edited in place.
@@ -68,11 +69,41 @@ export async function addTaxRate(
   const { rate, ...rest } = parsed.data;
   if (rate === null) return refused('A rate is required.');
 
-  await db.insert(taxRates).values({
-    ...rest,
-    rateTenThou: rate,
-    createdBy: guard.actor.id,
+  /**
+   * Read and checked INSIDE the writing transaction, not from the form.
+   *
+   * The picker and the list were rendered before this submit, so "what is in
+   * force" may have changed in another tab or another window since -- the same
+   * reasoning `resolveChoices` in `app/vendors/actions.ts` states for its own
+   * re-reads. Two people adding a rate at once is not the likely case; one
+   * person with a stale tab is.
+   */
+  const problem = await db.transaction(async (tx) => {
+    const rows = await tx
+      .select({
+        label: taxRates.label,
+        effectiveFrom: taxRates.effectiveFrom,
+        effectiveTo: taxRates.effectiveTo,
+      })
+      .from(taxRates)
+      .where(and(eq(taxRates.isActive, true), eq(taxRates.recordStatus, 'active')));
+
+    const clash = overlapProblem(rows, {
+      label: parsed.data.label,
+      effectiveFrom: parsed.data.effectiveFrom,
+      effectiveTo: null,
+    });
+    if (clash) return clash;
+
+    await tx.insert(taxRates).values({
+      ...rest,
+      rateTenThou: rate,
+      createdBy: guard.actor.id,
+    });
+    return null;
   });
+
+  if (problem) return refused(problem);
 
   revalidatePath('/settings/tax-rates');
   return saved(`${parsed.data.label} added, in force from ${parsed.data.effectiveFrom}.`);

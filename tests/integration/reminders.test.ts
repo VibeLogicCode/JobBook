@@ -237,7 +237,12 @@ describe('evaluation', () => {
     await runReminderEvaluation();
 
     const [row] = await remindersFromRule(ruleFor('project_won'));
-    expect(row!.title).toBe('Won Basement finish — confirm start date and deposit');
+    // The title leads with the VERB and names no project. It used to read
+    // "Won Basement finish — confirm start date and deposit", which repeated
+    // the pipeline card's own heading and buried the only new word in the
+    // middle of the line. The project is not lost: the reminder resolves to
+    // the record, and both screens show it.
+    expect(row!.title).toBe('Confirm the start date and deposit');
   });
 
   /**

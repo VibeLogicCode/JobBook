@@ -128,16 +128,20 @@ export function Board({ cards, reminderOf, today, basePath, filters, showClosed 
                 className={`min-w-0 ${column.cards.length === 0 ? 'max-sm:hidden' : ''}`}
               >
                 <section className="flex flex-col rounded-panel border border-line bg-surface-2">
-                  {/* Sticky below `sm` only, where the columns are stacked and
-                      a long one can fill the screen: scrolling through eleven
-                      leads should never leave the reader unsure which stage
-                      they are in. It works because nothing between here and
-                      the document sets `overflow` -- `Card` records why it
-                      refuses `overflow-hidden`, and this is the other half of
-                      that lesson. `bg-surface-2` is not decoration: a sticky
+                  {/* Sticky at EVERY width. It was `max-sm:` only, on the
+                      reasoning that stacked columns are the case where one
+                      fills the screen -- but a desktop column of fifteen leads
+                      scrolls the page just as far, and the reader arrives at
+                      the bottom of it no longer sure which stage they are
+                      reading. Same question, same answer, whatever the layout.
+
+                      It works because nothing between here and the document
+                      sets `overflow` -- `Card` records why it refuses
+                      `overflow-hidden`, and this is the other half of that
+                      lesson. `bg-surface-2` is not decoration: a sticky
                       heading with a transparent background has cards sliding
                       through its text. */}
-                  <h3 className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-line bg-surface-2 px-3 py-2 max-sm:sticky max-sm:top-0 max-sm:z-10">
+                  <h3 className="sticky top-0 z-10 flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-line bg-surface-2 px-3 py-2">
                     <Link
                       href={
                         stageFiltered

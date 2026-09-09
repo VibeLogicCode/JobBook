@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { PROJECT_TYPE_IDS } from '@/db/seed/project-lists';
 import { db } from '@/db/client';
 import { costCodes, customers, expenseTaxes, expenses, organization, projects, vendors } from '@/db/schema';
+import { ensureOrganization } from '../support/organization';
 
 /**
  * What the database refuses, and the one thing it must never quietly change.
@@ -33,10 +34,7 @@ beforeEach(async () => {
    * what it needs is the fix; `on conflict do nothing` because a file that
    * runs after a truncate and a file that runs after a seed must both work.
    */
-  await db
-    .insert(organization)
-    .values({ id: 1, legalName: 'Sample Contracting Ltd', displayName: 'Sample Contracting' })
-    .onConflictDoNothing();
+  await ensureOrganization();
 });
 
 /**

@@ -83,7 +83,19 @@ export const DEFAULT_REMINDER_RULES: readonly DefaultReminderRule[] = [
     trigger: 'project_won',
     offsetDays: 1,
     reminderKind: 'follow_up',
-    titleTemplate: 'Won {project} — confirm start date and deposit',
+    /**
+     * LEADS WITH THE VERB, and names no project.
+     *
+     * It read "Won {project} — confirm start date and deposit", which is right
+     * on the reminders screen and wrong on a pipeline card: the card is already
+     * titled with the project, so the reminder under it repeated the heading
+     * above it and buried the only new word in the middle of the line.
+     *
+     * The project is not lost -- every reminder resolves to the record it
+     * belongs to, and both screens show that record. A title's job is to say
+     * what to DO.
+     */
+    titleTemplate: 'Confirm the start date and deposit',
   },
 ];
 

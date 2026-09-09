@@ -8,6 +8,7 @@ import { pointLogoAt } from '@/app/settings/identity/logo/logo';
 import { db } from '@/db/client';
 import { files, organization } from '@/db/schema';
 import { INLINE_TYPES, STORABLE_TYPES } from '@/lib/files/sniff';
+import { ensureOrganization } from '../support/organization';
 import {
   LOGO_MAX_BYTES,
   ORGANIZATION_ENTITY_ID,
@@ -576,10 +577,7 @@ describe('replacing the logo', () => {
       // `finally`, so a failing assertion above still leaves the database as it
       // found it. A cleanup that only runs on success is a cleanup that skips
       // exactly when it is needed.
-      await db
-        .insert(organization)
-        .values({ id: 1, legalName: 'Sample Contracting Ltd', displayName: 'Sample Contracting' })
-        .onConflictDoNothing();
+      await ensureOrganization();
     }
   });
 });
