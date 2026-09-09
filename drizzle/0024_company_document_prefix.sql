@@ -1,0 +1,19 @@
+-- A company code that PREFIXES the document number, not a letter appended to
+-- the kind code.
+--
+-- Owner's decision, and the right one: these numbers get read down the phone
+-- and typed into somebody else's accounting system, so `RENO_INV` beside
+-- `MAP_INV` is unmistakable where `INV` beside `INVS` is one transcription
+-- error away from an hour of reconciling.
+--
+-- A RENAME rather than a drop and add, so nothing is lost on a database that
+-- has already run 0022. The values are compatible: both columns hold a short
+-- code, and every existing row holds NULL because no second company exists
+-- yet in any deployment.
+--
+-- Composed as `{prefix}_{KIND}-{YEAR}-{SEQ}` in `lib/quote/numbering.ts`. The
+-- kind code is never replaced, only prefixed: a quote and a change order are
+-- both rows in `quotes` and share the `quote_number` unique index, so a flat
+-- per-company code would number both `RENO_-2026-0001` and the second insert
+-- would fail on an index a long way from the cause.
+ALTER TABLE "companies" RENAME COLUMN "document_code_suffix" TO "document_prefix";

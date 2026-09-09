@@ -80,21 +80,28 @@ export async function allocateDocumentNumber(
   const seriesYear = year ?? (await tenantYear(tx));
 
   /**
-   * The kind's code, plus whatever distinguishes this company.
+   * This company's code, then the kind's: `RENO_QT`, or plain `QT` when the
+   * company has no code of its own.
    *
-   * `document_sequences` refuses two companies the same `(kind, year, prefix)`,
-   * because the documents themselves carry globally unique numbers and no
-   * company of their own. A suffix of null or empty -- which is every existing
-   * installation and every single-company one -- leaves this exactly as it
-   * was.
+   * The kind code is never REPLACED, only prefixed. A quote and a change order
+   * are both rows in `quotes` and share the `quote_number` unique index, so a
+   * flat per-company code would number both `RENO_-2026-0001`.
+   *
+   * The underscore lives here rather than in the stored value, so a prefix
+   * typed as `RENO_` cannot become `RENO__QT` and two companies cannot
+   * disagree about the separator.
+   *
+   * Null -- every existing installation and every single-company one -- leaves
+   * this exactly as it was.
    */
   const [company] = await tx
-    .select({ suffix: companies.documentCodeSuffix })
+    .select({ prefix: companies.documentPrefix })
     .from(companies)
     .where(eq(companies.id, companyId));
   if (!company) throw new Error(`company ${companyId} not found`);
 
-  const fallback = `${DEFAULT_PREFIX[kind]}${company.suffix ?? ''}`;
+  const code = company.prefix?.trim();
+  const fallback = code ? `${code}_${DEFAULT_PREFIX[kind]}` : DEFAULT_PREFIX[kind];
 
   // next_seq holds the number to issue NEXT, so the row is created at 2 with 1
   // handed out, and the returned value is always one past what was allocated.

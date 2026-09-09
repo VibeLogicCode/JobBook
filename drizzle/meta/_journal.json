@@ -169,6 +169,13 @@
       "when": 1788984311220,
       "tag": "0023_company_payment_terms_nullable",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1788984875568,
+      "tag": "0024_company_document_prefix",
+      "breakpoints": true
     }
   ]
 }

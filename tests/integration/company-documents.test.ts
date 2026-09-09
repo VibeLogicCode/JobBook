@@ -53,7 +53,7 @@ beforeEach(async () => {
       // would both want (invoice, 2026, 'INV'), which `document_sequences`
       // refuses -- because the invoices themselves are globally unique and
       // carry no company.
-      documentCodeSuffix: 'S',
+      documentPrefix: 'SVC',
       sortOrder: 20,
     })
     .returning({ id: companies.id });
@@ -167,11 +167,31 @@ describe('each company numbers its own documents', () => {
       // auditor asks each corporation for its own sequential run, and nothing
       // is ever renumbered.
       expect(await allocateDocumentNumber(tx, 'invoice', secondId, 2026))
-        .toBe('INVS-2026-0001');
+        .toBe('SVC_INV-2026-0001');
       // And the first company's counter was not touched by the second's.
       expect(await allocateDocumentNumber(tx, 'invoice', FIRST_COMPANY_ID, 2026))
         .toBe('INV-2026-0003');
     });
+  });
+
+  it('keeps the kind in the number, so a quote and a change order differ', async () => {
+    // A flat per-company code would number both `SVC_-2026-0001`, and they
+    // share the `quotes.quote_number` unique index. This is why the company
+    // prefix is prepended to the kind code rather than replacing it.
+    await db.transaction(async (tx) => {
+      expect(await allocateDocumentNumber(tx, 'quote', secondId, 2026))
+        .toBe('SVC_QT-2026-0001');
+      expect(await allocateDocumentNumber(tx, 'change_order', secondId, 2026))
+        .toBe('SVC_CO-2026-0001');
+    });
+  });
+
+  it('leaves a company with no code numbering exactly as before', async () => {
+    // Every existing installation and every single-company one. With one
+    // company there is nothing to distinguish, and `QT-2026-0001` is shorter
+    // and says as much.
+    expect(await db.transaction((tx) => allocateDocumentNumber(tx, 'quote', FIRST_COMPANY_ID, 2026)))
+      .toBe('QT-2026-0001');
   });
 
   it('refuses two companies the same code, rather than colliding on an invoice', async () => {
@@ -201,6 +221,6 @@ describe('each company numbers its own documents', () => {
     // The rolled-back allocation burned nothing, exactly as it does for a
     // single company: the counter is inside the transaction that writes.
     expect(await db.transaction((tx) => allocateDocumentNumber(tx, 'quote', secondId, 2026)))
-      .toBe('QTS-2026-0002');
+      .toBe('SVC_QT-2026-0002');
   });
 });

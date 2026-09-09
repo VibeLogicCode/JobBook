@@ -136,34 +136,49 @@ export const companies = pgTable('companies', {
   workPosture: workPostureEnum('work_posture').notNull().default('both'),
 
   /**
-   * What distinguishes this company's document numbers from the other's.
+   * This company's code on every document it issues: `RENO`, `MAP`.
    *
    * ---------------------------------------------------------------------------
-   * WHY THIS COLUMN HAS TO EXIST
+   * WHY A PREFIX AND NOT A SUFFIX
    * ---------------------------------------------------------------------------
    *
-   * Each company runs its OWN series -- company one keeps its history and
-   * company two starts at 0001, which is what an auditor asks each registrant
-   * for. But `quotes.quote_number`, `customer_invoices.invoice_number` and
-   * `projects.project_number` are globally unique indexes, and those documents
-   * carry no company of their own: they reach one through their project. So
-   * two companies both numbering `INV-2026-0001` would collide on an index a
-   * long way from the cause.
+   * Owner's decision. An earlier draft appended one letter to the kind code --
+   * `INV` beside `INVS` -- which is technically sufficient and practically
+   * bad: these numbers get read down the phone and typed into somebody else's
+   * accounting system, and a one-letter difference at the END of a code is the
+   * kind of thing that gets transcribed wrong once and reconciled for an hour.
+   * `RENO_INV` beside `MAP_INV` cannot be misread.
    *
-   * The prefix is therefore what has to differ, and `document_sequences` has a
-   * unique index on `(kind, year, prefix)` to refuse the clash at the source
-   * rather than let it surface as a failed insert on an invoice.
+   * ---------------------------------------------------------------------------
+   * WHY IT DOES NOT REPLACE THE KIND CODE
+   * ---------------------------------------------------------------------------
    *
-   * So this is appended to the per-kind code: null or empty leaves company one
-   * issuing `INV-2026-0001` exactly as before, and a second company set to `S`
-   * issues `INVS-2026-0001`. Per KIND as well as per company, deliberately --
-   * one flat per-company prefix would make a quote and a change order both
-   * `NHS-2026-0001`, and they share `quotes.quote_number`.
+   * Composed as `{prefix}_{KIND}-{YEAR}-{SEQ}`, so `RENO_QT-2026-0001`. The
+   * kind has to stay: a quote and a change order are both rows in `quotes` and
+   * share the `quote_number` unique index, so a flat per-company prefix would
+   * number both `RENO_-2026-0001` and the second insert would fail on an index
+   * a long way from the cause.
    *
-   * A person can also tell the two apart at a glance, which is worth more than
-   * the column costs.
+   * ---------------------------------------------------------------------------
+   * WHY IT IS NULLABLE
+   * ---------------------------------------------------------------------------
+   *
+   * Null is every existing installation and every single-company one: with one
+   * company there is nothing to distinguish, and `QT-2026-0001` is shorter and
+   * says as much. Setting one is what a second company does -- and the first
+   * company may set one too if the owner wants both sides labelled, which is
+   * why this is not derived from anything.
+   *
+   * Stored WITHOUT the separator. The underscore is the format's, not the
+   * value's, so two companies cannot disagree about where it goes and a
+   * prefix typed as `RENO_` does not become `RENO__QT`.
+   *
+   * `document_sequences` has a unique index on `(kind, year, prefix)` holding
+   * the COMPOSED prefix, so two companies cannot claim the same code -- the
+   * clash is refused at the source rather than surfacing as a failed insert on
+   * an invoice.
    */
-  documentCodeSuffix: text('document_code_suffix'),
+  documentPrefix: text('document_prefix'),
 
   /** Where it sits in the picker. Ties fall back to the display name. */
   sortOrder: integer('sort_order').notNull().default(0),
