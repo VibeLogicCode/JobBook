@@ -228,10 +228,57 @@ async function authModeCheck(): Promise<Omit<EnvironmentCheck, 'id' | 'title' | 
   if (mode === 'local') {
     const email = envValue('LOCAL_USER_EMAIL');
     if (!email) {
+      // NOT a failure. It is the shipped default, and the whole point of it
+      // being optional is that one compose file serves every customer -- see
+      // `lib/auth/sole-owner.ts`. What this step does instead is report which
+      // of the three unset branches the deployment is actually in, because
+      // "it works itself out" is not something an installer should have to
+      // take on faith while looking at a blank variable.
+      const active = await db
+        .select({ email: users.email })
+        .from(users)
+        .where(eq(users.isActive, true));
+
+      if (active.length === 0) {
+        return {
+          // 'off' rather than 'fail': nothing is misconfigured, nothing is
+          // yet configured. This step sits AFTER the first-user step in the
+          // wizard's order, so a reader seeing it has either not finished
+          // that step or has emptied the table since -- and in both cases the
+          // remedy is one screen back, not a variable to edit.
+          status: 'off',
+          detail:
+            'LOCAL_USER_EMAIL is not set, which is the shipped default and correct — but no ' +
+            'user account exists yet, so no request signs in as anybody and every action is ' +
+            'refused for want of an identity.',
+          remedy:
+            'Finish the first-user step. The account it creates becomes the one this ' +
+            'deployment signs in as, with nothing to configure and no variable to set.',
+        };
+      }
+
+      if (active.length === 1) {
+        return {
+          status: 'pass',
+          detail:
+            `Local mode, working itself out. LOCAL_USER_EMAIL is not set, and there is exactly ` +
+            `one active account — ${active[0]!.email} — so every request arrives as that ` +
+            'person. There is no password, no provider and no session; this mode is for a LAN ' +
+            'or a laptop under test.',
+          remedy: null,
+        };
+      }
+
       return {
         status: 'fail',
-        detail: 'AUTH_MODE is local, and LOCAL_USER_EMAIL is not set.',
-        remedy: 'Set LOCAL_USER_EMAIL to the address of the account every request signs in as.',
+        detail:
+          `LOCAL_USER_EMAIL is not set and this deployment has ${active.length} active ` +
+          'accounts. Local mode signs every request in as one person and there is nothing ' +
+          'here to say which, so it refuses to guess — every screen is refused until this ' +
+          'is settled.',
+        remedy:
+          'Set LOCAL_USER_EMAIL to the address that should be signed in, or deactivate the ' +
+          'accounts that should not be.',
       };
     }
 

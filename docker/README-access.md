@@ -34,7 +34,7 @@ the LAN posture, put `AUTH_MODE=local` in the compose environment yourself.
 ```sh
 # .env
 AUTH_MODE=local
-LOCAL_USER_EMAIL=owner@example.invalid   # must match a users row
+LOCAL_USER_EMAIL=owner@example.invalid   # OPTIONAL; blank = the sole account
 CADDY_SITE=https://192.168.1.50          # this machine's LAN address
 docker compose -f docker-compose.app.yml --profile https up -d
 ```

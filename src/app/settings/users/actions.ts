@@ -9,6 +9,7 @@ import { type Actor, type Role, requireCapability } from '@/app/settings/actor';
 import { type ActionResult, refused, saved } from '@/app/settings/result';
 import { formValues, invalid, requiredText } from '@/app/settings/validate';
 import { authMode, configuredProviders } from '@/app/settings/users/sign-in-mode';
+import { forgetSoleOwner } from '@/lib/auth/sole-owner';
 
 /**
  * User management.
@@ -168,6 +169,11 @@ export async function addUser(
       loginMethod: method,
       createdBy: guard.actor.id,
     });
+    // A second account is what makes "who is this request" ambiguous on a
+    // deployment running without LOCAL_USER_EMAIL, and that ambiguity must be
+    // refused on the NEXT request rather than up to a minute later. See
+    // `lib/auth/sole-owner.ts`.
+    forgetSoleOwner();
   } catch (error) {
     if (isDuplicateEmail(error)) {
       // The email is UNIQUE and a user row is never voided, so an existing
@@ -255,6 +261,10 @@ export async function setUserActive(
   if (breach) return refused(breach);
 
   await db.update(users).set({ isActive }).where(eq(users.id, id));
+  // Both directions matter. Deactivating the second of two accounts resolves
+  // the ambiguity and must start working immediately; reactivating one
+  // recreates it and must start refusing immediately.
+  forgetSoleOwner();
   if (!isActive) await revokeSessions(id, 'deactivated');
 
   revalidatePath('/settings/users');

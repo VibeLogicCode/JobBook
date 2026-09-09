@@ -119,10 +119,20 @@ services:
       # half-configured switch fails loudly rather than quietly trusting
       # everyone.
       AUTH_MODE: ${AUTH_MODE:-local}
-      # Must match a users row: authorization is a lookup against users, and
-      # local mode is not exempt. The first-run setup wizard's "first user"
-      # step is what creates that row when SEED_DEMO=0 -- see README.md.
-      LOCAL_USER_EMAIL: ${LOCAL_USER_EMAIL:?set LOCAL_USER_EMAIL in .env}
+      # OPTIONAL, and left blank on purpose. This file is meant to be
+      # byte-identical for every customer, which it cannot be if it has to
+      # carry somebody's address.
+      #
+      # Blank, the app works it out: with no accounts yet nobody is signed in
+      # and the setup wizard runs anyway, and from the moment the wizard's
+      # "first user" step creates the one account, every request arrives as
+      # that person. Add a SECOND account and the app refuses to guess between
+      # them -- at which point set this to the address that should be signed
+      # in, and rebuild.
+      #
+      # Set it here if you would rather be explicit. A value given always
+      # wins, and must match an active users row.
+      LOCAL_USER_EMAIL: ${LOCAL_USER_EMAIL:-}
       CF_ACCESS_TEAM_DOMAIN: ${CF_ACCESS_TEAM_DOMAIN:-}
       CF_ACCESS_AUD: ${CF_ACCESS_AUD:-}
       # Loads the fictional demo tenant on first boot so there is something to

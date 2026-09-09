@@ -48,11 +48,36 @@ describe('localIdentity', () => {
     expect(() => localIdentity()).toThrow(/AUTH_MODE is not local/);
   });
 
-  it('refuses to run without a named user', async () => {
+  it('defers to the database when no user is named', async () => {
+    // CONTRACT CHANGED 2026-09-09. This used to throw
+    // "AUTH_MODE=local requires LOCAL_USER_EMAIL", which meant a fresh
+    // install could not bootstrap itself and every customer needed a compose
+    // file carrying his own address. Null now means "the environment does not
+    // say; ask the users table" -- it does NOT mean anonymous, and nothing
+    // downstream treats it as permission for anything. The four branches and
+    // the refusals live in `lib/auth/sole-owner.ts`.
     env({ AUTH_MODE: 'local' });
-    const { localIdentity, AuthError } = await load();
-    expect(() => localIdentity()).toThrow(AuthError);
-    expect(() => localIdentity()).toThrow(/LOCAL_USER_EMAIL/);
+    const { localIdentity } = await load();
+    expect(localIdentity()).toBeNull();
+  });
+
+  it('still refuses an empty LOCAL_USER_EMAIL by deferring rather than trusting it', async () => {
+    // An empty string is not an address. It must not be handed on as one --
+    // `guard()` would look up '' and refuse with a sentence naming nobody.
+    env({ AUTH_MODE: 'local', LOCAL_USER_EMAIL: '' });
+    const { localIdentity } = await load();
+    expect(localIdentity()).toBeNull();
+  });
+
+  it('refuses the Access conflict BEFORE considering whether a user is named', async () => {
+    // Ordering, asserted deliberately. With the email now optional, a
+    // half-configured tunnel plus no named user must still hit the conflict
+    // refusal rather than falling through to the database and resolving
+    // somebody -- which would be the "silently falls back to LAN mode"
+    // failure this refusal exists to prevent.
+    env({ AUTH_MODE: 'local', CF_ACCESS_TEAM_DOMAIN: TEAM_DOMAIN });
+    const { localIdentity } = await load();
+    expect(() => localIdentity()).toThrow(/cannot be combined/);
   });
 
   it('refuses to run alongside CF_ACCESS_TEAM_DOMAIN', async () => {

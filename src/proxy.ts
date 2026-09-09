@@ -167,7 +167,12 @@ export async function proxy(request: NextRequest) {
 
   try {
     const identity = await identify(request.headers);
-    return withIdentity(request, identity.email);
+    // Null is local mode with no accounts yet: nobody has claimed this
+    // deployment. The request continues WITHOUT an identity header rather than
+    // being refused, because the setup wizard is what creates the first
+    // account and it deliberately sits outside the permission guard. Every
+    // guarded action still refuses, for want of the header.
+    return identity ? withIdentity(request, identity.email) : withoutIdentity(request);
   } catch (error) {
     if (error instanceof AuthError) {
       return new NextResponse(`Not authorised: ${error.message}`, { status: 401 });
@@ -186,5 +191,21 @@ function withIdentity(request: NextRequest, email: string): NextResponse {
   const headers = new Headers(request.headers);
   headers.delete('x-identity-email');
   headers.set('x-identity-email', email);
+  return NextResponse.next({ request: { headers } });
+}
+
+/**
+ * Continues the request with NO identity, and strips any the client sent.
+ *
+ * The delete is the entire point of this function existing rather than a bare
+ * `NextResponse.next()`. A request that establishes no identity is exactly the
+ * request on which a forged `x-identity-email` would be most valuable, and
+ * `guard()` trusts that header completely -- it is the only thing it reads. So
+ * the header is removed on the path that sets nothing, for the same reason
+ * `withIdentity` removes it before setting its own.
+ */
+function withoutIdentity(request: NextRequest): NextResponse {
+  const headers = new Headers(request.headers);
+  headers.delete('x-identity-email');
   return NextResponse.next({ request: { headers } });
 }

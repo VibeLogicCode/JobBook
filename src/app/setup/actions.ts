@@ -32,6 +32,7 @@ import {
 } from '@/app/setup/state';
 import { type SetupStepSlug, stepAt } from '@/app/setup/steps';
 import { authMode } from '@/lib/auth/mode';
+import { forgetSoleOwner } from '@/lib/auth/sole-owner';
 
 /**
  * First-run setup: one action per step, each persisting as it completes.
@@ -511,6 +512,8 @@ export async function saveFirstUserStep(
         .set({ displayName, email, role: 'owner', loginMethod: method, isActive: true })
         .where(eq(users.id, existingId))
         .returning({ id: users.id });
+      // The address may have just changed, and it is the cached answer.
+      forgetSoleOwner();
       if (rows.length > 0) {
         return saved(`${displayName} corrected. The account remains the owner.`);
       }
@@ -522,6 +525,11 @@ export async function saveFirstUserStep(
         .values({ displayName, email, role: 'owner', loginMethod: method, createdBy: null })
         .returning({ id: users.id });
       await putSetting(tx, OWNER_USER_ID_KEY, row!.id);
+      // The installer must be signed in as this account on his very next
+      // request, not after a cache expires. On a deployment with no
+      // LOCAL_USER_EMAIL this row is what ends the "nobody has claimed this
+      // deployment" state -- see `lib/auth/sole-owner.ts`.
+      forgetSoleOwner();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (message.includes('users_email_unique') || message.includes('duplicate key')) {
