@@ -1,7 +1,7 @@
 import { eq, sql } from 'drizzle-orm';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { db } from '@/db/client';
-import { auditLog, documentSequences, organization, settings, taxRates, users } from '@/db/schema';
+import { companies, auditLog, documentSequences, organization, settings, taxRates, users } from '@/db/schema';
 import { FIRST_COMPANY_ID } from '@/lib/company/ids';
 import { ensureCompany } from '../support/organization';
 import { seedDeployment } from '../support/organization';
@@ -18,34 +18,37 @@ beforeEach(async () => {
 
 describe('organization', () => {
   it('permits exactly one row', async () => {
-    await seedDeployment({ id: 1, legalName: 'Acme Ltd', displayName: 'Acme' });
+    await seedDeployment({ legalName: 'Acme Ltd', displayName: 'Acme' });
     await expect(
-      db.insert(organization).values({ id: 2, legalName: 'Other Ltd', displayName: 'Other' }),
+      db.insert(organization).values({ id: 2, displayName: 'Other' }),
     ).rejects.toThrow();
   });
 
   it('stores fiscal year end as month and day, not a fixed date', async () => {
+    // On `companies` since the split: a fiscal year end is a fact about a
+    // corporation's filings, and two companies under one owner can have
+    // different ones.
     await seedDeployment({
-      id: 1,
       legalName: 'Acme Ltd',
       displayName: 'Acme',
       fiscalYearEndMonth: 6,
       fiscalYearEndDay: 30,
     });
-    const [row] = await db.select().from(organization);
+    const [row] = await db.select().from(companies);
     expect(row?.fiscalYearEndMonth).toBe(6);
     expect(row?.fiscalYearEndDay).toBe(30);
   });
 
   it('always has a timezone, because dates are computed in the tenant local day', async () => {
-    await seedDeployment({ id: 1, legalName: 'Acme Ltd', displayName: 'Acme' });
+    await seedDeployment({ legalName: 'Acme Ltd', displayName: 'Acme' });
     const [row] = await db.select().from(organization);
     expect(row?.timezone).toBeTruthy();
   });
 
   it('defers tax on holdback by default', async () => {
-    await seedDeployment({ id: 1, legalName: 'Acme Ltd', displayName: 'Acme' });
-    const [row] = await db.select().from(organization);
+    // Excise Tax Act s.168(7), and a per-registrant position: on `companies`.
+    await seedDeployment({ legalName: 'Acme Ltd', displayName: 'Acme' });
+    const [row] = await db.select().from(companies);
     expect(row?.taxDeferredOnHoldback).toBe(true);
   });
 
@@ -53,8 +56,12 @@ describe('organization', () => {
     // audit_log.record_id is text for exactly this reason. As uuid it could not
     // record the one table where every change is a branding, tax or holdback
     // setting, and the insert failed outright.
-    await seedDeployment({ id: 1, legalName: 'Acme Ltd', displayName: 'Acme' });
-    await db.update(organization).set({ phone: '555-0100' }).where(eq(organization.id, 1));
+    await seedDeployment({ legalName: 'Acme Ltd', displayName: 'Acme' });
+    // `timezone` rather than `phone`: the phone number is the company's now,
+    // and this test is about `organization` being auditable despite its
+    // integer key.
+    await db.update(organization).set({ timezone: 'America/Vancouver' })
+      .where(eq(organization.id, 1));
     const entries = await db.select().from(auditLog).where(eq(auditLog.recordId, '1'));
     expect(entries.map((e) => e.action)).toEqual(['insert', 'update']);
   });

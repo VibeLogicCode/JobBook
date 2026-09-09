@@ -55,6 +55,7 @@ export function StartQuoteForm({
   opportunities,
   templates,
   projectTypes,
+  companies = [],
   leadSources,
   defaultProvince,
   preselectedCustomerId,
@@ -65,6 +66,16 @@ export function StartQuoteForm({
   templates: TemplateOption[];
   /** Every project type, for the new-opportunity picker below. */
   projectTypes: ListRowRef[];
+  /**
+   * The companies a NEW opportunity may be filed under, active only.
+   *
+   * Shown only inside the new-opportunity branch: choosing an EXISTING
+   * opportunity inherits its company, because a job never moves between them.
+   * Empty or one entry renders nothing at all -- a single-company install has
+   * no such concept, and a hidden control is still announced by a screen
+   * reader.
+   */
+  companies?: { id: string; label: string }[];
   /** Every lead source, for the new-customer picker below. */
   leadSources: ListRowRef[];
   /**
@@ -178,6 +189,19 @@ export function StartQuoteForm({
               maxLength={200}
               hint="What this work is called on site."
             />
+            {companies.length > 1 ? (
+              <SelectField
+                label="Company"
+                name="companyId"
+                required
+                placeholder="Choose a company"
+                hint="Whose quotes and invoices this job produces. It cannot be changed later."
+                options={companies.map((company) => ({
+                  value: company.id,
+                  label: company.label,
+                }))}
+              />
+            ) : null}
             <SelectField
               label="Type of work"
               name="newOpportunityTypeId"

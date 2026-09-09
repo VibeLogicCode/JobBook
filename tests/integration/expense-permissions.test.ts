@@ -98,7 +98,6 @@ beforeEach(async () => {
   `);
 
   await seedDeployment({
-    id: 1,
     legalName: 'Test Holdings Ltd',
     displayName: 'Test Holdings',
     timezone: 'America/Toronto',

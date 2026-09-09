@@ -6,9 +6,10 @@ import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { GET } from '@/app/api/files/[id]/route';
 import { pointLogoAt } from '@/app/settings/identity/logo/logo';
 import { db } from '@/db/client';
-import { files, organization } from '@/db/schema';
+import { files, organization, companies } from '@/db/schema';
 import { INLINE_TYPES, STORABLE_TYPES } from '@/lib/files/sniff';
-import { ensureOrganization, seedDeployment } from '../support/organization';
+import { ensureCompany, ensureOrganization, seedDeployment } from '../support/organization';
+import { FIRST_COMPANY_ID } from '@/lib/company/ids';
 import {
   LOGO_MAX_BYTES,
   ORGANIZATION_ENTITY_ID,
@@ -488,7 +489,6 @@ describe('the serve route', () => {
 describe('replacing the logo', () => {
   beforeEach(async () => {
     await seedDeployment({
-      id: 1,
       legalName: 'Test Holdings Ltd',
       displayName: 'Test Holdings',
     });
@@ -508,8 +508,11 @@ describe('replacing the logo', () => {
     const replacement = await pointLogoAt(second.file.id, ACTOR);
     expect(replacement).toEqual({ previousFileId: first.file.id, previousVoided: true });
 
-    const [org] = await db.select().from(organization).where(eq(organization.id, 1));
-    expect(org?.logoFileId).toBe(second.file.id);
+    // The logo is the COMPANY's: it is the letterhead, so two companies need
+    // two of them.
+    const [issuer] = await db.select().from(companies)
+      .where(eq(companies.id, FIRST_COMPANY_ID));
+    expect(issuer?.logoFileId).toBe(second.file.id);
 
     // Both rows are still there. Nothing in this product is deleted, and the
     // old logo is the image already printed on quotes that were sent.
@@ -567,8 +570,10 @@ describe('replacing the logo', () => {
    * because the next file to read `organization` without creating one should
    * not have to discover this the same way.
    */
-  it('reports no organization row rather than pointing at nothing', async () => {
-    await db.execute(sql`truncate table organization restart identity cascade`);
+  it('reports no company rather than pointing a logo at nothing', async () => {
+    // `companies` and not `organization`: the logo moved with the rest of the
+    // letterhead, so "nowhere to point it" now means no company exists.
+    await db.execute(sql`truncate table companies restart identity cascade`);
     try {
       const stored = await storeLogo(upload(GENUINE_PNG, 'logo.png'));
       if (!stored.ok) throw new Error('fixture upload failed');
@@ -578,6 +583,7 @@ describe('replacing the logo', () => {
       // found it. A cleanup that only runs on success is a cleanup that skips
       // exactly when it is needed.
       await ensureOrganization();
+      await ensureCompany();
     }
   });
 });

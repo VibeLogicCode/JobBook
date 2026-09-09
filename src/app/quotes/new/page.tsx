@@ -3,7 +3,7 @@ import { db } from '@/db/client';
 import {
   customers, leadSources, projects, projectTypes, quotes, scopeTemplates,
 } from '@/db/schema';
-import { defaultProvince } from '@/lib/company/load';
+import { defaultProvince, readCompanies } from '@/lib/company/load';
 import { startQuote } from '@/app/quotes/new/actions';
 import { StartQuoteForm } from '@/app/quotes/new/StartQuoteForm';
 import { Panel } from '@/components/detail/Panel';
@@ -36,6 +36,15 @@ export default async function NewQuotePage({
    * one, because nobody re-reads a field they did not have to fill in.
    */
   const province = await defaultProvince();
+  // Active companies only; the form renders nothing when there is one.
+  const offeredCompanies = (await readCompanies())
+    .filter((company) => company.isActive)
+    .map((company) => ({
+      id: company.id,
+      label: company.documentPrefix
+        ? `${company.displayName} (${company.documentPrefix})`
+        : company.displayName,
+    }));
   const { customer, opportunity } = await searchParams;
 
 
@@ -139,6 +148,7 @@ export default async function NewQuotePage({
           opportunities={opportunityList}
           templates={templateList}
           projectTypes={projectTypeList}
+          companies={offeredCompanies}
           leadSources={leadSourceList}
           defaultProvince={province ?? ''}
           preselectedCustomerId={preselected}

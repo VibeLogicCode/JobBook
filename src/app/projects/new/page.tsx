@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { asc, eq } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { customers, projectTypes } from '@/db/schema';
-import { defaultProvince } from '@/lib/company/load';
+import { defaultProvince, readCompanies } from '@/lib/company/load';
 import { createProject } from '@/app/projects/actions';
 import { Panel } from '@/components/detail/Panel';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -28,6 +28,23 @@ export default async function NewProjectPage({
    * one, because nobody re-reads a field they did not have to fill in.
    */
   const province = await defaultProvince();
+  /**
+   * Active companies only, and the form renders nothing when there is one.
+   *
+   * A retired company still resolves for every document it ever issued -- that
+   * is what retiring rather than deleting is for -- but it must not be offered
+   * on new work.
+   */
+  const offeredCompanies = (await readCompanies())
+    .filter((company) => company.isActive)
+    .map((company) => ({
+      id: company.id,
+      // The code included, because it is what appears on every document the
+      // choice produces.
+      label: company.documentPrefix
+        ? `${company.displayName} (${company.documentPrefix})`
+        : company.displayName,
+    }));
   const { customer } = await searchParams;
 
 
@@ -80,6 +97,7 @@ export default async function NewProjectPage({
             project={preselected ? { customerId: preselected } : undefined}
             customers={customerList}
             projectTypes={projectTypeList}
+            companies={offeredCompanies}
             // The site province defaults from the organization record. The
             // column has no database default on purpose: one there would
             // hardcode a tenant's region into every deployment.

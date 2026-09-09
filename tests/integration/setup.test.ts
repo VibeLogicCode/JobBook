@@ -16,7 +16,7 @@ import { db } from '@/db/client';
 import { organization, settings, taxRates, users } from '@/db/schema';
 // After the mocks above, deliberately: this pulls in the database client,
 // and the module under test must not be loaded before they are installed.
-import { seedDeployment } from '../support/organization';
+import { readDeployment, seedDeployment } from '../support/organization';
 import {
   acknowledgeEnvironmentStep,
   finishSetup,
@@ -165,7 +165,6 @@ describe('the wizard refuses to run once a company exists', () => {
     // The demo seed, or a restored backup: an organization row with no claim
     // by this wizard.
     await seedDeployment({
-      id: 1,
       legalName: 'Kestrel Joinery Incorporated',
       displayName: 'Kestrel Joinery',
     });
@@ -178,7 +177,6 @@ describe('the wizard refuses to run once a company exists', () => {
 
   it('refuses the first step, and leaves the existing company untouched', async () => {
     await seedDeployment({
-      id: 1,
       legalName: 'Kestrel Joinery Incorporated',
       displayName: 'Kestrel Joinery',
     });
@@ -186,13 +184,12 @@ describe('the wizard refuses to run once a company exists', () => {
     const result = await saveCompanyStep(null, form(COMPANY));
     expect(result.ok).toBe(false);
 
-    const [row] = await db.select().from(organization).where(eq(organization.id, 1));
+    const row = await readDeployment();
     expect(row?.legalName).toBe('Kestrel Joinery Incorporated');
   });
 
   it('refuses a later step as well, so no step is a way in', async () => {
     await seedDeployment({
-      id: 1,
       legalName: 'Kestrel Joinery Incorporated',
       displayName: 'Kestrel Joinery',
     });
@@ -234,7 +231,7 @@ describe('the wizard refuses to run once a company exists', () => {
     // Finishing is not a state anything walks back out of.
     const again = await saveCompanyStep(null, form({ ...COMPANY, legalName: 'Something Else' }));
     expect(again.ok).toBe(false);
-    const [row] = await db.select().from(organization).where(eq(organization.id, 1));
+    const row = await readDeployment();
     expect(row?.legalName).toBe(COMPANY.legalName);
   });
 });
@@ -244,7 +241,7 @@ describe('each step persists independently', () => {
     const result = await saveCompanyStep(null, form(COMPANY));
     expect(result.ok).toBe(true);
 
-    const [row] = await db.select().from(organization).where(eq(organization.id, 1));
+    const row = await readDeployment();
     expect(row?.id).toBe(1);
     expect(row?.legalName).toBe(COMPANY.legalName);
     expect(row?.operatingName).toBe(COMPANY.operatingName);
@@ -258,13 +255,18 @@ describe('each step persists independently', () => {
     await saveCompanyStep(null, form(COMPANY));
     expect((await saveContactStep(null, form(CONTACT))).ok).toBe(true);
 
-    const rows = await db.select().from(organization);
-    expect(rows).toHaveLength(1);
-    expect(rows[0]?.city).toBe(CONTACT.city);
+    // Still exactly one deployment row -- the contact step updates, it does
+    // not insert a second.
+    expect(await db.select().from(organization)).toHaveLength(1);
+
+    const row = await readDeployment();
+    expect(row?.city).toBe(CONTACT.city);
     // The earlier step's values survive: this is an update, not a replacement.
-    expect(rows[0]?.legalName).toBe(COMPANY.legalName);
+    // Both halves of it -- the company step wrote the legal name to
+    // `companies` and the contact step must not have replaced that row either.
+    expect(row?.legalName).toBe(COMPANY.legalName);
     // A field left blank is NULL, never the empty string.
-    expect(rows[0]?.altPhone).toBeNull();
+    expect(row?.altPhone).toBeNull();
   });
 
   it('stores the locale, which is what dates the first quote', async () => {
@@ -273,7 +275,7 @@ describe('each step persists independently', () => {
     const result = await saveLocaleStep(null, form(LOCALE));
     expect(messageOf(result)).toContain(LOCALE.timezone);
 
-    const [row] = await db.select().from(organization);
+    const row = await readDeployment();
     expect(row?.timezone).toBe(LOCALE.timezone);
     expect(row?.currency).toBe(LOCALE.currency);
     expect(row?.areaUnit).toBe('sqm');
@@ -282,7 +284,7 @@ describe('each step persists independently', () => {
   it('stores percentages as scaled integers, not floats', async () => {
     await runStepsThroughFinancial();
 
-    const [row] = await db.select().from(organization);
+    const row = await readDeployment();
     // 7.5% is 750 ten-thousandths of a fraction, and a bigint, not 0.075.
     expect(row?.defaultHoldbackPctTenThou).toBe(750n);
     // Basis points are the same scale: 22.5% is 2250 of either.
@@ -340,7 +342,7 @@ describe('each step persists independently', () => {
     expect(result.ok).toBe(false);
     expect(messageOf(result)).toContain('Nothing was saved');
 
-    const [row] = await db.select().from(organization);
+    const row = await readDeployment();
     expect(row?.holdbackLabel).toBeNull();
   });
 });
@@ -389,7 +391,7 @@ describe('a partial setup can be resumed', () => {
     );
     expect(corrected.ok).toBe(true);
 
-    const [row] = await db.select().from(organization);
+    const row = await readDeployment();
     expect(row?.displayName).toBe('Ravensworth Fit-Out');
     // Going back does not undo what came after it.
     expect((await openGate()).completed.has('contact')).toBe(true);

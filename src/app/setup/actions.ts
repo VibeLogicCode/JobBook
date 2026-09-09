@@ -85,18 +85,42 @@ async function upsertOrganization(
     displayName: gate.org?.displayName ?? '',
   };
 
-  await tx
-    .insert(organization)
-    .values({
-      id: 1,
-      ...names,
-      ...patch,
-      // Null on purpose. There is no actor yet -- the owner's account is step
-      // 6 -- and inventing one would put a fabricated author on the audit row
-      // this insert writes.
-      createdBy: null,
-    })
-    .onConflictDoUpdate({ target: organization.id, set: patch });
+  /**
+   * Filtered to what `organization` still owns, and guarded when that is
+   * nothing.
+   *
+   * Both halves matter. The company step submits a legal name, an operating
+   * name, a tagline and an owner -- every one of which now lives on
+   * `companies` -- so its patch for THIS table is empty, and
+   * `onConflictDoUpdate` with an empty `set` is not a no-op but invalid SQL
+   * (`DO UPDATE SET` followed by nothing). The row still has to be created by
+   * such a step, because it is the first step in the order.
+   *
+   * Derived from the table object rather than a list of names, the same way
+   * `upsertFirstCompany` does it below: the split is one rule and having it
+   * written twice in two shapes is how the two drift.
+   */
+  const deploymentOwned = Object.fromEntries(
+    Object.entries(patch).filter(([key]) => key in organization),
+  );
+
+  const insert = tx.insert(organization).values({
+    id: 1,
+    // `displayName` is the deployment's label, so it belongs in this insert
+    // even though the rest of `names` is the company's.
+    displayName: names.displayName,
+    ...deploymentOwned,
+    // Null on purpose. There is no actor yet -- the owner's account is step
+    // 6 -- and inventing one would put a fabricated author on the audit row
+    // this insert writes.
+    createdBy: null,
+  });
+
+  if (Object.keys(deploymentOwned).length === 0) {
+    await insert.onConflictDoNothing({ target: organization.id });
+  } else {
+    await insert.onConflictDoUpdate({ target: organization.id, set: deploymentOwned });
+  }
 
   await upsertFirstCompany(tx, patch, names);
 }

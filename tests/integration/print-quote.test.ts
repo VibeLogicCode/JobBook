@@ -6,6 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   customers, organization, companies, projects, quoteLines, quoteTaxes, quotes, taxRates,
 } from '@/db/schema';
+import { FIRST_COMPANY_ID } from '@/lib/company/ids';
 import { closeBrowser, renderPdf } from '@/lib/documents/pdf';
 import { formatCents, formatQty, formatRate, parseAmountToCents } from '@/lib/money/format';
 import { selectRatesInForce, type TaxRateInput } from '@/lib/quote/tax';
@@ -204,7 +205,15 @@ async function findServer(probeId: string, expected: string): Promise<string | n
 
 interface Loaded {
   base: string;
-  org: typeof organization.$inferSelect;
+  /**
+   * The letterhead, merged from the deployment row and its company.
+   *
+   * The printed document reads them as one block -- name, address, HST number,
+   * logo -- and asserting against that block should not require this file to
+   * know that `legalName` moved to `companies` while `locale` stayed. It is
+   * also the shape the print page itself now assembles.
+   */
+  org: typeof organization.$inferSelect & Omit<typeof companies.$inferSelect, 'id'>;
   fixtures: Fixture[];
 }
 
@@ -217,7 +226,18 @@ async function load(): Promise<Loaded> {
   try {
     const db = drizzle(sql);
 
-    const [org] = await db.select().from(organization).where(eq(organization.id, 1));
+    const [deployment] = await db.select().from(organization).where(eq(organization.id, 1));
+    const [issuer] = await db.select().from(companies)
+      .where(eq(companies.id, FIRST_COMPANY_ID));
+    if (!deployment || !issuer) {
+      throw new Error('this database has no organization or company row');
+    }
+    // Merged, because the printed letterhead is one block: the deployment
+    // supplies the locale and the company supplies everything a customer
+    // reads. This file opens its own connection, so it cannot use the shared
+    // `readDeployment` helper.
+    const { id: _issuerId, ...issuerFields } = issuer;
+    const org = { ...deployment, ...issuerFields };
     if (!org) throw new Error('no organization row; run the seed');
 
     const rateRows = await db

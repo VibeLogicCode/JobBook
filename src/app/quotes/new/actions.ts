@@ -7,7 +7,7 @@ import { z } from 'zod';
 import { db } from '@/db/client';
 import { customers, projects, projectTypes } from '@/db/schema';
 import { guard } from '@/lib/auth/guard';
-import { primaryOf, readCompanies } from '@/lib/company/load';
+import { resolveIssuingCompany } from '@/lib/company/issuer';
 import { allocateDocumentNumber } from '@/lib/quote/numbering';
 import { createBlankQuote, createQuoteFromTemplate } from '@/lib/quote/repository';
 import { parseQtyToMilli } from '@/lib/money/format';
@@ -75,6 +75,15 @@ const schema = z
     opportunityChoice: z.string().min(1, 'choose an opportunity'),
     newOpportunityName: trimmedOptional(200),
     newOpportunityTypeId: z.string().uuid().optional(),
+    /**
+     * Which company the new opportunity is filed under.
+     *
+     * Optional because the picker renders nothing while there is one company,
+     * and `resolveIssuingCompany` resolves it in that case. Present only when
+     * a new opportunity is being created -- an EXISTING one already has a
+     * company and a job never moves between them.
+     */
+    companyId: z.string().uuid().optional(),
     // Optional for the same reason it is on the opportunity form proper: a
     // quote must not be blocked on a commercial decision nobody has made yet.
     newOpportunityContractType: z
@@ -211,45 +220,19 @@ export async function startQuote(
         throw new Error('that type of work is void, so nothing new can be filed under it');
       }
 
-      /**
-       * Which company is issuing this job. Written ONCE, here, and never
-       * editable afterwards -- a job does not move between companies, which is
-       * what lets every document under it resolve its letterhead through one
-       * join and lets its number series stay untouched forever.
-       *
-       * `primaryCompany` refuses rather than guessing when there are two. A
-       * job filed under the wrong company would put the wrong legal name and
-       * the wrong HST registration number on every document it ever produces.
-       * Unreachable until "Add a company" exists, which is also when this form
-       * grows a picker.
-       */
-      /**
-       * The UNCACHED read, deliberately.
-       *
-       * `primaryCompany` is `cache()`-wrapped for page rendering, where several
-       * components in one request want the same two rows. An action does one read
-       * and shares it with nobody, so the cache buys nothing here -- and under
-       * test, where there is no request scope, it would hand this action whichever
-       * rows some earlier file happened to load.
-       */
-      const company = primaryOf(await readCompanies());
-      if (!company) {
-        throw new Error(
-          'this deployment has more than one company, so a new opportunity has to say which one it is for',
-        );
-      }
+      // Shared with the new-job form, so the two cannot answer "which
+      // company" differently. Refuses rather than guessing when there are two
+      // and the form named neither.
+      const issuer = await resolveIssuingCompany(input.companyId ?? null);
+      if ('problem' in issuer) throw new Error(issuer.problem);
 
-      // Allocated inside the transaction, so an opportunity that fails to save
-      // does not burn a number out of the series -- and AFTER the company is
-      // known, because the series is per company and there is no series to
-      // allocate from until it is.
-      const projectNumber = await allocateDocumentNumber(tx, 'project', company.id);
+      const projectNumber = await allocateDocumentNumber(tx, 'project', issuer.company);
 
       const [created] = await tx
         .insert(projects)
         .values({
           customerId,
-          companyId: company.id,
+          companyId: issuer.company.id,
           projectNumber,
           name: input.newOpportunityName!,
           projectTypeId: input.newOpportunityTypeId!,

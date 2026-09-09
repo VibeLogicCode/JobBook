@@ -175,7 +175,7 @@ export async function createQuoteFromTemplate(args: {
     const lines = expandTemplate(templateItems, args.scope);
     const totals = computeQuote(lines, await loadTaxRatesFor(tx, company.id), { onDate: quoteDate, customerExempt });
 
-    const quoteNumber = await allocateDocumentNumber(tx, 'quote', company.id, yearOf(quoteDate));
+    const quoteNumber = await allocateDocumentNumber(tx, 'quote', company, yearOf(quoteDate));
 
     const sequence = await nextEstimateSequence(tx, args.projectId);
 
@@ -241,7 +241,7 @@ export async function createBlankQuote(args: {
     });
 
     const sequence = await nextEstimateSequence(tx, args.projectId);
-    const quoteNumber = await allocateDocumentNumber(tx, 'quote', company.id, yearOf(quoteDate));
+    const quoteNumber = await allocateDocumentNumber(tx, 'quote', company, yearOf(quoteDate));
 
     const [quote] = await tx
       .insert(quotes)

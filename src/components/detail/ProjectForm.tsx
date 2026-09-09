@@ -48,6 +48,7 @@ export function ProjectFields({
   project,
   customers,
   projectTypes,
+  companies = [],
   defaultProvince,
   showRealisedDates = false,
 }: {
@@ -55,6 +56,24 @@ export function ProjectFields({
   customers: { id: string; name: string; companyName: string | null }[];
   /** Every project type, retired and voided included -- see `listOptions`. */
   projectTypes: ListRowRef[];
+  /**
+   * The companies a NEW job may be filed under, active only.
+   *
+   * Passed as DATA rather than a rendered picker, because this is a client
+   * component and the company list is read on the server. Data also means the
+   * rule -- "no picker while there is one company" -- is one comparison in one
+   * place rather than a prop somebody can forget to pass.
+   *
+   * Empty or one entry renders NOTHING: not a hidden input and not a disabled
+   * select with one option. A single-company installation has no such concept,
+   * and a hidden control is still in the DOM and still announced by a screen
+   * reader.
+   *
+   * Absent on an EDIT, always. A job does not move between companies -- that
+   * is what lets every document under it resolve its letterhead through one
+   * join and its number series stay untouched forever.
+   */
+  companies?: { id: string; label: string }[];
   /**
    * From `organization.province`. No database default on the column on
    * purpose: a default there would hardcode one tenant's region.
@@ -66,6 +85,16 @@ export function ProjectFields({
   return (
     <>
       <FieldGroup legend="Work">
+        {companies.length > 1 ? (
+          <SelectField
+            label="Company"
+            name="companyId"
+            required
+            placeholder="Choose a company"
+            hint="Whose quotes and invoices this job produces. It cannot be changed later."
+            options={companies.map((company) => ({ value: company.id, label: company.label }))}
+          />
+        ) : null}
         <SelectField
           label="Customer"
           name="customerId"
@@ -203,6 +232,7 @@ export function ProjectForm({
   project,
   customers,
   projectTypes,
+  companies = [],
   defaultProvince,
   cancelHref,
   submitLabel,
@@ -212,6 +242,8 @@ export function ProjectForm({
   project?: ProjectDraft;
   customers: { id: string; name: string; companyName: string | null }[];
   projectTypes: ListRowRef[];
+  /** Only on create. See `ProjectFields`. */
+  companies?: { id: string; label: string }[];
   defaultProvince: string;
   cancelHref: string;
   submitLabel: string;
@@ -244,6 +276,7 @@ export function ProjectForm({
         project={project}
         customers={customers}
         projectTypes={projectTypes}
+        companies={companies}
         defaultProvince={defaultProvince}
         showRealisedDates={showRealisedDates}
       />

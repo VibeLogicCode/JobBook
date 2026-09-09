@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { organization } from '@/db/schema';
 import { type Capability, type Actor, can, resolveActor } from '@/app/settings/actor';
-import { type Company, primaryOf, readCompanies } from '@/lib/company/load';
+import { type Company, companyFields, primaryOf, readCompanies } from '@/lib/company/load';
 
 /**
  * The configuration a settings screen reads, as ONE object.
@@ -27,34 +27,26 @@ import { type Company, primaryOf, readCompanies } from '@/lib/company/load';
  * reason, so a screen showing one company's values and saving to neither is
  * not a state that can arise.
  */
-export type Organization = typeof organization.$inferSelect & Omit<Partial<Company>, 'id'>;
-
-/**
- * The company's half of the merged view.
- *
- * Only the fields BOTH tables still carry -- which is exactly the set on its
- * way from `organization` to `companies` -- and never `id`, because each row's
- * identity is its own and they are not even the same type: the deployment's is
- * an integer and a company's is a uuid. Spreading the whole company row
- * replaced one with the other, and the first thing to break was a settings
- * screen that writes `where organization.id = 1`.
- *
- * Derived from the two table objects rather than listed, so the day a column
- * finishes moving this stops overlaying it without an edit here. Audit columns
- * and `isActive` fall out for free: they exist on both, and the merged view
- * wants the deployment's -- but nothing reads them off this object, which is
- * why sharing that behaviour with the letterhead fields costs nothing.
- */
-function letterheadOf(company: Company | null): Omit<Partial<Company>, 'id'> {
-  if (!company) return {};
-  return Object.fromEntries(
-    Object.entries(company).filter(([key]) => key !== 'id' && key in organization),
-  ) as Omit<Partial<Company>, 'id'>;
-}
+export type Organization = typeof organization.$inferSelect & Partial<Omit<Company, 'id'>>;
 
 export interface SettingsContext {
   /** Null before first-run setup has written the single row. */
   org: Organization | null;
+  /**
+   * How many companies this deployment issues documents as.
+   *
+   * `1` for every installation until somebody deliberately adds a second, and
+   * the four screens that edit COMPANY fields -- identity, contact, financial,
+   * documents -- say so when it is more, because with two companies the fields
+   * they show belong to neither. `patchOrganization` refuses those writes for
+   * the same reason, so the notice is what stops somebody typing into a form
+   * that will refuse them.
+   *
+   * `/settings/locale` deliberately does NOT check it: currency, timezone and
+   * area unit are the deployment's, and two companies sharing one office
+   * cannot disagree about them.
+   */
+  companyCount: number;
   actor: Actor | null;
   /** Why there is no actor, for a screen that must say so rather than 500. */
   reason: string | null;
@@ -75,8 +67,21 @@ export async function loadSettings(capability: Capability): Promise<SettingsCont
   const company = primaryOf(await readCompanies());
   const state = await resolveActor();
 
+  const all = await readCompanies();
+
   return {
-    org: row ? { ...row, ...letterheadOf(company) } : null,
+    /**
+     * The deployment row, merged with the company's fields when there is one
+     * unambiguous company.
+     *
+     * NOT null merely because the company is ambiguous: `/settings/locale`
+     * edits deployment facts and has to keep working with two companies. The
+     * company-owned fields come back undefined in that case, which is why the
+     * four company screens read `companyCount` and say so rather than
+     * presenting blank inputs as if nothing had been set.
+     */
+    org: row ? { ...row, ...(company ? companyFields(company) : {}) } : null,
+    companyCount: all.filter((entry) => entry.isActive).length,
     actor: state.actor,
     reason: state.reason,
     allowed: state.actor ? can(state.actor.role, capability) : false,

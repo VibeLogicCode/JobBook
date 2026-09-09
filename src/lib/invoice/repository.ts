@@ -432,7 +432,7 @@ export async function issueInvoice(args: IssueInvoiceArgs): Promise<IssuedInvoic
   return db.transaction(async (tx) => {
     const { company, project, contract, issueDate, computed } = await priceInvoice(tx, args);
 
-    const invoiceNumber = await allocateDocumentNumber(tx, 'invoice', company.id, yearOf(issueDate));
+    const invoiceNumber = await allocateDocumentNumber(tx, 'invoice', company, yearOf(issueDate));
     const status = args.status ?? 'draft';
 
     const [invoice] = await tx

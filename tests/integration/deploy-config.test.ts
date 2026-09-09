@@ -470,7 +470,6 @@ describe('what the step refuses', () => {
 
   it('refuses to reconfigure a company this wizard did not create', async () => {
     await seedDeployment({
-      id: 1,
       legalName: 'Kestrel Joinery Incorporated',
       displayName: 'Kestrel Joinery',
     });

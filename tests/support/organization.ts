@@ -1,3 +1,4 @@
+import { eq, ne } from 'drizzle-orm';
 import { companies, organization } from '@/db/schema';
 import { db } from '@/db/client';
 import { FIRST_COMPANY_ID } from '@/lib/company/ids';
@@ -36,7 +37,9 @@ export async function ensureOrganization(
     .insert(organization)
     .values({
       id: 1,
-      legalName: 'Sample Contracting Ltd',
+      // The deployment's label only. The legal name went to `companies` --
+      // that is what prints on a document, and this is what shows in a browser
+      // tab and on the sign-in screen.
       displayName: 'Sample Contracting',
     })
     .onConflictDoNothing();
@@ -69,6 +72,20 @@ export async function ensureCompany(
 }
 
 /**
+ * Everything a test may want to state about the deployment and its company,
+ * in the flat shape the tables used to share.
+ *
+ * `organization` gave up thirty-six columns to `companies`, and a test that
+ * says `legalName: 'Acme Ltd', timezone: 'America/Toronto'` in one literal is
+ * saying something true about the installation regardless of which table each
+ * half landed in. Routing them is this helper's job, not the test author's.
+ */
+export type DeploymentValues =
+  Omit<Partial<typeof organization.$inferInsert>, 'id'>
+  & Omit<Partial<typeof companies.$inferInsert>, 'id'>
+  & { legalName: string; displayName: string };
+
+/**
  * Seeds a deployment AND its first company from one set of values.
  *
  * ---------------------------------------------------------------------------
@@ -92,22 +109,27 @@ export async function ensureCompany(
  * names, so a column added to it later is picked up for free and a deployment
  * fact -- `timezone`, `currency` -- cannot be smuggled across by a typo.
  *
- * Values are given ONCE, in the shape `organization` takes. Anything the
- * company also owns is copied; anything only the company owns can be passed in
- * `companyOnly`.
+ * NO `id`. There is one deployment row and one first company, and this helper
+ * owns both keys -- `organization.id` is the integer 1 and the company's is
+ * `FIRST_COMPANY_ID`. Accepting an id would also make the type useless: the
+ * two tables key differently, so `id` intersects to `never`.
  */
 export async function seedDeployment(
-  values: typeof organization.$inferInsert,
+  values: DeploymentValues,
   companyOnly: Partial<typeof companies.$inferInsert> = {},
 ): Promise<void> {
-  await db.insert(organization).values(values);
+  const deployment = Object.fromEntries(
+    Object.entries(values).filter(([key]) => key in organization),
+  ) as typeof organization.$inferInsert;
 
-  const shared = Object.fromEntries(
+  const company = Object.fromEntries(
     Object.entries(values).filter(([key]) => key !== 'id' && key in companies),
-  );
+  ) as typeof companies.$inferInsert;
 
-  const company = {
-    ...shared,
+  await db.insert(organization).values({ ...deployment, id: 1 });
+
+  const row = {
+    ...company,
     ...companyOnly,
     id: FIRST_COMPANY_ID,
     legalName: values.legalName,
@@ -129,8 +151,60 @@ export async function seedDeployment(
    * the test would assert against 'Sample Contracting' while its own literal
    * said 'Acme Ltd'.
    */
+  await db.insert(companies).values(row).onConflictDoUpdate({ target: companies.id, set: row });
+
+  /**
+   * Leaves `FIRST_COMPANY_ID` as the ONLY active company.
+   *
+   * ---------------------------------------------------------------------------
+   * WHY THE HELPER ENFORCES ITS OWN POSTCONDITION
+   * ---------------------------------------------------------------------------
+   *
+   * This is the §9 lesson a third time. `tests/integration/add-company.test.ts`
+   * adds a second company and does not remove it, so the next file to run got
+   * a deployment with two -- and `primaryOf` then CORRECTLY refuses to guess
+   * which one issues a document, so the logo tests failed with a refusal that
+   * was right about a state they never asked for.
+   *
+   * Those files passed alone and failed together, which is the most expensive
+   * shape of failure to read: it looks like the feature is broken rather than
+   * like the fixture is.
+   *
+   * Fixing it here rather than adding `truncate companies` to each file,
+   * because "seed the deployment" means ONE deployment with one company, and a
+   * helper that leaves that ambiguous is a helper every future file has to
+   * remember something about. A file that genuinely wants two companies adds
+   * the second AFTER calling this.
+   *
+   * RETIRED, not deleted: `projects.company_id` and `tax_rates.company_id` are
+   * NOT NULL foreign keys, so a delete would either fail or cascade, and the
+   * application role has no DELETE grant at all.
+   */
   await db
-    .insert(companies)
-    .values(company)
-    .onConflictDoUpdate({ target: companies.id, set: company });
+    .update(companies)
+    .set({ isActive: false })
+    .where(ne(companies.id, FIRST_COMPANY_ID));
+}
+
+/**
+ * The deployment and its first company, read back as ONE row.
+ *
+ * The mirror of `seedDeployment`: a test that states a letterhead in one
+ * literal should read it back in one object, whichever table each half landed
+ * in. Without this, thirty assertions across two files would each have to know
+ * that `legalName` moved and `timezone` did not -- and the ones that got it
+ * wrong would not fail loudly, they would read `undefined` and compare it to
+ * `undefined`.
+ *
+ * Null unless BOTH rows exist, because that is the only state the product can
+ * be in after setup: every wizard step writes them together.
+ */
+export async function readDeployment(): Promise<
+  (typeof organization.$inferSelect & Omit<typeof companies.$inferSelect, 'id'>) | null
+> {
+  const [row] = await db.select().from(organization).where(eq(organization.id, 1));
+  const [company] = await db.select().from(companies).where(eq(companies.id, FIRST_COMPANY_ID));
+  if (!row || !company) return null;
+  const { id: _id, ...fields } = company;
+  return { ...row, ...fields };
 }

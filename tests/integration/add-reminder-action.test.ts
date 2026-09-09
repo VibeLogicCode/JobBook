@@ -101,7 +101,6 @@ beforeEach(async () => {
   `);
 
   await seedDeployment({
-    id: 1,
     legalName: 'Test Company Ltd',
     displayName: 'Test Company',
     timezone: TIMEZONE,

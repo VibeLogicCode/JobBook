@@ -40,7 +40,6 @@ beforeEach(async () => {
   `);
 
   await seedDeployment({
-    id: 1,
     legalName: 'Test Company Ltd',
     displayName: 'Test Company',
     timezone: 'America/Toronto',
@@ -704,12 +703,13 @@ describe('refusals', () => {
 
 describe('a contract with no withholding', () => {
   it('bills the whole draw and taxes all of it', async () => {
-    // A quote whose holdback rate is null withholds nothing. The organization
-    // default is NOT read here: it may have moved since the contract was signed.
+    // A quote whose holdback rate is null withholds nothing. The COMPANY
+    // default is NOT read here: it may have moved since the contract was
+    // signed, and `contractOf` refuses to fall back to it in as many words.
     await db
-      .update(organization)
+      .update(companies)
       .set({ defaultHoldbackPctTenThou: 5000n })
-      .where(eq(organization.id, 1));
+      .where(eq(companies.id, FIRST_COMPANY_ID));
     await acceptContract(CONTRACT_CENTS, null);
 
     const draw = await issue({ percentCompleteTenThou: 2500n });

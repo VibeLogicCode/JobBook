@@ -11,6 +11,7 @@ import { Notice } from '@/components/ui/Notice';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Pill, statusTone } from '@/components/ui/Pill';
 import { AmountCell, TableWrap } from '@/components/ui/Table';
+import { defaultProvince } from '@/lib/company/load';
 import { formatBasisPoints, formatCents } from '@/lib/money/format';
 import { setProjectStage, updateProject } from '@/app/projects/actions';
 import { EditSheet } from '@/components/detail/EditSheet';
@@ -105,7 +106,12 @@ export default async function ProjectPage({
   if (!job) notFound();
   const { project } = job;
 
-  const [org] = await db.select().from(organization).where(eq(organization.id, 1));
+  const [org] = await db
+    .select({ locale: organization.locale, timezone: organization.timezone })
+    .from(organization)
+    .where(eq(organization.id, 1));
+  // A pre-fill, blank when two companies disagree about the answer.
+  const province = await defaultProvince();
 
   const versions = await db
     .select({
@@ -331,7 +337,7 @@ export default async function ProjectPage({
             project={project}
             customers={customerList}
             projectTypes={projectTypeList}
-            defaultProvince={org?.province ?? ''}
+            defaultProvince={province ?? ''}
             showRealisedDates
           />
         </EditSheet>

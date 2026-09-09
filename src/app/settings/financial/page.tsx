@@ -12,6 +12,7 @@ import {
   TextField,
 } from '@/components/settings/Fields';
 import { Notice } from '@/components/ui/Notice';
+import { CompanyScopeNotice } from '@/components/settings/CompanyScopeNotice';
 import { Reveal } from '@/components/ui/Reveal';
 import { Section } from '@/components/settings/Section';
 import { formatBasisPoints, formatRate } from '@/lib/money/format';
@@ -60,6 +61,7 @@ export default async function FinancialSettingsPage() {
 
   return (
     <div className="flex flex-col gap-4">
+      <CompanyScopeNotice companyCount={context.companyCount} />
       {/*
        * Both the number and its label are configuration, not just the number:
        * a jurisdiction decides whether a document says one thing or another

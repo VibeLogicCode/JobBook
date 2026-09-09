@@ -1,6 +1,7 @@
 import { eq } from 'drizzle-orm';
 import { db } from '@/db/client';
-import { files, organization } from '@/db/schema';
+import { files, companies } from '@/db/schema';
+import { primaryOf, readCompanies } from '@/lib/company/load';
 import { type Dimensions, INLINE_TYPES } from '@/lib/files/sniff';
 import {
   type FileRow,
@@ -47,13 +48,16 @@ export interface CurrentLogo {
  * deployment.
  */
 export async function currentLogo(): Promise<CurrentLogo | null> {
-  const [org] = await db
-    .select({ logoFileId: organization.logoFileId })
-    .from(organization)
-    .where(eq(organization.id, 1));
-  if (!org?.logoFileId) return null;
+  /**
+   * The logo belongs to the COMPANY, because it is the letterhead: it prints
+   * on the quote, so two companies need two of them. Null when there are two
+   * -- this screen edits one company's branding and the per-company settings
+   * are where that choice belongs.
+   */
+  const company = primaryOf(await readCompanies());
+  if (!company?.logoFileId) return null;
 
-  const row = await activeFileRow(org.logoFileId);
+  const row = await activeFileRow(company.logoFileId);
   if (!row) return null;
 
   const described = await describeStored(row);
@@ -91,14 +95,20 @@ export async function pointLogoAt(
   actorId?: string | null,
 ): Promise<LogoReplacement | null> {
   return db.transaction(async (tx) => {
-    const [org] = await tx
-      .select({ logoFileId: organization.logoFileId })
-      .from(organization)
-      .where(eq(organization.id, 1));
-    if (!org) return null;
+    const target = primaryOf(await readCompanies());
+    // Refuses rather than guessing: writing a logo to whichever company sorted
+    // first would put the wrong mark on the wrong corporation's paper, and the
+    // person uploading would have no way to tell from this screen.
+    if (!target) return null;
 
-    const previousFileId = org.logoFileId;
-    await tx.update(organization).set({ logoFileId: fileId }).where(eq(organization.id, 1));
+    const [company] = await tx
+      .select({ logoFileId: companies.logoFileId })
+      .from(companies)
+      .where(eq(companies.id, target.id));
+    if (!company) return null;
+
+    const previousFileId = company.logoFileId;
+    await tx.update(companies).set({ logoFileId: fileId }).where(eq(companies.id, target.id));
 
     if (!previousFileId || previousFileId === fileId) {
       return { previousFileId: previousFileId ?? null, previousVoided: false };

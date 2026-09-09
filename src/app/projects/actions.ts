@@ -6,7 +6,7 @@ import { redirect } from 'next/navigation';
 import { z } from 'zod';
 import { db } from '@/db/client';
 import { customers, projects, quotes, stageHistory } from '@/db/schema';
-import { primaryOf, readCompanies } from '@/lib/company/load';
+import { resolveIssuingCompany } from '@/lib/company/issuer';
 import { allocateDocumentNumber } from '@/lib/quote/numbering';
 import type { FormResult } from '@/components/detail/form-state';
 import { guard } from '@/lib/auth/guard';
@@ -126,6 +126,20 @@ export async function createProject(
   const parsed = projectFields.safeParse(fields(formData));
   if (!parsed.success) return { ok: false, error: firstProblem(parsed.error) };
 
+  /**
+   * Read off the form directly, and deliberately NOT part of `projectFields`.
+   *
+   * That schema is shared with the edit action, and a job does not move
+   * between companies -- putting the field there would make it editable, and
+   * a job that changed hands would need its number reissued under the other
+   * company's series and every document it has already produced reprinted.
+   * Create-only is the whole reason the rest of this feature is cheap.
+   */
+  const submittedCompanyId = formData.get('companyId');
+  const companyId = typeof submittedCompanyId === 'string' && submittedCompanyId !== ''
+    ? submittedCompanyId
+    : null;
+
   let id: string;
   try {
     const allowed = await guard('quote:write');
@@ -152,32 +166,19 @@ export async function createProject(
        * what lets every document under it resolve its letterhead through one
        * join and lets its number series stay untouched forever.
        *
-       * `primaryCompany` refuses rather than guessing when there are two. A
-       * job filed under the wrong company would put the wrong legal name and
-       * the wrong HST registration number on every document it ever produces.
-       * Unreachable until "Add a company" exists, which is also when this form
-       * grows a picker.
+       * `resolveIssuingCompany` is shared with the new-opportunity form, so
+       * the two cannot answer "which company" differently. It refuses rather
+       * than guessing when there are two and the form named neither: a job
+       * filed under the wrong company would put the wrong legal name and the
+       * wrong HST registration number on every document it ever produces.
        */
-      /**
-       * The UNCACHED read, deliberately.
-       *
-       * `primaryCompany` is `cache()`-wrapped for page rendering, where several
-       * components in one request want the same two rows. An action does one read
-       * and shares it with nobody, so the cache buys nothing here -- and under
-       * test, where there is no request scope, it would hand this action whichever
-       * rows some earlier file happened to load.
-       */
-      const company = primaryOf(await readCompanies());
-      if (!company) {
-        throw new Error(
-          'this deployment has more than one company, so a new job has to say which one it is for',
-        );
-      }
+      const issuer = await resolveIssuingCompany(companyId);
+      if ('problem' in issuer) throw new Error(issuer.problem);
 
-      const projectNumber = await allocateDocumentNumber(tx, 'project', company.id);
+      const projectNumber = await allocateDocumentNumber(tx, 'project', issuer.company);
       const [row] = await tx
         .insert(projects)
-        .values({ ...parsed.data, projectNumber, companyId: company.id })
+        .values({ ...parsed.data, projectNumber, companyId: issuer.company.id })
         .returning({ id: projects.id });
       if (!row) throw new Error('the job was not saved');
       return row.id;

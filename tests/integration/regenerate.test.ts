@@ -25,7 +25,6 @@ beforeEach(async () => {
   `);
 
   await seedDeployment({
-    id: 1,
     legalName: 'Acme Ltd',
     displayName: 'Acme',
     timezone: 'America/Toronto',

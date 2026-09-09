@@ -1,6 +1,8 @@
 import { eq } from 'drizzle-orm';
 import { db } from '@/db/client';
-import { organization, settings } from '@/db/schema';
+import { companies, organization, settings } from '@/db/schema';
+import { FIRST_COMPANY_ID } from '@/lib/company/ids';
+import { type Company, companyFields } from '@/lib/company/load';
 import {
   FIRST_STEP,
   SETUP_STEP_SLUGS,
@@ -57,7 +59,20 @@ export const OWNER_USER_ID_KEY = 'setup.owner_user_id';
 
 export type SetupStateValue = 'in_progress' | 'complete';
 
-export type Organization = typeof organization.$inferSelect;
+/**
+ * What the wizard's forms read back to pre-fill themselves.
+ *
+ * The deployment row MERGED with the first company, because the split is
+ * about where things are stored and these forms are about what the installer
+ * typed: the company step writes a legal name (now `companies`) and the locale
+ * step writes a timezone (still `organization`), and neither step should have
+ * to know which table it landed in.
+ *
+ * The company's `id` is dropped: each row's identity is its own, and the two
+ * are not even the same type -- the deployment's is an integer and a company's
+ * is a uuid. Spreading the whole row replaced one with the other.
+ */
+export type Organization = typeof organization.$inferSelect & Omit<Company, 'id'>;
 
 export interface OpenGate {
   open: true;
@@ -102,10 +117,32 @@ async function readSetupSettings(executor: Executor): Promise<Map<string, string
 
 export async function readSetupGate(executor: Executor = db): Promise<SetupGate> {
   let org: Organization | null;
+  /** Whether an `organization` row exists at all. See the note below. */
+  let deploymentExists: boolean;
   let values: Map<string, string | null>;
 
   try {
-    [org = null] = await executor.select().from(organization).where(eq(organization.id, 1));
+    const [row = null] = await executor.select().from(organization).where(eq(organization.id, 1));
+    const [company = null] = await executor
+      .select().from(companies).where(eq(companies.id, FIRST_COMPANY_ID));
+    /**
+     * TWO separate facts, deliberately kept apart.
+     *
+     * `deploymentExists` is "is there an organization row", and it is what
+     * decides whether this wizard may write at all. `org` is the merged
+     * pre-fill for the forms, and is null unless BOTH rows are there --
+     * pre-filling from half of a first step would show the installer fields
+     * that were never saved.
+     *
+     * They were one value, and that was a SAFETY BUG: keying the live-tenant
+     * refusal on the merged pair means a deployment with an organization row
+     * and no company row -- an old dump restored and migrated forward without
+     * 0020's backfill reaching it -- would read as "no company yet" and be
+     * offered first-run forms over somebody's real business. The whole purpose
+     * of that refusal is to make that impossible.
+     */
+    deploymentExists = row !== null;
+    org = row && company ? { ...row, ...companyFields(company) } : null;
     values = await readSetupSettings(executor);
   } catch (error) {
     // A database that does not answer must not read as "no company yet". That
@@ -128,7 +165,11 @@ export async function readSetupGate(executor: Executor = db): Promise<SetupGate>
     };
   }
 
-  if (org && state !== 'in_progress') {
+  /**
+   * `deploymentExists`, not `org`. A company row that is missing must never
+   * make a live tenant look like a fresh install -- see the note above.
+   */
+  if (deploymentExists && state !== 'in_progress') {
     return {
       open: false,
       reason: 'live-tenant',

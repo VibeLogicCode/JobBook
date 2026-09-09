@@ -11,18 +11,26 @@ beforeEach(async () => {
     sql`truncate table audit_log, document_sequences, organization restart identity cascade`,
   );
   await seedDeployment({
-    id: 1,
     legalName: 'Acme Ltd',
     displayName: 'Acme',
     timezone: 'America/Toronto',
   });
 });
 
+/**
+ * The company is passed by VALUE, not looked up by the allocator.
+ *
+ * That is not a convenience: reading the company inside the writing
+ * transaction deadlocked against the foreign key's own `FOR KEY SHARE` lock on
+ * the same row, and the concurrency test below is what caught it.
+ */
+const FIRST = { id: FIRST_COMPANY_ID, documentPrefix: null };
+
 const allocate = (
   kind: 'quote' | 'project' | 'invoice' | 'change_order',
   year?: number,
-  companyId: string = FIRST_COMPANY_ID,
-) => db.transaction((tx) => allocateDocumentNumber(tx, kind, companyId, year));
+  company: { id: string; documentPrefix: string | null } = FIRST,
+) => db.transaction((tx) => allocateDocumentNumber(tx, kind, company, year));
 
 describe('allocateDocumentNumber', () => {
   it('formats the prefix, year, and a zero-padded sequence', async () => {
@@ -62,7 +70,7 @@ describe('allocateDocumentNumber', () => {
   it('does not burn a number when the transaction rolls back', async () => {
     await expect(
       db.transaction(async (tx) => {
-        await allocateDocumentNumber(tx, 'quote', FIRST_COMPANY_ID, 2026);
+        await allocateDocumentNumber(tx, 'quote', FIRST, 2026);
         throw new Error('abandoned');
       }),
     ).rejects.toThrow('abandoned');

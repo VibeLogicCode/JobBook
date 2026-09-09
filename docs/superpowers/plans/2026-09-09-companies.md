@@ -12,6 +12,63 @@
 
 **Sibling plan:** `docs/superpowers/plans/2026-09-09-work-posture-and-trade-packs.md` runs AFTER this one and puts `work_posture` on `companies`. Task 1 of this plan creates that column, because it is free in this migration and a second migration for one column is not.
 
+## What building it changed
+
+Recorded here rather than folded silently into the tasks, because five of
+these are decisions a reader would otherwise have to reverse-engineer from the
+code — and two were mistakes of mine that the toolchain caught.
+
+**Tasks 2 and 4 merged, and they had to.** Rekeying `document_sequences`
+breaks `allocateDocumentNumber`'s `ON CONFLICT` in the same statement, so the
+schema change and the allocator are one change. The task boundary as drawn
+would have left the tree red between two commits.
+
+**Task 5 merged in too, for a better reason.** Every `org.` read in the three
+document writers — quote validity, holdback percentage, quote terms, payment
+terms, holdback deferral, holdback release days — turned out to be a company
+fact without exception. Not one deployment fact among them. So "repoint the
+writers" and "fix the letterhead" were the same edit, and splitting them would
+have meant touching the same lines twice.
+
+**`companies.document_prefix`, which no task anticipated.** The unique index
+on `document_sequences (kind, year, prefix)` that §4.5 requires means two
+companies cannot both use `INV` — and nothing gave the second one a distinct
+code, so its first invoice would have failed on an index far from the cause.
+The owner chose a prefix over my suffix: `RENO_INV-2026-0001` beside
+`MAP_INV-2026-0001`, because a document number is read down the phone and a
+one-letter difference at the end of a code is one transcription error away
+from an hour of reconciling. The kind code is prefixed, never replaced — a
+quote and a change order share `quotes.quote_number`.
+
+**`organization` keeps `display_name`; the move was 36 columns, not 37.** The
+sign-in screen renders before authentication, so it has no session, no project
+and no way to choose between two companies. A screen that cannot know which
+company it is must not be asking.
+
+**`React.cache` had to be split from the rule.** `loadCompanies` and
+`primaryCompany` are request-scoped in production and process-wide under a
+single test fork, so the second test file got the first file's rows. That is
+what made `tests/db/companies.test.ts` pass alone and fail in the suite.
+`readCompanies` (uncached) and `primaryOf` (pure) are what tests and server
+actions use; the cached wrappers are for page rendering, where several
+components in one request want the same two rows.
+
+**Two mistakes of mine, and what caught each.**
+`companies.payment_terms_days` was `NOT NULL DEFAULT 30` where
+`organization`'s is nullable — the typechecker caught it, and it mattered:
+`issueInvoice` reads null as "no stated terms", so a default would invent a
+due date the customer never agreed to. And `actions.ts` exported a string from
+a `'use server'` file, which only `next build` catches — `tests/ops/action-guards.test.ts`
+asserts the rule but not that particular shape.
+
+**drizzle-kit could not generate three of the six migrations.** It emitted
+`ADD COLUMN ... NOT NULL` with no backfill (fails on any non-empty table) and
+put a new primary key before the column it names; and a column RENAME is
+precisely the diff it stops to ask a human about, so it hung. Those are
+hand-written, snapshots included.
+
+---
+
 ## Global Constraints
 
 Copied from the spec and from `AGENTS.md`. Every task's requirements implicitly include this section.
@@ -69,7 +126,7 @@ Copied from the spec and from `AGENTS.md`. Every task's requirements implicitly 
 
 ---
 
-## Task 1: The `companies` table, created and backfilled
+## Task 1: The `companies` table, created and backfilled — DONE (`cd0d49b`)
 
 **Files:**
 - Create: `src/db/schema/companies.ts`
@@ -498,7 +555,7 @@ git commit -m "feat: a companies table, holding the legal person on the paper"
 
 ---
 
-## Task 2: The three columns that must land in the first migration
+## Task 2: The three columns that must land in the first migration — DONE (`152cf32`, with Tasks 4 and 5)
 
 **Files:**
 - Modify: `drizzle/0020_companies.sql` (same migration — it has not shipped)
@@ -690,7 +747,7 @@ git commit -m "feat: projects, tax rates and numbering all belong to a company"
 
 ---
 
-## Task 3: Tax rates scoped to one company
+## Task 3: Tax rates scoped to one company — DONE (`152cf32`)
 
 **Files:**
 - Modify: `src/lib/quote/rates.ts:20`
@@ -859,7 +916,7 @@ git commit -m "fix: two companies charge their own tax, not each other's as well
 
 ---
 
-## Task 4: Numbering per company
+## Task 4: Numbering per company — DONE (`152cf32`, `cee9405`)
 
 **Files:**
 - Modify: `src/lib/quote/numbering.ts:54`
@@ -936,7 +993,7 @@ git commit -m "feat: each company gets its own document series"
 
 ---
 
-## Task 5: The right letterhead and the right defaults
+## Task 5: The right letterhead and the right defaults — DONE (`152cf32`)
 
 **Files:**
 - Modify: `src/app/print/quote/[id]/page.tsx:51,128`
@@ -994,7 +1051,7 @@ git commit -m "fix: a document carries the letterhead of the company that issued
 
 ---
 
-## Task 6: Repoint the remaining readers
+## Task 6: Repoint the remaining readers — DONE
 
 **Files:** the 22 not covered by Tasks 3–5. Verify the list before starting — it was 23 in the spec and is 28 today:
 
@@ -1018,7 +1075,7 @@ git commit -m "refactor: every reader of the old organization columns names a co
 
 ---
 
-## Task 7: Drop the moved columns
+## Task 7: Drop the moved columns — DONE (migration 0025, 36 columns)
 
 **Files:**
 - Create: `drizzle/0021_organization_contract.sql`
@@ -1038,7 +1095,7 @@ git commit -m "refactor: organization keeps only what the deployment owns"
 
 ---
 
-## Task 8: Add a company
+## Task 8: Add a company — DONE
 
 **Files:**
 - Create: `src/app/settings/companies/page.tsx`, `actions.ts`

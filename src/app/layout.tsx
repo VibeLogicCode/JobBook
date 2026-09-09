@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { ThemeScript } from '@/components/theme/theme-script';
 import { AppShell } from '@/components/ui/AppShell';
 import { loadOrganization } from '@/lib/organization/load';
+import { primaryCompany } from '@/lib/company/load';
 import './globals.css';
 
 export const dynamic = 'force-dynamic';
@@ -18,12 +19,19 @@ export const dynamic = 'force-dynamic';
  */
 export async function generateMetadata(): Promise<Metadata> {
   const org = await loadOrganization();
+  /**
+   * The tab title is the DEPLOYMENT's name -- the group's, when there are two
+   * companies -- because a browser tab is not a document and cannot know which
+   * company the reader is looking at. The tagline is a company's, so it goes
+   * quiet rather than picking one.
+   */
+  const company = await primaryCompany();
   return {
     title: {
       template: org ? `%s — ${org.displayName}` : '%s',
       default: org?.displayName ?? 'Setup required',
     },
-    description: org?.tagline ?? undefined,
+    description: company?.tagline ?? undefined,
   };
 }
 
@@ -36,20 +44,31 @@ export const viewport: Viewport = {
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const org = await loadOrganization();
+  /**
+   * Null when there are two companies, which paints the app in the default
+   * token family and shows no owner name.
+   *
+   * That is the right answer rather than a gap: the accent colour and the
+   * owner's name are one company's branding, and painting the whole
+   * application in the builder's colour while somebody works on a repair job
+   * would be a claim about which business they are in. `loadCompanies` is
+   * `cache()`-wrapped and the layout is the reader it was wrapped for.
+   */
+  const company = await primaryCompany();
 
   return (
     <html lang={org?.locale ?? 'en-CA'} suppressHydrationWarning>
       <head>
         <ThemeScript />
-        {org?.brandColor ? (
-          // The tenant's accent overrides the token family for the whole app.
-          <style>{`:root{--accent:${org.brandColor};--accent-text:${org.brandColor};--focus:${org.brandColor}}`}</style>
+        {company?.brandColor ? (
+          // The company's accent overrides the token family for the whole app.
+          <style>{`:root{--accent:${company.brandColor};--accent-text:${company.brandColor};--focus:${company.brandColor}}`}</style>
         ) : null}
       </head>
       <body>
         <AppShell
           displayName={org?.displayName ?? 'Not set up'}
-          ownerName={org?.ownerName ?? null}
+          ownerName={company?.ownerName ?? null}
         >
           {children}
         </AppShell>

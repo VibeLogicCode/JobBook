@@ -11,30 +11,37 @@ import { companies } from '@/db/schema/companies';
 export const organization = pgTable('organization', {
   id: integer('id').primaryKey(),
 
-  // identity
-  legalName: text('legal_name').notNull(),
+  /**
+   * The DEPLOYMENT's label, and the only name that stays here.
+   *
+   * Three places need a name with no company in hand and no way to get one:
+   * the sign-in heading (`app/auth/sign-in/page.tsx`, which renders before
+   * authentication, so it has no session and no project), the browser tab
+   * title template and the shell heading. A screen that cannot know which
+   * company it is must not be asking, so this answers there -- the group's
+   * name, when there are two.
+   *
+   * It must NEVER print on a document. `companies.display_name` and
+   * `companies.legal_name` are what appear on paper; this is what appears in
+   * the browser.
+   */
   displayName: text('display_name').notNull(),
-  operatingName: text('operating_name'),
-  tagline: text('tagline'),
-  ownerName: text('owner_name'),
-  ownerTitle: text('owner_title'),
-  logoFileId: uuid('logo_file_id'),
-  faviconFileId: uuid('favicon_file_id'),
-  brandColor: text('brand_color'),
 
-  // contact
-  addressLine1: text('address_line1'),
-  addressLine2: text('address_line2'),
-  city: text('city'),
-  province: text('province'),
-  postalCode: text('postal_code'),
-  country: text('country'),
-  phone: text('phone'),
-  altPhone: text('alt_phone'),
-  email: text('email'),
-  website: text('website'),
+  // ---------------------------------------------------------------------
+  // What is left after the split, and why exactly these
+  // ---------------------------------------------------------------------
+  //
+  // Two companies sharing one office cannot disagree about any of the
+  // following without one of them being wrong. Everything that IS a fact
+  // about a legal person -- the legal name, the address, the HST
+  // registration number, the holdback terms, the payment terms, the quote
+  // footer -- moved to `companies` in migration 0025.
+  //
+  // `tenantYear` (lib/quote/numbering.ts), `tenantToday` (lib/quote/dates.ts)
+  // and the reminder evaluation (lib/reminders/repository.ts) all read the
+  // timezone from here and are deliberately unchanged: what day it is is a
+  // property of the office, not of which corporation is billing.
 
-  // locale
   currency: text('currency').notNull().default('CAD'),
   locale: text('locale').notNull().default('en-CA'),
   /**
@@ -45,25 +52,6 @@ export const organization = pgTable('organization', {
    */
   timezone: text('timezone').notNull().default('America/Toronto'),
   areaUnit: areaUnitEnum('area_unit').notNull().default('sqft'),
-
-  // financial and legal
-  taxRegistrationNumber: text('tax_registration_number'),
-  /** What the number is called on a document: 'HST Number', 'VAT Number'. */
-  taxRegistrationLabel: text('tax_registration_label'),
-  businessNumber: text('business_number'),
-  /** Not assumed to be 31 December. */
-  fiscalYearEndMonth: integer('fiscal_year_end_month'),
-  fiscalYearEndDay: integer('fiscal_year_end_day'),
-  taxFilingFrequency: filingFrequencyEnum('tax_filing_frequency'),
-  /** Excise Tax Act s.168(7): tax on a statutory holdback defers until payable. */
-  taxDeferredOnHoldback: boolean('tax_deferred_on_holdback').notNull().default(true),
-  defaultHoldbackPctTenThou: rate('default_holdback_pct_ten_thou'),
-  holdbackLabel: text('holdback_label'),
-  holdbackTermsText: text('holdback_terms_text'),
-  holdbackReleaseDays: integer('holdback_release_days').notNull().default(60),
-  paymentTermsDays: integer('payment_terms_days'),
-  paymentTermsText: text('payment_terms_text'),
-  insuranceStatement: text('insurance_statement'),
   /**
    * What a kilometre driven on a job costs, in ten-thousandths of a currency
    * unit: $0.7200/km is 7200.
@@ -78,15 +66,11 @@ export const organization = pgTable('organization', {
    * re-cost an existing trip: this column is what the NEXT trip will cost, and
    * a screen that read it live would restate every trip ever driven the first
    * January the figure changed.
+   *
+   * A deployment fact rather than a company one: it is what the vehicle in
+   * the yard costs to run, and both companies drive it.
    */
   mileageRatePerKmTenThou: rate('mileage_rate_per_km_ten_thou').notNull().default(sql`7200`),
-  /** Drives the worksheet margin gauge bands. */
-  targetMarginBp: integer('target_margin_bp'),
-
-  // documents
-  quoteValidityDays: integer('quote_validity_days').notNull().default(30),
-  quoteTermsText: text('quote_terms_text'),
-  documentFooterText: text('document_footer_text'),
 
   ...auditColumns,
 }, (t) => [

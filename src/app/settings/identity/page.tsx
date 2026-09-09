@@ -4,6 +4,7 @@ import { loadSettings, readOnlyNote } from '@/app/settings/load';
 import { ActionForm } from '@/components/settings/ActionForm';
 import { FieldGrid, ReadOnlyField, TextField } from '@/components/settings/Fields';
 import { Notice } from '@/components/ui/Notice';
+import { CompanyScopeNotice } from '@/components/settings/CompanyScopeNotice';
 import { Section } from '@/components/settings/Section';
 
 export const dynamic = 'force-dynamic';
@@ -16,6 +17,7 @@ export default async function IdentitySettingsPage() {
 
   return (
     <div className="flex flex-col gap-4">
+      <CompanyScopeNotice companyCount={context.companyCount} />
       {/*
        * None of this is built into the product: the software is configured
        * for a company, not written about one, so a second deployment changes

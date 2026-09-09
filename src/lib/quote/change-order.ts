@@ -143,7 +143,7 @@ export async function createChangeOrder(args: {
       customerExempt: customer?.isTaxExempt ?? false,
     });
 
-    const quoteNumber = await allocateDocumentNumber(tx, 'change_order', company.id, yearOf(quoteDate));
+    const quoteNumber = await allocateDocumentNumber(tx, 'change_order', company, yearOf(quoteDate));
 
     const [changeOrder] = await tx
       .insert(quotes)

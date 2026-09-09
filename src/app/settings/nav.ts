@@ -38,6 +38,23 @@ export const SETTINGS_GROUPS: NavGroup[] = [
         summary: 'The names, the owner, and the accent colour every document carries.',
       },
       {
+        /**
+         * First in the group, and listed even on a one-company install.
+         *
+         * Not hidden until a second company exists, unlike every OTHER
+         * appearance of the concept: this is the one screen whose job is to
+         * explain what a second company would mean and to be findable by
+         * somebody who has just been asked the question by an accountant. A
+         * feature nobody can find is a feature nobody knows they declined.
+         *
+         * Its own summary says most businesses have one, so a reader who does
+         * not need it can stop there.
+         */
+        href: '/settings/companies',
+        label: 'Companies',
+        summary: 'Which legal company issues a job. Most businesses have one.',
+      },
+      {
         href: '/settings/contact',
         label: 'Contact',
         summary: 'The address and contact block printed on quotes.',

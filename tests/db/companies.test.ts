@@ -60,7 +60,7 @@ describe('companies', () => {
 
   it('leaves organization single-row', async () => {
     await expect(
-      db.insert(organization).values({ id: 2, legalName: 'Second', displayName: 'Second' }),
+      db.insert(organization).values({ id: 2, displayName: 'Second' }),
     ).rejects.toThrow();
   });
 

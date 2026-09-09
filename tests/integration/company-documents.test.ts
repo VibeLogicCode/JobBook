@@ -28,6 +28,8 @@ import { seedDeployment } from '../support/organization';
  */
 
 let secondId: string;
+const first = { id: FIRST_COMPANY_ID, documentPrefix: null };
+let second: { id: string; documentPrefix: string | null };
 
 beforeEach(async () => {
   await db.execute(sql`
@@ -36,14 +38,13 @@ beforeEach(async () => {
   `);
 
   await seedDeployment({
-    id: 1,
     legalName: 'Northgate Building Group Inc.',
     displayName: 'Northgate Building Group',
     timezone: 'America/Toronto',
     taxRegistrationNumber: '111111111RT0001',
   });
 
-  const [second] = await db
+  const [created] = await db
     .insert(companies)
     .values({
       legalName: 'Northgate Home Services Ltd.',
@@ -57,7 +58,8 @@ beforeEach(async () => {
       sortOrder: 20,
     })
     .returning({ id: companies.id });
-  secondId = second!.id;
+  secondId = created!.id;
+  second = { id: created!.id, documentPrefix: 'SVC' };
 
   // Both registered, both charging 13%, both in force from the same day. This
   // is the ordinary case, not a contrived one: two Ontario corporations under
@@ -159,17 +161,17 @@ describe('the overlap guard reads one company', () => {
 describe('each company numbers its own documents', () => {
   it('starts the second company at 0001 and leaves the first where it is', async () => {
     await db.transaction(async (tx) => {
-      expect(await allocateDocumentNumber(tx, 'invoice', FIRST_COMPANY_ID, 2026))
+      expect(await allocateDocumentNumber(tx, 'invoice', first, 2026))
         .toBe('INV-2026-0001');
-      expect(await allocateDocumentNumber(tx, 'invoice', FIRST_COMPANY_ID, 2026))
+      expect(await allocateDocumentNumber(tx, 'invoice', first, 2026))
         .toBe('INV-2026-0002');
       // A different registrant's series, from 0001, under its own code. An
       // auditor asks each corporation for its own sequential run, and nothing
       // is ever renumbered.
-      expect(await allocateDocumentNumber(tx, 'invoice', secondId, 2026))
+      expect(await allocateDocumentNumber(tx, 'invoice', second, 2026))
         .toBe('SVC_INV-2026-0001');
       // And the first company's counter was not touched by the second's.
-      expect(await allocateDocumentNumber(tx, 'invoice', FIRST_COMPANY_ID, 2026))
+      expect(await allocateDocumentNumber(tx, 'invoice', first, 2026))
         .toBe('INV-2026-0003');
     });
   });
@@ -179,9 +181,9 @@ describe('each company numbers its own documents', () => {
     // share the `quotes.quote_number` unique index. This is why the company
     // prefix is prepended to the kind code rather than replacing it.
     await db.transaction(async (tx) => {
-      expect(await allocateDocumentNumber(tx, 'quote', secondId, 2026))
+      expect(await allocateDocumentNumber(tx, 'quote', second, 2026))
         .toBe('SVC_QT-2026-0001');
-      expect(await allocateDocumentNumber(tx, 'change_order', secondId, 2026))
+      expect(await allocateDocumentNumber(tx, 'change_order', second, 2026))
         .toBe('SVC_CO-2026-0001');
     });
   });
@@ -190,7 +192,7 @@ describe('each company numbers its own documents', () => {
     // Every existing installation and every single-company one. With one
     // company there is nothing to distinguish, and `QT-2026-0001` is shorter
     // and says as much.
-    expect(await db.transaction((tx) => allocateDocumentNumber(tx, 'quote', FIRST_COMPANY_ID, 2026)))
+    expect(await db.transaction((tx) => allocateDocumentNumber(tx, 'quote', first, 2026)))
       .toBe('QT-2026-0001');
   });
 
@@ -204,23 +206,23 @@ describe('each company numbers its own documents', () => {
       .values({ legalName: 'Third Co Ltd', displayName: 'Third Co' })
       .returning({ id: companies.id });
 
-    await db.transaction((tx) => allocateDocumentNumber(tx, 'invoice', FIRST_COMPANY_ID, 2026));
+    await db.transaction((tx) => allocateDocumentNumber(tx, 'invoice', first, 2026));
     await expect(
-      db.transaction((tx) => allocateDocumentNumber(tx, 'invoice', clashing!.id, 2026)),
+      db.transaction((tx) => allocateDocumentNumber(tx, 'invoice', { id: clashing!.id, documentPrefix: null }, 2026)),
     ).rejects.toThrow();
   });
 
   it('keeps a gap per company, because a gap is the record of a void', async () => {
-    await db.transaction((tx) => allocateDocumentNumber(tx, 'quote', secondId, 2026));
+    await db.transaction((tx) => allocateDocumentNumber(tx, 'quote', second, 2026));
     await expect(
       db.transaction(async (tx) => {
-        await allocateDocumentNumber(tx, 'quote', secondId, 2026);
+        await allocateDocumentNumber(tx, 'quote', second, 2026);
         throw new Error('abandoned');
       }),
     ).rejects.toThrow('abandoned');
     // The rolled-back allocation burned nothing, exactly as it does for a
     // single company: the counter is inside the transaction that writes.
-    expect(await db.transaction((tx) => allocateDocumentNumber(tx, 'quote', secondId, 2026)))
+    expect(await db.transaction((tx) => allocateDocumentNumber(tx, 'quote', second, 2026)))
       .toBe('SVC_QT-2026-0002');
   });
 });

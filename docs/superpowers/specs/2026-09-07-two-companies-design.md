@@ -1,9 +1,16 @@
 # Two companies under one owner
 
-**2026-09-07.** Agreed with the owner. **Not scheduled. Nothing here is
-built.** Written now because the cheap half of it constrains work that is
-already queued, and because three of the changes it needs are far cheaper as
-part of the next migration than as a retrofit.
+**2026-09-07.** Agreed with the owner. **Wave B built 2026-09-09** -- see
+`docs/superpowers/plans/2026-09-09-companies.md`, whose "What building it
+changed" section records the seven places this design did not survive contact
+with the code. Wave C, the visibility wall, is still deferred on the condition
+§6.4 states.
+
+Two counts here are wrong and were corrected while building: `organization`
+had 43 columns rather than 41 (the split list in §4.2 was exactly right), and
+28 files read the row directly rather than 23. The design also did not
+anticipate that §4.5's unique index forces a per-company document CODE, which
+is now `companies.document_prefix`.
 
 The owner's question: *"what if the same owner has 2 companies that are sister
 concerns. 1 does small jobs basement, house hold repairs where its mostly cash

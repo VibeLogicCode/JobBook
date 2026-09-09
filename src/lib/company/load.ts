@@ -162,3 +162,27 @@ export async function companyOf(tx: Executor, projectId: string): Promise<Compan
 export async function defaultProvince(): Promise<string | null> {
   return primaryOf(await readCompanies())?.province ?? null;
 }
+
+/**
+ * A company's fields, without its identity, for merging over a deployment row.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY THREE READERS SHARE THIS
+ * ---------------------------------------------------------------------------
+ *
+ * `app/settings/load.ts`, `app/setup/state.ts` and the print path all want the
+ * same thing: one object a form or a document can read by field name, without
+ * caring that the legal name now lives in `companies` and the timezone still
+ * lives in `organization`. That is a fact about STORAGE; a form is about what
+ * somebody typed.
+ *
+ * Written once because the exclusion is not obvious and getting it wrong is
+ * quiet: `id` exists on both tables and they are not the same type -- the
+ * deployment's is an integer and a company's is a uuid. Spreading a whole
+ * company row replaced one with the other, and the first thing to break was a
+ * settings action writing `where organization.id = 1`.
+ */
+export function companyFields(company: Company): Omit<Company, 'id'> {
+  const { id: _id, ...fields } = company;
+  return fields;
+}

@@ -21,8 +21,12 @@ import { FIRST_COMPANY_ID } from '@/lib/company/ids';
 import { createQuoteFromTemplate } from '@/lib/quote/repository';
 
 async function main() {
-  const [existing] = await db.select().from(organization).where(eq(organization.id, 1));
-  if (existing && existing.legalName !== DEMO_ORGANIZATION.legalName && !process.env.SEED_FORCE) {
+  // The legal name lives on `companies` now, so the "is this somebody else's
+  // database" guard reads it there. It has to stay a check on the NAME rather
+  // than on mere existence: `organization` exists on any migrated database,
+  // and refusing on that would make the demo seed unusable on a fresh install.
+  const [existing] = await db.select().from(companies).where(eq(companies.id, FIRST_COMPANY_ID));
+  if (existing && existing.legalName !== DEMO_COMPANY.legalName && !process.env.SEED_FORCE) {
     throw new Error(
       `this database belongs to ${existing.legalName}. Set SEED_FORCE=1 only if you mean to replace it.`,
     );

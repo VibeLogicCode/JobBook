@@ -1,5 +1,6 @@
 import { saveDocuments } from '@/app/settings/actions';
 import { loadSettings, readOnlyNote } from '@/app/settings/load';
+import { CompanyScopeNotice } from '@/components/settings/CompanyScopeNotice';
 import { ActionForm } from '@/components/settings/ActionForm';
 import { FieldGrid, ReadOnlyField, TextAreaField, TextField } from '@/components/settings/Fields';
 import { Section } from '@/components/settings/Section';
@@ -40,6 +41,9 @@ export default async function DocumentSettingsPage() {
   // Every string on a generated document comes from the organization
   // record — there is no template with a company name in it.
   return (
+    <div className="flex flex-col gap-4">
+      <CompanyScopeNotice companyCount={context.companyCount} />
+
     <Section
       title="Documents"
       description={<p>Text that prints on a quote, and how long one stands.</p>}
@@ -84,5 +88,6 @@ export default async function DocumentSettingsPage() {
         </FieldGrid>
       </ActionForm>
     </Section>
+    </div>
   );
 }

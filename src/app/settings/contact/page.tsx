@@ -1,5 +1,6 @@
 import { saveContact } from '@/app/settings/actions';
 import { loadSettings, readOnlyNote } from '@/app/settings/load';
+import { CompanyScopeNotice } from '@/components/settings/CompanyScopeNotice';
 import { ActionForm } from '@/components/settings/ActionForm';
 import { FieldGrid, TextField } from '@/components/settings/Fields';
 import { Section } from '@/components/settings/Section';
@@ -15,6 +16,9 @@ export default async function ContactSettingsPage() {
   // The customer table carries no province default of its own — a default
   // in the schema would be a guess about a country.
   return (
+    <div className="flex flex-col gap-4">
+      <CompanyScopeNotice companyCount={context.companyCount} />
+
     <Section
       title="Contact"
       description={
@@ -101,5 +105,6 @@ export default async function ContactSettingsPage() {
         </FieldGrid>
       </ActionForm>
     </Section>
+    </div>
   );
 }
