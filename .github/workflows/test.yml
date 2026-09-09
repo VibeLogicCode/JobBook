@@ -35,6 +35,45 @@ jobs:
           cache: npm
       - run: npm ci
 
+      # ----------------------------------------------------------------------
+      # The browser, without which the PDF suite cannot run
+      # ----------------------------------------------------------------------
+      #
+      # `lib/documents/pdf.ts` drives real Chromium, because the quote a
+      # customer signs is rendered by the same engine that renders it on
+      # screen. Playwright refuses to drive a build it did not ship with, so
+      # the browser has to be the one THIS version downloads -- which is why
+      # the version is read out of the lockfile rather than written here, and
+      # why the Dockerfile pins its base image to the same number.
+      #
+      # This step was missing, and the suite passed anyway on any machine that
+      # had run `npx playwright install` once. CI is the machine that never
+      # has: the first run failed with "Executable doesn't exist at
+      # .../chrome-headless-shell", which reads as a broken Playwright install
+      # rather than a missing setup step. The root README states the
+      # requirement; the workflow did not honour it.
+      - name: Read the locked Playwright version
+        id: pw
+        run: |
+          version=$(node -p "require('./package-lock.json').packages['node_modules/playwright'].version")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      # Keyed on the browser version, not on the whole lockfile: an unrelated
+      # dependency bump should not re-download 150MB of Chromium.
+      - name: Cache the browser
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
+
+      # `--with-deps` every run, cache hit or not. The cache holds the browser
+      # but not the apt packages it links against, and a restored browser that
+      # cannot find a shared library fails at launch with a message about the
+      # executable rather than about the library. `install` skips the download
+      # when the browser is already there, so a hit costs only the apt step.
+      - name: Install Chromium and its system libraries
+        run: npx playwright install --with-deps chromium
+
       # The suite connects to TEST_DATABASE_URL, so that database has to exist
       # and carry the schema. Migrating only DATABASE_URL would leave every
       # database test failing on a missing table.
