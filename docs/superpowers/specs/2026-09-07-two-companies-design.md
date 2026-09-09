@@ -66,6 +66,20 @@ asked at all, and what has to be true instead.
 
 ---
 
+## 3. Simple mode (Wave A) — SUPERSEDED
+
+**Superseded 2026-09-09 by
+`2026-09-09-service-and-contract-work-design.md`.** This section argued simple
+mode should key on the job *"not the company"*. The owner corrected it: two
+businesses running different workflows is not two form lengths. The successor
+carries the two-level model, the service/contract vocabulary, and the trade
+starter packs -- and records that this section's claim about AP/AR being
+removable was wrong, since getting paid is not a builder feature.
+
+Left in place rather than deleted, because §9's sequencing table and §1's
+framing still reference it, and because the reasoning it got wrong is worth
+being able to read.
+
 ## 3. Simple mode (Wave A)
 
 Keyed on `project_types`, which is already a maintained database list with a
@@ -91,8 +105,9 @@ is registered.
 
 ### 3.2 Where the flags live, and one deliberate override
 
-Flags go on `project_types` as columns. `src/db/schema/system.ts` states the
-opposite rule in as many words: *"There is deliberately no feature_flags table
+Flags go on `project_types` as columns. `src/db/schema/organization.ts:171`
+states the opposite rule in as many words -- it is on the `settings` table
+there, not in `system.ts` as an earlier draft of this line claimed: *"There is deliberately no feature_flags table
 -- flags and credentials are environment variables, because a mirrored table
 ends up in SharePoint and in every backup, and secrets must never enter the
 database."*

@@ -1,477 +1,509 @@
 # Service work and contract work
 
-**2026-09-09.** Agreed with the owner. **The next thing to be built**, ahead of
-the launch-blockers, by his decision.
+**2026-09-09.** Agreed with the owner. **Revision 2**, after a review by Fable
+at his request found three errors in revision 1 — one of them fatal to the
+design's central claim. What that review changed is recorded in §10 rather
+than quietly folded in, because two of the mistakes were mine arguing
+confidently from a misreading of this codebase.
 
-This supersedes §3 of `2026-09-07-two-companies-design.md`, which argued that
-simple mode should key on the job *"not the company"*. That was overcorrected.
-The owner's reply is the reason:
+**Sequenced after backlog §10b.1**, by the owner's decision once the review
+found that §10b.1 is a *prerequisite* rather than merely a priority (§8).
+
+The owner's question:
 
 > *"regarding 2 companies its not just tax separation they will have different
 > workflows correct? what i mean by that is 1 will be company setup that has to
 > act like a builder or a big contractor and second as a small 1 man shop."*
 
-He is right, and the earlier design was answering a smaller question.
+And, on naming:
+
+> *"can this app not be used for other services like electrician plumber? i
+> dont want to call it a builder what do you say?"*
+
+And on starter data:
+
+> *"also make sure this can be used by other trades too... based on selection
+> in company setup (construction, electrical, plumbing and other generic
+> trades) we give them sample code list and other data pre populated."*
+
+This supersedes §3 of `2026-09-07-two-companies-design.md`.
 
 ---
 
-## 1. What was wrong, and what replaces it
+## 1. The model, stated honestly
 
-The 2026-09-07 design treated the difference as **form length** -- the same
-screens with fewer fields. It is not. A one-man shop and a home builder run
-**different businesses**: one is dispatched to a job, does it, invoices it once
-and gets paid; the other signs a scope, draws against progress, holds back
-statutory amounts, coordinates subcontractors against a schedule, and issues
-change orders.
+Revision 1 claimed two levels *"different in kind"* — company posture removing
+whole MODULES, project type controlling FIELDS. **That does not survive contact
+with the code**, and the review was right to call it one idea wearing two hats:
 
-Those are different products, not different form lengths. A field that is
-merely collapsed is still a field somebody has to understand and decline.
+- Nothing in `src/components/ui/destinations.ts` is removable. `/templates` is
+  a single destination covering both scope templates and schedule templates.
+- Nothing in `src/app/settings/nav.ts` is removable either. `/settings/financial`
+  holds the holdback fields *beside* tax registration, fiscal year and margin.
+- The only whole routes posture can remove are `/templates/schedule` and
+  `/templates/schedule/[id]`. Two.
 
-**So there are two levels, and they are different in kind:**
+So the honest model is one level plus a default:
 
-| Level | Decides | Granularity |
-|---|---|---|
-| **Company posture** | Which MODULES exist | Whole screens and nav entries, absent |
-| **Project type** | Which FIELDS appear on a job | Forms, inside an enabled module |
+> **Every flag lives on `project_types`.** Posture does exactly three things:
+> it decides which types are offered by default, it supplies the default flag
+> values for a newly created type, and it filters two routes.
 
-Both are needed. Collapsing them into one was the error: a builder still wants
-a short path for a warranty visit, which the company level cannot give; a solo
-electrician should never see a holdback field at all, which the job level
-cannot give.
+That is still worth having. It also **dissolves two bugs** revision 1 had
+created, which is the strongest argument for it (§10.1, §10.2).
+
+The owner's requirement is unchanged and is met: a solo electrician's forms
+carry no holdback, no draws, no critical path, because every project type he
+is offered has those flags off. What changes is the mechanism, and with it the
+claim that a module can be made to not exist.
 
 ---
 
 ## 2. The vocabulary, and why not "builder"
-
-The owner's objection, which reframed this:
-
-> *"can this app not be used for other services like electrician plumber? i
-> dont want to call it a builder what do you say?"*
 
 **Naming the trade would make the product narrower than it is.** An
 electrician, a plumber, an HVAC contractor and a home builder all have the
 same split *inside their own business*. The axis is the WORK, not the trade.
 
 - **Service work.** Dispatched. One visit or a few days. One invoice. Usually
-  no subcontractors, no holdback, no schedule worth drawing. A leaking tap, a
-  panel swap, a furnace that will not fire.
+  no subcontractors, no holdback, no schedule worth drawing.
 - **Contract work.** A signed scope. Progress draws. Holdback.
-  Subcontractors. A schedule with dependencies. Change orders. A custom home,
-  a full rewire, a finished basement.
+  Subcontractors. A schedule with dependencies. Change orders.
 
-**This is not invented vocabulary.** Electrical, plumbing and HVAC companies
-organise themselves exactly this way -- a service department and a
-construction department, different paperwork, often different crews. It is the
-language the customer already uses about himself, which is the only test that
-matters for a word on a first-run screen.
+**Not invented vocabulary.** Electrical, plumbing and HVAC companies organise
+themselves exactly this way — a service department and a construction
+department, different paperwork, often different crews. It is the language the
+customer already uses about himself, which is the only test that matters for a
+word on a first-run screen.
 
-**And the same two words work at both levels**, which is what makes the
-two-level model teachable rather than a second thing to learn. The company
-says which kinds of work it does; the project type says which kind this job
-is.
+**The same two words work at both levels**, which is what makes this teachable
+rather than a second thing to learn.
 
 ---
 
 ## 3. What the company is asked
 
-One question, three answers, in the first-run wizard's `financial` step or a
-step of its own:
-
 > **What kind of work do you do?**
-> - Service work
-> - Contract work
-> - Both
+> — Service work · Contract work · Both
 
-**"Both" is today's behaviour**, which makes it the safe default and makes
-this change backward-compatible by construction: an existing deployment reads
-as "both" and nothing it can see moves. Only "service only" hides anything,
-and only "contract only" is a claim about not doing service work.
-
-A company that answers "both" gets every module, and the per-job project type
-does all the narrowing. A company that answers "service" never sees the
-contract modules again.
-
-**Changeable afterwards, in Settings, always.** A service company that lands
-its first contract turns contract work on; nothing about its existing jobs
-changes, because they were all service jobs and remain so.
+**"Both" is today's behaviour**, so it is the default and this change is
+backward-compatible by construction. Changeable in Settings afterwards,
+always.
 
 ### 3.1 Where the answer lives
 
-`organization`, not `companies`. This is a fact about the deployment's
-operating posture and it is needed before `companies` exists (Wave B of the
-two-companies design is not scheduled). When `companies` is built, the column
-moves there and `organization` keeps a deployment-wide default -- and that
-move is why the reader must be a function from the start (§6.1) rather than 40
-call sites reading a column.
+`organization`, not `companies` — this is needed before `companies` exists,
+and Wave B of the two-companies design is unscheduled. When `companies` is
+built the column moves and `organization` keeps a deployment-wide default,
+which is why §6.1 insists the reader be a function from the first commit.
+
+### 3.2 The switch back is not free
+
+**Both → service, with contract jobs in flight.** Their project types keep
+their flags, so those jobs go on computing holdback and offering draws
+correctly. Only what is *offered on new work* changes. Stated because the
+alternative — posture re-deriving behaviour for existing jobs — would silently
+change the terms of a signed contract.
 
 ---
 
-## 4. What "service only" removes
+## 4. What the flags are, and the audit
 
-Removed means **absent** -- no nav entry, no settings section, no route, the
-guard refusing the route directly rather than the link merely being hidden. A
-hidden link is not a permission and it is not a simplification either; the
-screen is still there to be found.
+Every flag below is a column on `project_types`. Posture sets their default
+for a new type and decides which seeded types are offered.
 
-| Removed under "service only" | Why it does not apply |
+| Flag | Off means |
 |---|---|
-| Holdback: the `/settings/financial` holdback fields, the project billing screen's holdback ledger, the `holdback_release` invoice kind | See §4.1 -- this is the one with a legal caveat |
-| The `progress` invoice kind | A dispatched job is invoiced once, at the end |
-| Schedule templates (`/templates/schedule`) and the forward pass | Three tasks do not want a critical path |
-| Construction Act dates: substantial performance, publication, last supply | Same statutory regime as holdback |
-| Purchase orders | Unbuilt. Recorded here so it is never built without asking. |
-| T5018 reporting | Unbuilt. A service company with no subs files none. |
-| The area / washrooms / kitchens / bedrooms scope inputs | Written for a build |
+| `holdback` | No holdback percentage on the quote, no ledger, no release |
+| `progress_invoicing` | One invoice at the end; no draws |
+| `schedule_template` | No template, no forward pass |
+| `construction_act_dates` | No substantial performance / publication / last supply |
+| `scope_inputs` | No area, washroom, kitchen or bedroom counts |
 
-**Kept, deliberately, under "service only":**
+**Invoice kinds follow `holdback` and `progress_invoicing`, not posture.** That
+correction is §10.2 and it is the one that prevented a stranded receivable.
 
-- **Vendors, trades and subcontractor assignments.** A one-man electrician
-  still calls a drywaller to patch what he cut. Removing vendors would be
-  reading "small" as "alone".
-- **The rate book, cost codes and the margin gauge.** A service company cares
-  about margin at least as much as a builder, and usually knows it worse.
-- **Change orders.** "While I'm here, can you also..." is the commonest
-  service upsell there is.
-- **Quotes, the pipeline, reminders, the calendar, expenses, AP/AR.** All of
-  it applies. AP/AR especially: getting paid is not a builder feature. The
-  2026-09-07 design listed AP/AR as removable and that was wrong.
+### 4.1 The audit: 37 files mention holdback
 
-### 4.1 The holdback caveat, which is load-bearing
+Revision 1 said 27. The review said 34. **It is 37** in `src` — and the count
+mattering three times over is itself the argument for doing this audit
+properly rather than by grep.
 
-**Hiding holdback by company can produce a legally wrong document.**
+Two of those files are **wrong document / wrong number**, not "missing
+screen", and both were already broken before this design existed. The review
+found them; both are now recorded in the backlog and one is fixed:
 
-Under the Construction Act the holdback obligation attaches to the improvement
-rather than to the size of the contract. If a service company signs a $50,000
-renovation, holdback applies whether or not the screen shows a field for it.
+1. **`src/app/print/quote/[id]/page.tsx`** printed `org.holdbackTermsText`
+   unconditionally and never read the quote's percentage — so a job
+   withholding nothing told the customer ten percent was retained. **Fixed
+   2026-09-09** (`6891752`), via `src/lib/quote/holdback-notice.ts`. This
+   design must not reintroduce it: the notice is a function of the QUOTE.
+2. **`src/lib/quote/repository.ts:192,253`** copies
+   `org.defaultHoldbackPctTenThou` onto every new quote. **If the project-type
+   flag does not intercept here, a service job's accepted quote carries 10% and
+   its final invoice withholds it.** Revision 1 never named this call site.
+   This is the single most important line in the implementation.
 
-So the posture sets a **default that a job can override**, never a hard
-removal:
+### 4.2 The work revision 1 did not list
 
-- Under "service only", holdback is off on every new job and its settings
-  section is hidden.
-- A project whose type is marked contract work turns it back on for that job,
-  and the settings needed to compute it fall back to sane statutory defaults
-  rather than being unreachable.
-- **Off by default, never off by force.** A module the owner cannot re-enable
-  on a single job is a module that will eventually be wrong on a real
-  contract.
+**No screen exposes `quotes.holdbackPctTenThou`.** Verified: the only match
+under `src/app/quotes` and `src/components/worksheet` is the wire field added
+on 2026-09-09. It is written by `repository.ts` from the org default, read by
+the invoice engine, and printed — and never editable.
 
-This is the one place where "absent" is downgraded to "off", and the reason is
-written here so it is not tidied away later for consistency.
+So "a job can turn holdback back on" has **no user interface to turn it on
+with**. That UI is real work and it is on the critical path for §4.3, not a
+detail. `lib/invoice/repository.ts:149` already refuses to fall back to the
+org default with an explicit comment, so the override must SET the column.
+
+### 4.3 Holdback: what is actually true, legally
+
+Revision 1 said hiding holdback per-company *"can produce a legally wrong
+document."* **That overstates it**, and the review's correction gives a better
+argument for the same conclusion:
+
+- **The holdback obligation is on the PAYER.** For a customer invoice the
+  homeowner is the payer, so a contractor's invoice omitting holdback is not
+  itself unlawful. The real consequence is a receivable: if the homeowner
+  retains 10% anyway, AR shows a short-paid invoice with no holdback row to
+  explain it.
+- **Since the 2018 amendments, "improvement" includes capital repair and
+  excludes maintenance.** A leaking tap is maintenance; a panel swap is an
+  improvement. **So the line is not contract size and not the company's
+  posture — it is a per-job fact about the work.** Which is a stronger
+  argument for putting the flag on the project type than anything revision 1
+  offered.
+- **The contractor's real exposure is the PAYABLE side.** A service
+  electrician who subs out drywall *is* a payer and must retain from the
+  drywaller. `holdback_direction = 'payable'` exists in the enum and **nothing
+  writes it.** Recorded here as a requirement on unwritten code, the way
+  T5018 is. Not built in this design.
+
+Neither the author nor the reviewer is a lawyer. What is defensible is that
+the flag sits where the fact sits: on the job.
+
+### 4.4 No invented statutory default
+
+Revision 1 promised *"sane statutory defaults"* when the settings screen is
+hidden. **Withdrawn.** `holdbackReleaseDays` (NOT NULL, 60) and
+`taxDeferredOnHoldback` (NOT NULL, true) already compute without that screen.
+The only value needed is the percentage, and `contractOf` in
+`lib/invoice/repository.ts` deliberately refuses an org-default fallback:
+*"absent means the contract withholds nothing."*
+
+A 10% fallback would be the jurisdiction assumption wearing a number that
+`invoices.ts` and `holdback.ts` both refuse. The override sets the column
+explicitly or there is no holdback.
 
 ---
 
-## 5. What the project type decides
+## 5. Starter data per trade
 
-`project_types` gains flags. It is already a maintained database list with a
-case-insensitive uniqueness index and a retire-rather-than-delete rule, so it
-is the right home.
+An empty rate book is why estimating software gets abandoned in week one. This
+is the change most likely to decide whether anybody keeps using the product.
 
-The primary flag is the same axis as the company's: **is this job service work
-or contract work.** Under a company that answers "both", this is what decides
-which form a job gets. Under "service only", contract types are not offered,
-and §4.1 is how one is still possible.
-
-Secondary flags stay per type because they vary within an axis: a bathroom
-renovation is contract work that wants no schedule template, and a large
-service call may want progress invoicing.
-
-### 5.1 The seeded defaults must follow the posture and the trade
-
-`src/db/seed/project-lists.ts` currently seeds: Custom home, Basement,
-Renovation, Kitchen, Bathroom, Addition, Commercial TI, Water leak, Other.
-
-**Every one of those is a builder's list.** A plumber's first screen would be
-somebody else's business, which is the worst possible first impression for a
-product being sold to trades. §5.2 is how that is fixed.
-
----
-
-## 5.2 Starter data per trade
-
-**Owner, 2026-09-09:** *"also make sure this can be used by other trades too.
-even if that means having sample codes and data per trade they are being used
-for. so based on selection in company setup (construction, electrical,
-plumbing and other generic trades we give them sample code list and other data
-pre populated). is that possible?"*
-
-Yes, and it is the single change that most affects whether anybody keeps using
-this. **An empty rate book is why estimating software gets abandoned in week
-one.** A contractor who has to type forty cost codes before he can price his
-first job will go back to the spreadsheet he already has.
-
-### 5.2.1 Trade is orthogonal to posture
-
-§9 of the first draft of this document listed *"asking the customer's trade"*
-as out of scope. **That was wrong, but the reasoning it came from is worth
-keeping**, because it is what stops the two ideas being conflated:
+### 5.1 Trade is orthogonal to posture
 
 | | Decides | Gates anything? |
 |---|---|---|
-| **Posture** (service / contract / both) | Which MODULES exist | Yes -- routes refuse |
-| **Trade** (electrical, plumbing, ...) | Which STARTER DATA is loaded | **No. Nothing.** |
+| **Posture** | Offered types, new-type defaults, two routes | Two routes |
+| **Trade** | Which starter pack is loaded | **No. Nothing.** |
 
-The trade must never gate a feature. The same electrician does service calls
-and full rewires, which is the entire argument of §2. It selects a pack of
-rows at first run and then has no further effect -- there is deliberately no
-`trade` column consulted at runtime, and no screen that behaves differently
-because of it.
+No `trade` column is consulted at runtime and no screen behaves differently
+because of it. The same electrician does service calls and full rewires.
 
-### 5.2.2 It is a copy, never a link
+### 5.2 It is a copy, never a link
 
-The pack is inserted as ordinary rows the owner then owns: he edits them,
-retires them, adds his own. **There is no mechanism that ever updates a
-seeded row**, and there must not be -- an "update your rate book from the
-latest pack" feature would overwrite a contractor's own prices, which is the
-single most destructive thing this product could do to somebody's business.
+Seeded rows become the owner's rows. **No mechanism ever updates one**, and
+there must not be — "update your rate book from the latest pack" would
+overwrite a contractor's own prices, the most destructive thing this product
+could do. A pack improved later reaches only new installations. Correct; the
+alternative is worse.
 
-A consequence to accept rather than fix: a pack improved in a later release
-reaches only new installations. That is correct. The alternative is worse.
+### 5.3 THE PACKS CARRY NO PRICES — and zero is not safe either
 
-### 5.2.3 THE PACKS MUST NOT CONTAIN PRICES
+Ship codes, descriptions, units and cost-code structure. **Never a dollar
+figure.** A rate book of invented numbers looks authoritative, and a
+contractor quoting at prices this software guessed loses the job or loses
+money, with nothing tracing back to a seed file.
 
-The hard rule, and the reason it is in capitals.
+**Revision 1 then claimed seeding at zero was safe. It is not, and the reason
+I gave was a misreading of my own codebase.** I quoted *"Blank records as
+zero, and the margin will read 100%"* — that hint is on the **cost** field
+(`RateItemFields.tsx:113` is `costRateTenThou`). Zero **sell** behaves
+differently and worse:
 
-**Ship codes, descriptions, units and cost-code structure. Never a dollar
-figure.** A rate book pre-filled with invented numbers is worse than an empty
-one, because it looks authoritative: a contractor who quotes at prices this
-product guessed will either lose the job or lose money on it, and neither
-failure will be traced back to a seed file. Labour and material rates vary by
-region, by year, by supplier and by how busy he is -- none of which this
-software knows.
+- `marginBasisPoints` returns **0** on zero revenue, so the rate list reads
+  0.00% and the gauge sits red at zero cells — indistinguishable from a real
+  item priced badly.
+- A zero-sell line contributes $0 to the subtotal.
+- `pricingDisplay` defaults to `group_totals`, under which the line is
+  **invisible on the printed quote**. A customer receives a document silently
+  missing the price of real work.
+- The rate picker offers every active item, zero included, with no flag.
 
-`rate_items.sellRateTenThou` is NOT NULL, so seeded rows carry zero, which the
-existing form hint already describes: *"Blank records as zero, and the margin
-will read 100%."* The rate list must say plainly that a zero-priced item is
-unpriced and will not quote correctly until he prices it. **The value being
-handed over is the STRUCTURE -- the list of things an electrician bills for,
-already coded and cost-coded -- not the arithmetic.**
+So a zero-priced seeded item is worse than an empty rate book **for exactly
+the reason stated against invented prices: it looks like a price.**
 
-The same rule applies to the target margin and to holdback percentages: a
-statutory default is a fact and may be seeded; a business's margin is not.
+**Therefore a structural guard, not hint text.** Adding a line whose
+`sellRateTenThou` is `0n` is refused — or requires an explicit confirmation —
+unless the item is a percent-mode line or an allowance, both of which are
+legitimately zero. The rate list flags unpriced rows. "The screen must say
+plainly" was a hope; a guard is a mechanism.
 
-### 5.2.4 Cost codes: write our own divisions, not an industry standard's
+### 5.4 No MasterFormat, no NAHB chart
 
-**MasterFormat** is the standard construction cost-code numbering in North
-America -- published by the Construction Specifications Institute, and in
-Canada by Construction Specifications Canada. It is the `03 Concrete` /
-`22 Plumbing` / `26 Electrical` system that architects' specifications and
-commercial estimating software are organised around. **NAHB's Chart of
-Accounts** is the residential equivalent. The term is spelled out here because
-the first draft of this section assumed the reader knew it, and the reader
-did not.
+**MasterFormat** is the standard North American construction cost-code
+numbering, published by the Construction Specifications Institute and, in
+Canada, Construction Specifications Canada — the `03 Concrete` /
+`22 Plumbing` / `26 Electrical` system. **NAHB's Chart of Accounts** is the
+residential equivalent. Spelled out because revision 1 assumed the reader knew
+the term and the reader did not.
 
-Either would be the obvious thing to seed a construction pack with, and it is
-tempting: it is the industry's shared vocabulary, so a pack built on it would
-look immediately familiar.
+Both are published and sold, with copyright asserted on the compilation — the
+selection, numbering and arrangement. Individual words are not protectable;
+nobody owns "Concrete".
 
-**Ship neither.** Both are published and sold by their standards bodies, which
-assert copyright on them. Individual words are not protectable -- nobody owns
-"Concrete" -- but the compilation is: the specific selection, numbering and
-arrangement of the whole system. Putting that inside a product that is sold is
-a licensing arrangement rather than a technical decision, and it is the kind
-of exposure that stays invisible until there are customers.
+**Owner's decision, 2026-09-09:** *"no i dont want to buy it."* Settled.
 
-**Owner's decision, 2026-09-09:** *"no i dont want to buy it."* Settled. This
-is not revisited without a deliberate purchase.
+So: **plain-language divisions we write ourselves**, with our own numbering.
 
-So: **plain-language divisions we write ourselves** -- Concrete, Framing,
-Roofing, Electrical, Plumbing, Finishes. Same practical value to a
-tradesperson reading his first screen, none of the exposure.
+**And the tension with the codes design, owned rather than hidden.**
+`2026-09-07-generated-codes-design.md` §2 says the app must NOT invent cost
+codes, because a chart of accounts has to agree with the accountant's. This
+seeds six to ten per trade, and `quote_lines.cost_code_id` is a live foreign
+key. The reconciliation: a seeded code is a **starting suggestion the owner
+renames or retires**, not an assertion. It is defensible because the
+alternative is an empty list — but it is a tension, not a thing the other spec
+supports.
 
-The practical loss is small in any case. MasterFormat is a commercial and
-institutional convention; a residential contractor typically uses his own
-buckets or whatever his bookkeeper set up. And
-`2026-09-07-generated-codes-design.md` §2 already establishes that the
-accountant's chart of accounts is the authority a cost code has to agree with
--- not this app's, and not a standards body's.
+### 5.5 One pack per trade, rows tagged by posture
 
-### 5.2.5 One pack per trade, rows tagged by posture
+Not a trade × posture matrix. Each pack is one list; each row carries the
+posture it belongs to. An electrical pack holds `Service call` (service),
+`Rewire` (contract), `Panel upgrade` (both). Adding a posture later does not
+multiply content.
 
-The combination could be a matrix -- trade times posture -- and must not be.
-Each pack is one list, and every row in it carries the posture it belongs to:
-`service`, `contract`, or both. The wizard then loads the pack for the trade
-and offers the rows the posture allows.
+### 5.6 Four packs, and the GC pack is not free
 
-So an electrical pack holds `Service call` tagged service, `Rewire` tagged
-contract, and `Panel upgrade` tagged both. One pack, no matrix, and adding a
-posture later does not multiply the content.
-
-### 5.2.6 The trades to ship, and how many
-
-Deliberately few. **A bad pack is worse than no pack**, because a wrong list
-on the first screen reads as a product that does not understand the business:
-
-1. **General contracting / renovation** -- today's list, which already exists
-   and is already proven against a real company.
+1. **General contracting / renovation**
 2. **Electrical**
 3. **Plumbing**
 4. **HVAC**
-5. **Other / none** -- project types and line groups only, no rate items, no
-   cost codes. The honest answer for a trade there is no pack for, and it must
-   not be a worse experience than today's empty start, only a plainer one.
+5. **Other / none** — project types and line groups only. Must be no worse
+   than today's empty start, only plainer.
+
+**Revision 1 called the GC pack "today's list, unchanged and therefore
+free". Wrong.** No cost codes or rate items ship to a real install today —
+`src/db/seed/schedule-templates.ts` says so in as many words. The only GC list
+is the demo tenant's (`src/db/seed/demo.ts`), which carries **prices and
+MasterFormat division numbers** (`01-00`, `03-30`, `22-00`, `26-00`) and
+therefore violates both hard rules above. The GC pack must be authored like
+the other three.
+
+**The demo tenant needs a decision of its own.** It is what anybody evaluating
+the product sees, and it uses MasterFormat numbering. Eight division numbers
+is plausibly de minimis, but the spec should not leave its own rule
+contradicted by its own demo: either exempt the demo explicitly with that
+reasoning, or renumber it. **Recommend renumbering** — it costs nothing and
+removes the question.
 
 Landscaping, roofing, painting and drywall are the obvious next four and are
-deliberately not in this build. Each pack is content work that wants somebody
-who knows the trade to read it, and shipping four good packs beats eight
-guessed ones.
+deliberately excluded. Each pack wants somebody who does that trade to read
+it.
 
-### 5.2.7 What a pack contains
+### 5.7 What a pack contains
 
-- **Project types**, posture-tagged (§5.2.5).
-- **Cost codes**, one shallow division per bucket the trade actually reports
-  on. Shallow on purpose: a deep hierarchy nobody asked for is the first thing
-  a new user has to delete.
-- **Rate items**, coded and cost-coded, **unpriced** (§5.2.3).
-- **Line groups**, which are how a quote is sectioned and are strongly
-  trade-shaped.
-- **Trades** (the `trades` table, meaning subcontractor kinds hired) -- the
-  general-contracting pack wants the full list; an electrician's is short.
-- **Nothing else.** Not vendors, not customers, not tax rates. Vendors and
-  customers are the owner's actual relationships and inventing them would put
-  fictional companies in a real business's records -- which the demo tenant
-  does deliberately and a production install must never do. Tax rates are
-  jurisdictional and already their own wizard step.
+Project types (posture-tagged), cost codes (shallow — a deep hierarchy nobody
+asked for is the first thing a new user deletes), rate items (unpriced), line
+groups, and trades (subcontractor kinds hired).
 
-### 5.2.8 Where it lives
+**Nothing else.** Not vendors, not customers, not tax rates. Vendors and
+customers are the owner's real relationships and inventing them would put
+fictional companies in a real business's records — which the demo tenant does
+deliberately and a production install must never do.
 
-`src/db/seed/project-lists.ts` already holds `DEFAULT_PROJECT_TYPES` and
-`DEFAULT_LEAD_SOURCES` with fixed ids, so the mechanism exists. It grows into
-one module per trade under the same directory, each exporting the same shape,
-with an index mapping a trade to its pack.
+### 5.8 The seeding mechanism does not exist, and the existing seeds fight it
 
-**Fixed ids per pack row, as the existing seed already does.** That is what
-makes re-running the wizard idempotent rather than duplicating a list.
+**Revision 1 said "the mechanism exists". It does not.**
+`src/db/seed/project-lists.ts` is a set of constants mirroring migration
+`0018`'s SQL; it seeds nothing at runtime. Three consequences, all of which
+break the feature as revision 1 described it:
 
-**This is a content problem wearing a code problem's clothes.** The code is a
-day; the packs are the work, and they are the part that decides whether the
-feature is any good.
+1. **The nine builder project types are in every database before the wizard
+   runs**, via migration 0018. An electrician's first screen would read
+   "Custom home, Basement, Renovation…" *plus* his pack. **So a pack must
+   RETIRE the types it does not want**, using the existing
+   retire-not-delete rule. §5.1 of revision 1 promised an electrician's list
+   and §5.2 did not deliver it.
+2. **`ensureVendorLists` and `ensureLineGroups` seed lazily on first visit**
+   to `/vendors`, `/settings/trades`, `/settings/vendor-types` and
+   `/settings/line-groups`, appending the full GC set. So an electrician's
+   short trade list acquires twelve general-contracting trades the first time
+   he opens Vendors, and his line groups acquire "Framing, Drywall,
+   Concrete…". **Those lazy seeds must become pack-aware, or reuse the pack's
+   fixed ids.** Not optional — it silently undoes the pack.
+3. **Fixed ids per pack row**, as the existing seed already does. Not for
+   wizard re-runs — `readSetupGate` refuses those on a live tenant — but for
+   re-submitting a step within one setup, and for a later "load a pack"
+   entry point in Settings.
+
+**Existing `project_types` rows need a stated backfill**: every one of the
+nine keeps today's behaviour, `Water leak` and `Other` included. "Current
+behaviour" is the migration's job to make explicit, not the reader's to infer.
+
+**This is a content problem wearing a code problem's clothes.**
 
 ---
 
-## 6. How it is implemented
+## 6. Implementation
 
-### 6.1 One reader, not forty
+### 6.1 One reader, derived — not a second cache
 
-A single function answers the question -- something of the shape
-`workPosture()` returning `'service' | 'contract' | 'both'`, cached per request
-the way `loadOrganization` already is.
+`workPosture()` derives from `loadOrganization`, which the root layout already
+calls and which is already `cache()`-wrapped. **Do not add a second cached
+reader.** `React.cache` is per-request, which is correct here; `proxy.ts`
+never sees it and should not — posture is not authentication.
 
-**Nothing reads the column directly.** The two-companies design counts 23
-files that read the organization row directly rather than through
-`loadOrganization`, and that count is the whole reason repointing them is a
-day's work. This must not add a twenty-fourth pattern. When the posture later
-moves to `companies`, one function changes.
+**It fails OPEN.** `loadOrganization` swallows errors to `null`, so a database
+blip resolves posture to `'both'` and the fuller forms appear. Acceptable for
+a product-shape flag and stated here because revision 1's "the guard refuses"
+language reads as a permission. **It is not a permission.** Nothing here
+protects anything; it shortens forms.
 
-Derived predicates sit beside it -- `hasContractWork()`, `hasServiceWork()` --
-so a call site reads as a question about the business rather than a string
-comparison, and a fourth posture (§9) would not touch the call sites.
+Derived predicates — `hasContractWork()`, `hasServiceWork()` — so a call site
+reads as a question about the business and a fourth posture would not touch
+them.
 
-### 6.2 Nav and settings are data, not markup
+`AppShell` is `'use client'`, so posture reaches it as a prop.
+`destinationsFor(posture)` replaces the three exported constants in
+`destinations.ts`, keeping the one-list invariant that
+`tests/unit/navigation.test.ts` asserts.
 
-`src/components/ui/destinations.ts` already exists as the single list behind
-both the desktop rail and the phone bar, with `tests/unit/navigation.test.ts`
-asserting that every destination is reachable from exactly one of them. A
-destination gains a posture predicate and the filtering happens in that
-module, so the rail, the bottom bar and the overflow sheet cannot disagree
-about what exists.
+### 6.2 Two routes, not a nav rebuild
 
-`src/app/settings/nav.ts` takes the same treatment for its grouped sections.
+`/templates/schedule` and `/templates/schedule/[id]` refuse under service-only.
+That is the whole of §6.2. Revision 1 described filtering `DESTINATIONS` and
+`SETTINGS_GROUPS`; §1 explains why that does nothing.
 
-### 6.3 The guard is the route, not the link
+The guard is on the route, not the link — a hidden nav entry is not a
+mechanism, which this codebase has already written about the estimator role.
 
-Every removed route refuses directly. A hidden nav entry is not a permission
--- this codebase has already written that sentence about the estimator role
-and it is no less true when the thing being hidden is a module rather than a
-column.
+### 6.3 Absence is the off state
 
-### 6.4 Absence is the off state
+The rule is at **`src/db/schema/organization.ts:171`** — revision 1 cited
+`system.ts`, and `2026-09-07-two-companies-design.md` repeats that
+misattribution and should be corrected too.
 
-`src/db/schema/system.ts` states the rule: *"Absence is the off state, so no
-defaulted column can switch a feature on for someone who never asked."* Here
-that means the posture column defaults to the value that changes nothing --
-`'both'`. An existing deployment, and the demo tenant, read as they do today.
+The posture column defaults to `'both'`, the value that changes nothing. Every
+project-type flag defaults to today's behaviour.
 
-The same file's *"deliberately no feature_flags table"* rule is overridden for
-these flags, as the 2026-09-07 design records: that rule protects
-CREDENTIALS, and nothing about "this company does not do contract work" is a
-secret or costs anything by appearing in a backup.
+The *"deliberately no feature_flags table"* rule from the same file is
+overridden for these flags, deliberately: it protects CREDENTIALS, and nothing
+about "this kind of job has no holdback" is a secret or costs anything in a
+backup.
 
 ---
 
 ## 7. Testing
 
-The suite is `environment: 'node'` with no component tests, so the rules have
-to be assertable as data. That is the same reasoning that produced
-`destinations.ts`.
+`environment: 'node'`, no component tests — so the rules must be assertable as
+data. Same reasoning that produced `destinations.ts`.
 
-- **Posture resolution**: all three values, and the default when the column has
-  never been set.
-- **Nav filtering**: under each posture, every destination is reachable from
-  exactly one of the bar or the overflow -- the existing invariant, now once
-  per posture. And that a removed destination appears in neither.
-- **Every removed route refuses** under "service only", called directly rather
-  than through a link. This is the test that would catch a hidden-link
-  implementation.
-- **The holdback override** (§4.1): a contract-type job under a service-only
-  company computes holdback correctly, using fallback defaults. This is the
-  test that stops "absent" being implemented where "off" was meant.
+- **Posture resolution**: three values, the default when never set, and the
+  fail-open path when `loadOrganization` returns null.
+- **`repository.ts:192,253`**: a service-type job's new quote carries **no**
+  holdback percentage. §4.1 item 2 — the wrong-number test.
+- **The print notice**: already covered by `tests/unit/print-holdback.test.ts`.
+- **Zero-sell guard** (§5.3): a zero-priced item is refused as a quote line;
+  a percent-mode line and an allowance still pass.
+- **Pack seeding**: loading a pack retires the migration-0018 types it does
+  not want, and a later visit to `/vendors` does **not** re-append the GC
+  trades. The §5.8 item 2 test.
+- **Route refusal**: `/templates/schedule` refused under service-only, called
+  directly rather than through a link.
 - **Backward compatibility**: a deployment with no posture set behaves
-  byte-identically to today. Worth asserting on the seeded demo tenant, which
-  is what anybody evaluating the product sees.
-- **Seeded project types** match the posture chosen in the wizard.
+  identically to today. Assert on the demo tenant, which is what an evaluator
+  sees.
+- **Wizard**: `tests/integration/setup.test.ts` asserts `resumeAt` by slug
+  (`'tax-rate'`, `'done'`) and walks steps by name, so a new step is real
+  churn revision 1 did not list. **Posture must be known before the pack**,
+  since §5.5 filters rows by it — so trade and posture share one step, or
+  posture comes first. The `done` summary should name both.
 
 ---
 
 ## 8. Cost and sequence
 
-**The posture work: two to four days**, most of it in §4's audit -- finding
-every surface that mentions holdback (27 files match `holdback` today) and
-deciding for each whether it is absent, off, or untouched. The code is not the
-hard part; the list is.
+**§10b.1 first.** The review found it is a prerequisite, not a priority: the
+trade pack lives in the wizard, and `src/lib/auth/access.ts:48-50` still
+throws without `LOCAL_USER_EMAIL`, so **no customer can reach the wizard, and
+therefore no customer can reach the packs.** ~1.5 hours. The owner agreed once
+this was pointed out.
 
-**The trade packs: a day of code, and the packs themselves are content.** The
-seed mechanism exists. Writing four packs that a tradesperson would recognise
-as his own list is the real work, and it wants review by somebody who does
-that trade -- an electrical pack written by guessing is exactly the "bad pack"
-§5.2.6 argues against shipping.
+§10b.2a (the backup key) is independent and is the liability. Before or
+interleaved.
 
-Splitting them is possible: posture first, packs second, with the
-general-contracting pack being today's list unchanged and therefore free.
+Then: **posture 2–4 days**, most of it the 37-file audit. **Packs: a day of
+code, and the packs are content** — including the GC pack, which §5.6 corrects
+from "free" to "authored".
 
-**Sequenced ahead of the launch-blockers by the owner's decision** (§10b.1,
-§10b.2a of the backlog). One thing recorded and then dropped: **the backup key
-still blocks selling.** Posture is what makes the product sellable to more
-people; the key is what makes it defensible to sell to anyone. This may move
-ahead of it, but not indefinitely.
-
-**Relationship to the two-companies design:** independent, and this one comes
-first. Posture is per-deployment today and moves to per-company when
-`companies` is built, which §6.1 is what makes cheap. Nothing here assumes
-that wave ever happens.
+Splittable: posture first, packs second.
 
 ---
 
 ## 9. Not in this design
 
-- **A third level between service and contract.** Offered and declined by the
-  owner. If a $15,000 bathroom turns out to want something between a dispatch
-  and a custom home, that is a project type with contract work and no schedule
-  template -- which §5 already allows -- rather than a third posture.
-- **Letting the trade gate a feature.** The trade is asked, and it selects a
-  starter pack (§5.2) -- but nothing at runtime consults it, there is no
-  screen that behaves differently because of it, and there is no `trade`
-  column read after first run. The same electrician does service calls and
-  full rewires, which is why posture and trade are separate questions.
-- **A rate pack containing prices.** §5.2.3. Not a scope decision, a rule.
-- **Reproducing MasterFormat or the NAHB chart.** §5.2.4. The owner declined
-  to buy a licence on 2026-09-09, so we write our own divisions.
-- **Any mechanism that updates a seeded row after first run.** §5.2.2. It
-  would overwrite a contractor's own prices.
-- **More than four trade packs in this build.** §5.2.6.
-- **Removing vendors, rates, change orders or AP/AR under "service only".**
-  §4 argues each. The 2026-09-07 design's claim that AP/AR is removable was
-  wrong: getting paid is not a builder feature.
-- **Per-user posture.** It is a property of the business, not of who is
-  looking.
-- **Hiding holdback outright.** §4.1.
+- **Letting the trade gate a feature.** §5.1.
+- **A pack containing prices, or zero prices without a guard.** §5.3.
+- **MasterFormat or the NAHB chart.** §5.4. Declined by the owner.
+- **Any mechanism updating a seeded row.** §5.2.
+- **More than four packs.** §5.6.
+- **Payable-side holdback.** §4.3. Real exposure, unwritten code, recorded.
+- **An invented statutory holdback default.** §4.4.
+- **A third posture between service and contract.** Offered and declined. A
+  $15,000 bathroom is contract work with no schedule template, which §4
+  already allows.
+- **Per-user posture.** A property of the business, not of who is looking.
+- **The holdback release form.** Needed for §4.2's override to be useful end
+  to end, but it is AP/AR work — see the backlog entry of 2026-09-09.
+
+---
+
+## 10. What the review changed
+
+Kept because the mistakes are instructive and two of them were confident.
+
+### 10.1 The fatal contradiction
+
+§4.1 of revision 1 said a contract-flagged job turns holdback back on. §5 said
+*"under service only, contract types are not offered."* **So the override could
+never fire, and holdback was exactly the hard removal §4.1 said must never
+exist.** The load-bearing caveat was dead code. Fixed by §1: every flag on the
+project type, posture only choosing what is offered.
+
+### 10.2 The stranded receivable
+
+Revision 1 removed the `progress` and `holdback_release` invoice kinds at the
+posture level. Holdback accrues only on draws and is paid out only by a
+release — so a contract job under a service-only company would have withheld
+10% and had **no invoice kind able to bill it back.** Money owed, and
+un-invoiceable. Fixed by tying invoice kinds to the project-type flags.
+
+### 10.3 Zero prices
+
+§5.3. I asserted a safety property and cited a hint that is on a different
+field. This is the second time in three days I have argued from a misreading
+of this codebase, and both times the error survived because the sentence
+sounded like it had been checked.
+
+### 10.4 Three counts, three wrong
+
+Revision 1: 27 files mention holdback. The review: 34. Actual: **37**. Small
+in itself, and a reason not to size an audit by a grep somebody remembered.
+
+### 10.5 Things the review confirmed
+
+The service/contract vocabulary, the `'both'` default, never updating a seeded
+row, the copyright reasoning in §5.4, excluding vendors and customers from
+packs, and that `React.cache` is the right mechanism for §6.1. Unchanged.
