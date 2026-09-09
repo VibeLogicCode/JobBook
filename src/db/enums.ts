@@ -66,6 +66,24 @@ export const entityTypeEnum = pgEnum('entity_type', [
 export const filingFrequencyEnum = pgEnum('filing_frequency', ['annual', 'quarterly', 'monthly']);
 
 /**
+ * What kind of work a company does, and which kinds of work a project type is
+ * offered for.
+ *
+ * `work_posture` and not `company_type`, `tier` or `mode`: the axis is the
+ * WORK, not the business. An electrician, a plumber and a home builder all
+ * have the same split inside their own business -- a service department and a
+ * construction department, different paperwork, often different crews -- so
+ * naming the trade would make the product narrower than it is. It is also the
+ * language the customer already uses about himself, which is the only test
+ * that matters for a word on a first-run screen.
+ *
+ * `both` FIRST, because it is today's behaviour and therefore the default, and
+ * because a picker whose default is not its first option is a picker people
+ * get wrong.
+ */
+export const workPostureEnum = pgEnum('work_posture', ['both', 'service', 'contract']);
+
+/**
  * How a person signs in, chosen per user by an administrator.
  *
  * Only meaningful in `sso` mode. Under Cloudflare Access the Access policy

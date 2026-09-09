@@ -1,5 +1,6 @@
-import { organization } from '@/db/schema';
+import { companies, organization } from '@/db/schema';
 import { db } from '@/db/client';
+import { FIRST_COMPANY_ID } from '@/lib/company/ids';
 
 /**
  * The `organization` row a test needs in order to read one.
@@ -35,6 +36,32 @@ export async function ensureOrganization(
     .insert(organization)
     .values({
       id: 1,
+      legalName: 'Sample Contracting Ltd',
+      displayName: 'Sample Contracting',
+    })
+    .onConflictDoNothing();
+}
+
+/**
+ * The `companies` row a test needs in order to issue a document.
+ *
+ * Same reasoning as `ensureOrganization` above, and the same
+ * `onConflictDoNothing`. In this file rather than a new one because a test
+ * that needs a company almost always needs the deployment row too, and two
+ * imports for one precondition is how one of them gets forgotten -- which is
+ * the §9 incident this file exists because of.
+ *
+ * Deliberately does NOT call `ensureOrganization` for the caller. The two rows
+ * answer different questions and a helper that quietly created a second table's
+ * row would hide which one a test actually depends on.
+ */
+export async function ensureCompany(
+  executor: Pick<typeof db, 'insert'> = db,
+): Promise<void> {
+  await executor
+    .insert(companies)
+    .values({
+      id: FIRST_COMPANY_ID,
       legalName: 'Sample Contracting Ltd',
       displayName: 'Sample Contracting',
     })

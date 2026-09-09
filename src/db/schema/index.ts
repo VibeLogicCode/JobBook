@@ -3,6 +3,7 @@
 // table column produces columns of a type the migration never creates.
 export * from '@/db/enums';
 export * from '@/db/schema/organization';
+export * from '@/db/schema/companies';
 export * from '@/db/schema/customers';
 export * from '@/db/schema/rates';
 export * from '@/db/schema/quotes';
