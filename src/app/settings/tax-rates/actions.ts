@@ -19,6 +19,7 @@ import {
 } from '@/app/settings/validate';
 import { addDays } from '@/lib/quote/dates';
 import { overlapProblem } from '@/lib/quote/tax-overlap';
+import { primaryOf, readCompanies } from '@/lib/company/load';
 
 /**
  * Tax rates: versioned by effective date, never edited in place.
@@ -70,6 +71,37 @@ export async function addTaxRate(
   if (rate === null) return refused('A rate is required.');
 
   /**
+   * A rate belongs to a REGISTRANT, not to a deployment.
+   *
+   * `primaryCompany` returns null when there is more than one, and that
+   * refusal is deliberate rather than a gap: guessing which of two
+   * corporations a tax rate belongs to would put one company's HST number on
+   * the other's invoice, and the Input Tax Credit Information Regulations make
+   * that the customer's problem -- a defective credit on a document they have
+   * already filed.
+   *
+   * Unreachable today, because nothing in the product creates a second
+   * company. When "Add a company" lands, this screen grows a company selector
+   * and the refusal becomes the fallback rather than the rule.
+   */
+  /**
+   * The UNCACHED read, deliberately.
+   *
+   * `primaryCompany` is `cache()`-wrapped for page rendering, where several
+   * components in one request want the same two rows. An action does one read
+   * and shares it with nobody, so the cache buys nothing here -- and under
+   * test, where there is no request scope, it would hand this action whichever
+   * rows some earlier file happened to load.
+   */
+  const company = primaryOf(await readCompanies());
+  if (!company) {
+    return refused(
+      'This deployment has more than one company, so a tax rate has to say which one it ' +
+      'belongs to. Add the rate from that company’s own settings.',
+    );
+  }
+
+  /**
    * Read and checked INSIDE the writing transaction, not from the form.
    *
    * The picker and the list were rendered before this submit, so "what is in
@@ -86,7 +118,17 @@ export async function addTaxRate(
         effectiveTo: taxRates.effectiveTo,
       })
       .from(taxRates)
-      .where(and(eq(taxRates.isActive, true), eq(taxRates.recordStatus, 'active')));
+      .where(and(
+        // ONE COMPANY'S ROWS. `overlapProblem` compares on the label, which
+        // was the only identity a tax had while there was one registrant --
+        // so without this the second company's HST would be refused as a
+        // duplicate of the first's, and the refusal would tell the owner to
+        // supersede a row belonging to a corporation that is not the one he
+        // is editing. A correct guard producing a wrong refusal.
+        eq(taxRates.companyId, company.id),
+        eq(taxRates.isActive, true),
+        eq(taxRates.recordStatus, 'active'),
+      ));
 
     const clash = overlapProblem(rows, {
       label: parsed.data.label,
@@ -96,6 +138,7 @@ export async function addTaxRate(
     if (clash) return clash;
 
     await tx.insert(taxRates).values({
+      companyId: company.id,
       ...rest,
       rateTenThou: rate,
       createdBy: guard.actor.id,
@@ -172,6 +215,10 @@ export async function supersedeTaxRate(
         .where(eq(taxRates.id, id));
 
       await tx.insert(taxRates).values({
+        // From the row being superseded, not from a lookup. The successor to a
+        // rate is that registrant's rate by definition, and reading it here
+        // means the two rows cannot end up under different companies.
+        companyId: current.companyId,
         label: current.label,
         shortLabel: current.shortLabel,
         registrationNumber: current.registrationNumber,

@@ -2,23 +2,30 @@ import { eq, sql } from 'drizzle-orm';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { db } from '@/db/client';
 import { auditLog, documentSequences, organization, settings, taxRates, users } from '@/db/schema';
+import { FIRST_COMPANY_ID } from '@/lib/company/ids';
+import { ensureCompany } from '../support/organization';
+import { seedDeployment } from '../support/organization';
 
 beforeEach(async () => {
   await db.execute(
-    sql`truncate table audit_log, tax_rates, users, organization, document_sequences, settings restart identity cascade`,
+    sql`truncate table audit_log, tax_rates, users, organization, companies, document_sequences, settings restart identity cascade`,
   );
+  // Tax rates and document sequences both carry a NOT NULL company_id: a rate
+  // belongs to a registrant and a series belongs to a company, so neither can
+  // be inserted before one exists.
+  await ensureCompany();
 });
 
 describe('organization', () => {
   it('permits exactly one row', async () => {
-    await db.insert(organization).values({ id: 1, legalName: 'Acme Ltd', displayName: 'Acme' });
+    await seedDeployment({ id: 1, legalName: 'Acme Ltd', displayName: 'Acme' });
     await expect(
       db.insert(organization).values({ id: 2, legalName: 'Other Ltd', displayName: 'Other' }),
     ).rejects.toThrow();
   });
 
   it('stores fiscal year end as month and day, not a fixed date', async () => {
-    await db.insert(organization).values({
+    await seedDeployment({
       id: 1,
       legalName: 'Acme Ltd',
       displayName: 'Acme',
@@ -31,13 +38,13 @@ describe('organization', () => {
   });
 
   it('always has a timezone, because dates are computed in the tenant local day', async () => {
-    await db.insert(organization).values({ id: 1, legalName: 'Acme Ltd', displayName: 'Acme' });
+    await seedDeployment({ id: 1, legalName: 'Acme Ltd', displayName: 'Acme' });
     const [row] = await db.select().from(organization);
     expect(row?.timezone).toBeTruthy();
   });
 
   it('defers tax on holdback by default', async () => {
-    await db.insert(organization).values({ id: 1, legalName: 'Acme Ltd', displayName: 'Acme' });
+    await seedDeployment({ id: 1, legalName: 'Acme Ltd', displayName: 'Acme' });
     const [row] = await db.select().from(organization);
     expect(row?.taxDeferredOnHoldback).toBe(true);
   });
@@ -46,7 +53,7 @@ describe('organization', () => {
     // audit_log.record_id is text for exactly this reason. As uuid it could not
     // record the one table where every change is a branding, tax or holdback
     // setting, and the insert failed outright.
-    await db.insert(organization).values({ id: 1, legalName: 'Acme Ltd', displayName: 'Acme' });
+    await seedDeployment({ id: 1, legalName: 'Acme Ltd', displayName: 'Acme' });
     await db.update(organization).set({ phone: '555-0100' }).where(eq(organization.id, 1));
     const entries = await db.select().from(auditLog).where(eq(auditLog.recordId, '1'));
     expect(entries.map((e) => e.action)).toEqual(['insert', 'update']);
@@ -63,7 +70,7 @@ describe('organization', () => {
 
 describe('taxRates', () => {
   it('stores a rate in ten-thousandths with an open effective window', async () => {
-    await db.insert(taxRates).values({
+    await db.insert(taxRates).values({ companyId: FIRST_COMPANY_ID,
       label: 'HST',
       rateTenThou: 1300n,
       effectiveFrom: '2010-07-01',
@@ -79,8 +86,8 @@ describe('taxRates', () => {
     // Versioning, not editing in place: an old quote must still print the tax
     // it was signed at, and a filing period straddling a change must split.
     await db.insert(taxRates).values([
-      { label: 'HST', rateTenThou: 1300n, effectiveFrom: '2010-07-01', effectiveTo: '2026-03-31' },
-      { label: 'HST', rateTenThou: 1200n, effectiveFrom: '2026-04-01' },
+      { companyId: FIRST_COMPANY_ID, label: 'HST', rateTenThou: 1300n, effectiveFrom: '2010-07-01', effectiveTo: '2026-03-31' },
+      { companyId: FIRST_COMPANY_ID, label: 'HST', rateTenThou: 1200n, effectiveFrom: '2026-04-01' },
     ]);
     const rows = await db.select().from(taxRates);
     expect(rows).toHaveLength(2);
@@ -109,14 +116,14 @@ describe('users', () => {
 describe('documentSequences', () => {
   it('keys a counter by kind and year together', async () => {
     await db.insert(documentSequences).values([
-      { kind: 'quote', year: 2026, nextSeq: 7 },
-      { kind: 'invoice', year: 2026, nextSeq: 1 },
-      { kind: 'quote', year: 2027, nextSeq: 1 },
+      { companyId: FIRST_COMPANY_ID, kind: 'quote', year: 2026, nextSeq: 7 },
+      { companyId: FIRST_COMPANY_ID, kind: 'invoice', year: 2026, nextSeq: 1 },
+      { companyId: FIRST_COMPANY_ID, kind: 'quote', year: 2027, nextSeq: 1 },
     ]);
     const rows = await db.select().from(documentSequences);
     expect(rows).toHaveLength(3);
     await expect(
-      db.insert(documentSequences).values({ kind: 'quote', year: 2026, nextSeq: 99 }),
+      db.insert(documentSequences).values({ companyId: FIRST_COMPANY_ID, kind: 'quote', year: 2026, nextSeq: 99 }),
     ).rejects.toThrow();
   });
 });

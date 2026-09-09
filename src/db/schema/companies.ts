@@ -102,7 +102,15 @@ export const companies = pgTable('companies', {
   holdbackReleaseDays: integer('holdback_release_days').notNull().default(60),
 
   // terms
-  paymentTermsDays: integer('payment_terms_days').notNull().default(30),
+  /**
+   * NULLABLE, matching `organization` -- deliberately not defaulted to 30.
+   *
+   * `issueInvoice` reads this to compute a due date and writes null when it is
+   * null: "no stated terms" is a real position, and a default would invent a
+   * due date the customer never agreed to. That is the same class of error as
+   * a holdback percentage nobody asked for.
+   */
+  paymentTermsDays: integer('payment_terms_days'),
   paymentTermsText: text('payment_terms_text'),
   insuranceStatement: text('insurance_statement'),
   targetMarginBp: integer('target_margin_bp'),
@@ -126,6 +134,36 @@ export const companies = pgTable('companies', {
    * would not.
    */
   workPosture: workPostureEnum('work_posture').notNull().default('both'),
+
+  /**
+   * What distinguishes this company's document numbers from the other's.
+   *
+   * ---------------------------------------------------------------------------
+   * WHY THIS COLUMN HAS TO EXIST
+   * ---------------------------------------------------------------------------
+   *
+   * Each company runs its OWN series -- company one keeps its history and
+   * company two starts at 0001, which is what an auditor asks each registrant
+   * for. But `quotes.quote_number`, `customer_invoices.invoice_number` and
+   * `projects.project_number` are globally unique indexes, and those documents
+   * carry no company of their own: they reach one through their project. So
+   * two companies both numbering `INV-2026-0001` would collide on an index a
+   * long way from the cause.
+   *
+   * The prefix is therefore what has to differ, and `document_sequences` has a
+   * unique index on `(kind, year, prefix)` to refuse the clash at the source
+   * rather than let it surface as a failed insert on an invoice.
+   *
+   * So this is appended to the per-kind code: null or empty leaves company one
+   * issuing `INV-2026-0001` exactly as before, and a second company set to `S`
+   * issues `INVS-2026-0001`. Per KIND as well as per company, deliberately --
+   * one flat per-company prefix would make a quote and a change order both
+   * `NHS-2026-0001`, and they share `quotes.quote_number`.
+   *
+   * A person can also tell the two apart at a glance, which is worth more than
+   * the column costs.
+   */
+  documentCodeSuffix: text('document_code_suffix'),
 
   /** Where it sits in the picker. Ties fall back to the display name. */
   sortOrder: integer('sort_order').notNull().default(0),

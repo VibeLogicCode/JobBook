@@ -20,6 +20,7 @@ import { ProgressBar } from '@/components/ui/ProgressBar';
 import { SectionHeader } from '@/components/ui/SectionHeader';
 import { AmountCell, TableWrap } from '@/components/ui/Table';
 import { holdbackOutstandingCents, holdbackReleaseEligibleDate } from '@/lib/invoice/holdback';
+import { companyOf } from '@/lib/company/load';
 import { formatPercent, resolvePercentTenThou, type BillingKind } from '@/lib/invoice/percent';
 import {
   jobBillingState,
@@ -138,7 +139,19 @@ export default async function BillingPage({
   if (!job) notFound();
   const { project } = job;
 
-  const [org] = await db.select().from(organization).where(eq(organization.id, 1));
+  /**
+   * Both rows, because this screen reads one field from each.
+   *
+   * `timezone` is the deployment's -- two companies in one office cannot
+   * disagree about what today is. `holdbackReleaseDays` and
+   * `taxDeferredOnHoldback` are the ISSUER's: the release clock and the Excise
+   * Tax Act s.168(7) position belong to the corporation billing the job, and
+   * reading them from a fixed row told a reader about the other company's
+   * terms on this company's invoice.
+   */
+  const [org] = await db.select({ timezone: organization.timezone }).from(organization)
+    .where(eq(organization.id, 1));
+  const company = await companyOf(db, projectId);
   const today = tenantIsoToday(org?.timezone ?? 'UTC');
 
   const contract = await jobContract(projectId);
@@ -466,14 +479,14 @@ export default async function BillingPage({
                   ? null
                   : holdbackReleaseEligibleDate(
                       project.substantialPerformanceDate,
-                      org.holdbackReleaseDays,
+                      company.holdbackReleaseDays,
                     )
               }
             />
           </DetailList>
 
           <p className="mt-3 max-w-prose t-small text-muted">
-            {org?.taxDeferredOnHoldback
+            {company.taxDeferredOnHoldback
               ? 'Tax on a construction holdback is not payable until the holdback is paid out, so a progress invoice taxes the draw less the withholding, and a release invoice taxes what was deferred.'
               : 'This tenant is set up without the holdback tax deferral, so the whole draw is taxed when it is billed and a release taxes nothing.'}
           </p>

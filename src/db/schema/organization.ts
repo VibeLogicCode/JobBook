@@ -2,6 +2,7 @@ import { sql } from 'drizzle-orm';
 import { boolean, check, date, integer, pgTable, primaryKey, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { auditColumns, rate } from '@/db/columns';
 import { areaUnitEnum, filingFrequencyEnum, loginMethodEnum, roleEnum } from '@/db/enums';
+import { companies } from '@/db/schema/companies';
 
 /**
  * Single-row tenant configuration. Every company-specific string in the product
@@ -102,6 +103,24 @@ export const organization = pgTable('organization', {
  */
 export const taxRates = pgTable('tax_rates', {
   id: uuid('id').primaryKey().defaultRandom(),
+  /**
+   * Whose registration this rate is charged under.
+   *
+   * NOT NULL, and the single most consequential column in the two-companies
+   * change. Before it existed, `loadTaxRatesFor` returned every active rate
+   * with no filter and `computeTaxes` applied all of them that were in force
+   * -- so the day a second company's 13% HST row existed, EVERY quote in the
+   * deployment would have charged 26%. Silently, on a document a customer
+   * signs, with the arithmetic entirely innocent.
+   *
+   * Nothing downstream can be made to catch that, and nothing downstream
+   * should try: two rates in force together is legitimate and is why
+   * `isCompound` exists -- GST beside PST, Quebec stacking one on the other.
+   * A second province's tax and a second corporation's copy of the same tax
+   * are indistinguishable once they are both in the list. The filter has to be
+   * in the query.
+   */
+  companyId: uuid('company_id').notNull().references(() => companies.id),
   label: text('label').notNull(),
   shortLabel: text('short_label'),
   registrationNumber: text('registration_number'),
@@ -150,6 +169,17 @@ export const users = pgTable('users', {
  * project numbers incrementing the invoice counter.
  */
 export const documentSequences = pgTable('document_sequences', {
+  /**
+   * Whose series this is. Part of the PRIMARY KEY rather than an extra column,
+   * because the key IS the series identity and `allocateDocumentNumber`'s
+   * `ON CONFLICT` targets it.
+   *
+   * Company one keeps its history and company two starts at 0001. Nothing is
+   * ever renumbered -- an auditor asks each registrant for its own sequential
+   * series, and the existing principle that a gap is the record of a voided
+   * document stays true per company.
+   */
+  companyId: uuid('company_id').notNull().references(() => companies.id),
   kind: text('kind').notNull(),
   year: integer('year').notNull(),
   nextSeq: integer('next_seq').notNull().default(1),
@@ -162,7 +192,17 @@ export const documentSequences = pgTable('document_sequences', {
    */
   prefix: text('prefix'),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-}, (t) => [primaryKey({ columns: [t.kind, t.year] })]);
+}, (t) => [
+  primaryKey({ columns: [t.companyId, t.kind, t.year] }),
+  /**
+   * The global unique indexes on `invoice_number` and `project_number` stay,
+   * so global uniqueness now has to hold BY CONSTRUCTION: two companies both
+   * registering `INV` for the same kind and year would format two documents
+   * with the same number and the second insert would fail on an index a long
+   * way from here. Refused at the source instead.
+   */
+  uniqueIndex('document_sequences_kind_year_prefix_unique').on(t.kind, t.year, t.prefix),
+]);
 
 /**
  * Key/value machine state: update bookkeeping, sync cursors. NOT mirrored.

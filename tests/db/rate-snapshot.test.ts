@@ -13,6 +13,7 @@ import {
   rateItems,
 } from '@/db/schema';
 import { lineTotalCents } from '@/lib/money/scale';
+import { FIRST_COMPANY_ID } from '@/lib/company/ids';
 
 /**
  * Editing a rate item must never move the price of a quote already written.
@@ -67,7 +68,7 @@ async function seedQuoteFromRateItem() {
     .returning();
   const [project] = await db
     .insert(projects)
-    .values({
+    .values({ companyId: FIRST_COMPANY_ID,
       customerId: customer!.id,
       projectNumber: 'P-0001',
       name: 'Basement finish',

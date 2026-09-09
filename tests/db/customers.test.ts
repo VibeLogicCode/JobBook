@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { PROJECT_TYPE_IDS } from '@/db/seed/project-lists';
 import { db } from '@/db/client';
 import { costCodes, customers, projects } from '@/db/schema';
+import { FIRST_COMPANY_ID } from '@/lib/company/ids';
 
 beforeEach(async () => {
   await db.execute(
@@ -64,7 +65,7 @@ describe('projects', () => {
     const customer = await seedCustomer();
     const [row] = await db
       .insert(projects)
-      .values({
+      .values({ companyId: FIRST_COMPANY_ID,
         customerId: customer.id,
         projectNumber: 'P-0001',
         name: 'Basement finish',
@@ -86,9 +87,9 @@ describe('projects', () => {
       projectTypeId: PROJECT_TYPE_IDS.basement,
       stage: 'lead' as const,
     };
-    await db.insert(projects).values({ ...base, projectNumber: 'P-0001' });
+    await db.insert(projects).values({ companyId: FIRST_COMPANY_ID, ...base, projectNumber: 'P-0001' });
     await expect(
-      db.insert(projects).values({ ...base, projectNumber: 'P-0001' }),
+      db.insert(projects).values({ companyId: FIRST_COMPANY_ID, ...base, projectNumber: 'P-0001' }),
     ).rejects.toThrow();
   });
 
@@ -104,7 +105,7 @@ describe('projects', () => {
     const customer = await seedCustomer();
     const [row] = await db
       .insert(projects)
-      .values({
+      .values({ companyId: FIRST_COMPANY_ID,
         customerId: customer.id,
         projectNumber: 'P-0002',
         name: 'Addition',

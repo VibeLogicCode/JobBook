@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { PROJECT_TYPE_IDS } from '@/db/seed/project-lists';
 import { db } from '@/db/client';
 import {
-  activities, auditLog, customers, organization, projects, quotes, reminderRules, reminders, users,
+  activities, auditLog, customers, organization, companies, projects, quotes, reminderRules, reminders, users,
 } from '@/db/schema';
 import { DEFAULT_REMINDER_RULES, seedDefaultReminderRules } from '@/db/seed/reminder-rules';
 import { addDays, tenantToday } from '@/lib/quote/dates';
@@ -20,6 +20,8 @@ import {
   snoozeReminder,
   voidReminder,
 } from '@/lib/reminders/repository';
+import { FIRST_COMPANY_ID } from '@/lib/company/ids';
+import { seedDeployment } from '../support/organization';
 
 /**
  * The reminder spine, against a real database.
@@ -103,7 +105,7 @@ beforeEach(async () => {
     restart identity cascade
   `);
 
-  await db.insert(organization).values({
+  await seedDeployment({
     id: 1,
     legalName: 'Test Company Ltd',
     displayName: 'Test Company',
@@ -129,7 +131,7 @@ beforeEach(async () => {
 
   const [project] = await db
     .insert(projects)
-    .values({
+    .values({ companyId: FIRST_COMPANY_ID,
       customerId,
       projectNumber: 'P-0001',
       name: 'Basement finish',

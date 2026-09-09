@@ -14,6 +14,9 @@ vi.mock('next/cache', () => ({ revalidatePath: () => {} }));
 
 import { db } from '@/db/client';
 import { organization, settings, taxRates, users } from '@/db/schema';
+// After the mocks above, deliberately: this pulls in the database client,
+// and the module under test must not be loaded before they are installed.
+import { seedDeployment } from '../support/organization';
 import {
   acknowledgeEnvironmentStep,
   finishSetup,
@@ -152,7 +155,7 @@ beforeEach(async () => {
   // reaches it. settings holds the completion marker, so a leftover row would
   // close the wizard for every test after the one that finished it.
   await db.execute(sql`
-    truncate table audit_log, tax_rates, users, organization, document_sequences, settings
+    truncate table audit_log, tax_rates, users, organization, companies, document_sequences, settings
     restart identity cascade
   `);
 });
@@ -161,7 +164,7 @@ describe('the wizard refuses to run once a company exists', () => {
   it('closes the gate on a company it did not create', async () => {
     // The demo seed, or a restored backup: an organization row with no claim
     // by this wizard.
-    await db.insert(organization).values({
+    await seedDeployment({
       id: 1,
       legalName: 'Kestrel Joinery Incorporated',
       displayName: 'Kestrel Joinery',
@@ -174,7 +177,7 @@ describe('the wizard refuses to run once a company exists', () => {
   });
 
   it('refuses the first step, and leaves the existing company untouched', async () => {
-    await db.insert(organization).values({
+    await seedDeployment({
       id: 1,
       legalName: 'Kestrel Joinery Incorporated',
       displayName: 'Kestrel Joinery',
@@ -188,7 +191,7 @@ describe('the wizard refuses to run once a company exists', () => {
   });
 
   it('refuses a later step as well, so no step is a way in', async () => {
-    await db.insert(organization).values({
+    await seedDeployment({
       id: 1,
       legalName: 'Kestrel Joinery Incorporated',
       displayName: 'Kestrel Joinery',

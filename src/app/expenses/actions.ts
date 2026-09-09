@@ -245,6 +245,7 @@ async function resolveTaxLines(
   for (const line of lines) {
     const [chosen] = await tx
       .select({
+        companyId: taxRates.companyId,
         label: taxRates.label,
         registrationNumber: taxRates.registrationNumber,
         rateTenThou: taxRates.rateTenThou,
@@ -266,6 +267,23 @@ async function resolveTaxLines(
       .from(taxRates)
       .where(
         and(
+          /**
+           * Scoped to the CHOSEN row's own company, not just its label.
+           *
+           * This re-resolves "what was this tax on the expense date" by
+           * matching the label, which was the only identity a tax had while
+           * there was one registrant. With two, `HST` names two different
+           * taxes owed by two different corporations, and the `desc` ordering
+           * below would happily return the other one's row.
+           *
+           * That would be worse than a wrong total: `expense_taxes` snapshots
+           * `registration_number`, and that number is what an Input Tax Credit
+           * claim rests on. The wrong one makes the claim defective.
+           *
+           * Taken from the row the user actually picked, which knows its own
+           * company -- no project lookup needed.
+           */
+          eq(taxRates.companyId, chosen.companyId),
           eq(taxRates.label, chosen.label),
           eq(taxRates.recordStatus, 'active'),
           lte(taxRates.effectiveFrom, expenseDate),

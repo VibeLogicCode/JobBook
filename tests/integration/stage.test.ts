@@ -19,7 +19,11 @@ vi.mock('next/headers', () => ({
 
 import { db } from '@/db/client';
 import { customers, organization, projects, quotes, stageHistory, users } from '@/db/schema';
+// After the mocks above, deliberately: this pulls in the database client,
+// and the module under test must not be loaded before they are installed.
+import { seedDeployment } from '../support/organization';
 import { setProjectStage } from '@/app/projects/actions';
+import { FIRST_COMPANY_ID } from '@/lib/company/ids';
 
 /**
  * A job can never sit in a pre-sale stage, and `won` is not a stage anybody
@@ -53,11 +57,11 @@ beforeEach(async () => {
   await db.execute(sql`
     truncate table audit_log, stage_history, sessions, user_identities, quote_taxes, quote_lines,
     quotes, scope_template_items, scope_templates, rate_items, cost_codes, tax_rates,
-    projects, customers, users, organization, document_sequences
+    projects, customers, users, organization, companies, document_sequences
     restart identity cascade
   `);
 
-  await db.insert(organization).values({
+  await seedDeployment({
     id: 1,
     legalName: 'Test Company Ltd',
     displayName: 'Test Company',
@@ -80,7 +84,7 @@ beforeEach(async () => {
 
   const [opportunity] = await db
     .insert(projects)
-    .values({
+    .values({ companyId: FIRST_COMPANY_ID,
       customerId: customer!.id,
       projectNumber: 'P-0001',
       name: 'Nothing won yet',
@@ -92,7 +96,7 @@ beforeEach(async () => {
 
   const [job] = await db
     .insert(projects)
-    .values({
+    .values({ companyId: FIRST_COMPANY_ID,
       customerId: customer!.id,
       projectNumber: 'P-0002',
       name: 'Work under contract',

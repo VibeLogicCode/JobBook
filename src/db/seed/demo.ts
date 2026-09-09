@@ -1,3 +1,5 @@
+import { companies } from '@/db/schema';
+import { FIRST_COMPANY_ID } from '@/lib/company/ids';
 import { LEAD_SOURCE_IDS, PROJECT_TYPE_IDS } from '@/db/seed/project-lists';
 
 /**
@@ -53,7 +55,25 @@ export const DEMO_ORGANIZATION = {
   documentFooterText: 'Northgate Building Group Inc. · 905-555-0142 · quotes@northgate.example',
 };
 
+/**
+ * The demo company: everything on `DEMO_ORGANIZATION` that appears on a
+ * document, under the fixed first-company id.
+ *
+ * Derived from `DEMO_ORGANIZATION` rather than retyped, and filtered against
+ * the `companies` table so the deployment's own facts -- currency, locale,
+ * timezone, area unit -- stay behind. Two hand-written copies of the same
+ * letterhead is exactly the drift the split exists to remove, and the demo is
+ * what an evaluator sees.
+ */
+export const DEMO_COMPANY = {
+  ...Object.fromEntries(
+    Object.entries(DEMO_ORGANIZATION).filter(([key]) => key !== 'id' && key in companies),
+  ),
+  id: FIRST_COMPANY_ID,
+} as typeof companies.$inferInsert;
+
 export const DEMO_TAX_RATE = {
+  companyId: FIRST_COMPANY_ID,
   label: 'HST',
   shortLabel: 'HST',
   registrationNumber: '80000 1234 RT0001',

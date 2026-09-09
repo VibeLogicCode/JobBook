@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { companies, organization } from '@/db/schema';
 import { FIRST_COMPANY_ID } from '@/lib/company/ids';
-import { loadCompanies, primaryCompany } from '@/lib/company/load';
+import { primaryOf, readCompanies } from '@/lib/company/load';
 import { ensureCompany, ensureOrganization } from '../support/organization';
 
 /**
@@ -17,7 +17,13 @@ import { ensureCompany, ensureOrganization } from '../support/organization';
  */
 describe('companies', () => {
   beforeEach(async () => {
-    await db.delete(companies);
+    // TRUNCATE, not DELETE. The application role has no DELETE grant at all --
+    // `tests/db/expenses.test.ts` asserts that as an invariant -- because the
+    // no-delete rule is enforced by the database rather than by convention.
+    await db.execute(sql`
+      truncate table audit_log, tax_rates, organization, companies, document_sequences
+      restart identity cascade
+    `);
     await ensureOrganization();
     await ensureCompany();
   });
@@ -64,8 +70,14 @@ describe('companies', () => {
   });
 
   it('reads back as the primary company while there is one', async () => {
-    expect((await loadCompanies()).map((row) => row.id)).toEqual([FIRST_COMPANY_ID]);
-    expect((await primaryCompany())?.id).toBe(FIRST_COMPANY_ID);
+    // `readCompanies` and not `loadCompanies`: the cached export is scoped to
+    // a request, and there is no request here -- every test file shares one
+    // fork, so the memoised reader would hand this file whichever rows ran
+    // first in the suite. That is what made these tests pass alone and fail
+    // together.
+    const rows = await readCompanies();
+    expect(rows.map((row) => row.id)).toEqual([FIRST_COMPANY_ID]);
+    expect(primaryOf(rows)?.id).toBe(FIRST_COMPANY_ID);
   });
 
   it('has no primary company once there are two', async () => {
@@ -73,7 +85,7 @@ describe('companies', () => {
     // Null on ambiguity rather than "the first one". Guessing which of two
     // registrants issued a document would put the wrong HST number on it and
     // make the customer's tax credit defective.
-    expect(await primaryCompany()).toBeNull();
+    expect(primaryOf(await readCompanies())).toBeNull();
   });
 
   it('retires rather than deletes', async () => {
@@ -85,7 +97,10 @@ describe('companies', () => {
     // letterhead it was legally issued under. That is what makes merging two
     // companies back into one free.
     expect(second!.isActive).toBe(false);
-    expect((await loadCompanies()).map((row) => row.id)).toContain(second!.id);
-    expect((await primaryCompany())?.id).toBe(FIRST_COMPANY_ID);
+    const rows = await readCompanies();
+    expect(rows.map((row) => row.id)).toContain(second!.id);
+    // Retired, so it is not a candidate: one ACTIVE company is still
+    // unambiguous, which is what makes merging two back into one free.
+    expect(primaryOf(rows)?.id).toBe(FIRST_COMPANY_ID);
   });
 });

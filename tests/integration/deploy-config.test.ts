@@ -14,6 +14,9 @@ vi.mock('next/cache', () => ({ revalidatePath: () => {} }));
 
 import { db } from '@/db/client';
 import { auditLog, organization, settings, users } from '@/db/schema';
+// After the mocks above, deliberately: this pulls in the database client,
+// and the module under test must not be loaded before they are installed.
+import { seedDeployment } from '../support/organization';
 import {
   saveCompanyStep,
   saveContactStep,
@@ -220,7 +223,7 @@ beforeEach(async () => {
   // audit_log first and by name, as `setup.test.ts` does: the triggers write a
   // row per insert and no foreign key means cascade never reaches it.
   await db.execute(sql`
-    truncate table audit_log, tax_rates, users, organization, document_sequences, settings
+    truncate table audit_log, tax_rates, users, organization, companies, document_sequences, settings
     restart identity cascade
   `);
   await rm(path.join(scratch, 'config'), { recursive: true, force: true });
@@ -466,7 +469,7 @@ describe('what the step refuses', () => {
   });
 
   it('refuses to reconfigure a company this wizard did not create', async () => {
-    await db.insert(organization).values({
+    await seedDeployment({
       id: 1,
       legalName: 'Kestrel Joinery Incorporated',
       displayName: 'Kestrel Joinery',

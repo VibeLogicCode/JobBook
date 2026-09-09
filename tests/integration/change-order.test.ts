@@ -8,6 +8,8 @@ import {
 } from '@/db/schema';
 import { changeOrderLinesFromRateItems, createChangeOrder } from '@/lib/quote/change-order';
 import { contractValueCents, createQuoteFromTemplate } from '@/lib/quote/repository';
+import { FIRST_COMPANY_ID } from '@/lib/company/ids';
+import { seedDeployment } from '../support/organization';
 
 let projectId: string;
 let templateId: string;
@@ -17,11 +19,11 @@ beforeEach(async () => {
   await db.execute(sql`
     truncate table audit_log, stage_history, sessions, user_identities, quote_taxes, quote_lines,
     quotes, scope_template_items, scope_templates, rate_items, cost_codes, tax_rates,
-    projects, customers, users, organization, document_sequences
+    projects, customers, users, organization, companies, document_sequences
     restart identity cascade
   `);
 
-  await db.insert(organization).values({
+  await seedDeployment({
     id: 1,
     legalName: 'Acme Ltd',
     displayName: 'Acme',
@@ -29,7 +31,7 @@ beforeEach(async () => {
     quoteValidityDays: 30,
     defaultHoldbackPctTenThou: 1000n,
   });
-  await db.insert(taxRates).values({
+  await db.insert(taxRates).values({ companyId: FIRST_COMPANY_ID,
     label: 'HST',
     rateTenThou: 1300n,
     effectiveFrom: '2010-07-01',
@@ -42,7 +44,7 @@ beforeEach(async () => {
     .returning();
   const [project] = await db
     .insert(projects)
-    .values({
+    .values({ companyId: FIRST_COMPANY_ID,
       customerId: customer!.id,
       projectNumber: 'P-0001',
       name: 'Basement finish',

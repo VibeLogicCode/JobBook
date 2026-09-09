@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { PROJECT_TYPE_IDS } from '@/db/seed/project-lists';
 import { db } from '@/db/client';
 import { assignments, customers, projects, scheduleTasks, users, vendors } from '@/db/schema';
+import { FIRST_COMPANY_ID } from '@/lib/company/ids';
 
 /**
  * What the database refuses about who is on a task.
@@ -49,7 +50,7 @@ async function seedTask(name = 'Framing', start = '2026-03-02', end = '2026-03-1
     .returning();
   const [project] = await db
     .insert(projects)
-    .values({
+    .values({ companyId: FIRST_COMPANY_ID,
       customerId: customer!.id,
       projectNumber: `P-${Math.floor(Math.random() * 100000)}`,
       name: 'Sample job',

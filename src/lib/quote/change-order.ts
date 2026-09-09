@@ -1,7 +1,8 @@
 import { and, asc, eq } from 'drizzle-orm';
 import { db } from '@/db/client';
-import { customers, organization, projects, quoteLines, quoteTaxes, quotes, rateItems } from '@/db/schema';
+import { customers, projects, quoteLines, quoteTaxes, quotes, rateItems } from '@/db/schema';
 import { addDays, tenantToday, yearOf } from '@/lib/quote/dates';
+import { companyOf } from '@/lib/company/load';
 import { allocateDocumentNumber } from '@/lib/quote/numbering';
 import type { TaxRateInput } from '@/lib/quote/tax';
 import { computeQuote } from '@/lib/quote/totals';
@@ -72,9 +73,6 @@ export async function createChangeOrder(args: {
   }
 
   return db.transaction(async (tx) => {
-    const [org] = await tx.select().from(organization).where(eq(organization.id, 1));
-    if (!org) throw new Error('organization row is missing; run setup first');
-
     const [parent] = await tx.select().from(quotes).where(eq(quotes.id, args.parentQuoteId));
     if (!parent) throw new Error(`quote ${args.parentQuoteId} not found`);
     if (parent.recordStatus !== 'active') {
@@ -106,8 +104,19 @@ export async function createChangeOrder(args: {
       .where(and(eq(quotes.projectId, parent.projectId), eq(quotes.kind, 'change_order')));
     const sequence = siblings.reduce((max, row) => Math.max(max, row.sequence), 0) + 1;
 
+    /**
+     * The change order is issued by whoever issued the quote it amends.
+     *
+     * Read from the parent's project rather than a fixed row, and read BEFORE
+     * the rates because the rates are this company's rates: a change order
+     * priced against the other corporation's HST would be a wrong number on a
+     * signed amendment, and the validity window below would be the wrong
+     * company's too.
+     */
+    const company = await companyOf(tx, parent.projectId);
+
     const quoteDate = await tenantToday(tx);
-    const rates: TaxRateInput[] = await loadTaxRatesFor(tx);
+    const rates: TaxRateInput[] = await loadTaxRatesFor(tx, company.id);
 
     const inputs: LineInput[] = args.lines.map((line, index) => ({
       code: line.code,
@@ -134,7 +143,7 @@ export async function createChangeOrder(args: {
       customerExempt: customer?.isTaxExempt ?? false,
     });
 
-    const quoteNumber = await allocateDocumentNumber(tx, 'change_order', yearOf(quoteDate));
+    const quoteNumber = await allocateDocumentNumber(tx, 'change_order', company.id, yearOf(quoteDate));
 
     const [changeOrder] = await tx
       .insert(quotes)
@@ -148,7 +157,7 @@ export async function createChangeOrder(args: {
         scheduleImpactDays: args.scheduleImpactDays ?? null,
         version: 1,
         quoteDate,
-        validUntil: addDays(quoteDate, org.quoteValidityDays),
+        validUntil: addDays(quoteDate, company.quoteValidityDays),
         subtotalCents: totals.subtotalCents,
         taxTotalCents: totals.taxTotalCents,
         totalCents: totals.totalCents,

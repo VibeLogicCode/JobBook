@@ -1,11 +1,12 @@
 import { and, asc, eq } from 'drizzle-orm';
 import { db } from '@/db/client';
 import {
-  customers, organization, projects, quoteLines, quoteTaxes, quotes, rateItems,
+  customers, projects, quoteLines, quoteTaxes, quotes, rateItems,
   scopeTemplateItems, scopeTemplates, taxRates,
 } from '@/db/schema';
 import { addDays, tenantToday, yearOf } from '@/lib/quote/dates';
 import { loadTaxRatesFor } from '@/lib/quote/rates';
+import { companyOf } from '@/lib/company/load';
 import { allocateDocumentNumber } from '@/lib/quote/numbering';
 import type { TaxRateInput } from '@/lib/quote/tax';
 import { expandTemplate, type ScopeInputs, type TemplateItem } from '@/lib/quote/template';
@@ -17,11 +18,20 @@ export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 /** Revision is allowed only from these. See the note on reviseQuote. */
 const REVISABLE = ['sent', 'declined'] as const;
 
-async function requireOrganization(tx: Tx) {
-  const [org] = await tx.select().from(organization).where(eq(organization.id, 1));
-  if (!org) throw new Error('organization row is missing; run setup first');
-  return org;
-}
+/**
+ * Every default a new quote inherits comes from the COMPANY that issues it.
+ *
+ * This replaced a `select ... from organization where id = 1`, and the reason
+ * matters: not one of the values read here is a fact about the deployment.
+ * Quote validity, holdback percentage, quote terms and payment terms are all
+ * facts about a legal person, and reading them from a single fixed row put
+ * company one's terms and company one's holdback on company two's quote --
+ * silently, on a document the customer signs, which is the failure this whole
+ * split exists to prevent.
+ *
+ * Reached through the project, because that is where the company is stamped
+ * and a job never moves between companies.
+ */
 
 export async function customerExemptFor(tx: Tx, projectId: string): Promise<boolean> {
   const [row] = await tx
@@ -116,7 +126,7 @@ export async function createQuoteFromTemplate(args: {
   createdBy?: string;
 }): Promise<{ quoteId: string; quoteNumber: string }> {
   return db.transaction(async (tx) => {
-    const org = await requireOrganization(tx);
+    const company = await companyOf(tx, args.projectId);
     const customerExempt = await customerExemptFor(tx, args.projectId);
 
     const [template] = await tx
@@ -163,9 +173,9 @@ export async function createQuoteFromTemplate(args: {
 
     const quoteDate = args.quoteDate ?? (await tenantToday(tx));
     const lines = expandTemplate(templateItems, args.scope);
-    const totals = computeQuote(lines, await loadTaxRatesFor(tx), { onDate: quoteDate, customerExempt });
+    const totals = computeQuote(lines, await loadTaxRatesFor(tx, company.id), { onDate: quoteDate, customerExempt });
 
-    const quoteNumber = await allocateDocumentNumber(tx, 'quote', yearOf(quoteDate));
+    const quoteNumber = await allocateDocumentNumber(tx, 'quote', company.id, yearOf(quoteDate));
 
     const sequence = await nextEstimateSequence(tx, args.projectId);
 
@@ -178,7 +188,7 @@ export async function createQuoteFromTemplate(args: {
         sequence,
         version: 1,
         quoteDate,
-        validUntil: addDays(quoteDate, org.quoteValidityDays),
+        validUntil: addDays(quoteDate, company.quoteValidityDays),
         scopeTemplateId: args.scopeTemplateId,
         areaSqftMilli: args.scope.areaSqftMilli,
         washroomCount: args.scope.washroomCount,
@@ -189,9 +199,9 @@ export async function createQuoteFromTemplate(args: {
         totalCents: totals.totalCents,
         totalCostCents: totals.totalCostCents,
         marginBp: totals.marginBp,
-        holdbackPctTenThou: org.defaultHoldbackPctTenThou,
-        terms: org.quoteTermsText,
-        paymentTermsText: org.paymentTermsText,
+        holdbackPctTenThou: company.defaultHoldbackPctTenThou,
+        terms: company.quoteTermsText,
+        paymentTermsText: company.paymentTermsText,
         createdBy: args.createdBy,
       })
       .returning();
@@ -211,7 +221,7 @@ export async function createQuoteFromTemplate(args: {
  *
  * Everything else is identical to the template path, deliberately: the number
  * is allocated inside the transaction so an abandoned quote does not burn one,
- * the validity window comes from the organization, and the tax rows are
+ * the validity window comes from the issuing company, and the tax rows are
  * written even though the base is zero, because the quote must print its tax
  * lines from the moment it exists rather than gaining them on first edit.
  */
@@ -221,17 +231,17 @@ export async function createBlankQuote(args: {
   createdBy?: string;
 }): Promise<{ quoteId: string; quoteNumber: string }> {
   return db.transaction(async (tx) => {
-    const org = await requireOrganization(tx);
+    const company = await companyOf(tx, args.projectId);
     const customerExempt = await customerExemptFor(tx, args.projectId);
 
     const quoteDate = args.quoteDate ?? (await tenantToday(tx));
-    const totals = computeQuote([], await loadTaxRatesFor(tx), {
+    const totals = computeQuote([], await loadTaxRatesFor(tx, company.id), {
       onDate: quoteDate,
       customerExempt,
     });
 
     const sequence = await nextEstimateSequence(tx, args.projectId);
-    const quoteNumber = await allocateDocumentNumber(tx, 'quote', yearOf(quoteDate));
+    const quoteNumber = await allocateDocumentNumber(tx, 'quote', company.id, yearOf(quoteDate));
 
     const [quote] = await tx
       .insert(quotes)
@@ -242,7 +252,7 @@ export async function createBlankQuote(args: {
         sequence,
         version: 1,
         quoteDate,
-        validUntil: addDays(quoteDate, org.quoteValidityDays),
+        validUntil: addDays(quoteDate, company.quoteValidityDays),
         // No scopeTemplateId, so "regenerate from template" has nothing to
         // regenerate from and the worksheet is the only author of the lines.
         subtotalCents: totals.subtotalCents,
@@ -250,9 +260,9 @@ export async function createBlankQuote(args: {
         totalCents: totals.totalCents,
         totalCostCents: totals.totalCostCents,
         marginBp: totals.marginBp,
-        holdbackPctTenThou: org.defaultHoldbackPctTenThou,
-        terms: org.quoteTermsText,
-        paymentTermsText: org.paymentTermsText,
+        holdbackPctTenThou: company.defaultHoldbackPctTenThou,
+        terms: company.quoteTermsText,
+        paymentTermsText: company.paymentTermsText,
         createdBy: args.createdBy,
       })
       .returning();
@@ -279,8 +289,6 @@ export async function reviseQuote(args: {
   createdBy?: string;
 }): Promise<{ quoteId: string; version: number }> {
   return db.transaction(async (tx) => {
-    const org = await requireOrganization(tx);
-
     const [source] = await tx.select().from(quotes).where(eq(quotes.id, args.quoteId));
     if (!source) throw new Error(`quote ${args.quoteId} not found`);
     if (source.recordStatus !== 'active') {
@@ -329,8 +337,9 @@ export async function reviseQuote(args: {
     }));
 
     const quoteDate = await tenantToday(tx);
+    const company = await companyOf(tx, source.projectId);
     const customerExempt = await customerExemptFor(tx, source.projectId);
-    const totals = computeQuote(carried, await loadTaxRatesFor(tx), { onDate: quoteDate, customerExempt });
+    const totals = computeQuote(carried, await loadTaxRatesFor(tx, company.id), { onDate: quoteDate, customerExempt });
 
     // Superseded before the copy is inserted, so the partial unique index on
     // the accepted slot never sees two live rows at once.
@@ -350,7 +359,7 @@ export async function reviseQuote(args: {
         version: nextVersion,
         status: 'draft',
         quoteDate,
-        validUntil: addDays(quoteDate, org.quoteValidityDays),
+        validUntil: addDays(quoteDate, company.quoteValidityDays),
         scopeTemplateId: source.scopeTemplateId,
         areaSqftMilli: source.areaSqftMilli,
         washroomCount: source.washroomCount,

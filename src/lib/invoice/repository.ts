@@ -10,6 +10,7 @@ import { assertPercentTenThou } from '@/lib/invoice/progress';
 import type { ComputedInvoice, InvoiceKind, JobBillingState } from '@/lib/invoice/types';
 import { addDays, tenantToday, yearOf } from '@/lib/quote/dates';
 import { computeLine } from '@/lib/quote/lines';
+import { type Company, companyOf } from '@/lib/company/load';
 import { allocateDocumentNumber } from '@/lib/quote/numbering';
 import { loadTaxRatesFor } from '@/lib/quote/rates';
 import { customerExemptFor, type Tx } from '@/lib/quote/repository';
@@ -284,7 +285,16 @@ export interface PriceInvoiceArgs {
 }
 
 interface PricedInvoice {
-  org: typeof organization.$inferSelect;
+  /**
+   * The COMPANY issuing this invoice, not the deployment.
+   *
+   * Every field read off it here -- `taxDeferredOnHoldback`,
+   * `paymentTermsDays`, `holdbackReleaseDays` -- is a fact about a legal
+   * person, and two registrants under one owner disagree about all three. It
+   * was `organization` read at `id = 1`, which put company one's payment terms
+   * and company one's holdback release clock on company two's invoice.
+   */
+  company: Company;
   project: typeof projects.$inferSelect;
   contract: Contract;
   issueDate: string;
@@ -304,8 +314,7 @@ interface PricedInvoice {
  * whatever the state is by then -- but there is only one set of rules.
  */
 async function priceInvoice(tx: Tx, args: PriceInvoiceArgs): Promise<PricedInvoice> {
-  const [org] = await tx.select().from(organization).where(eq(organization.id, 1));
-  if (!org) throw new Error('organization row is missing; run setup first');
+  const company = await companyOf(tx, args.projectId);
 
   const [project] = await tx.select().from(projects).where(eq(projects.id, args.projectId));
   if (!project) throw new Error(`project ${args.projectId} not found`);
@@ -349,9 +358,9 @@ async function priceInvoice(tx: Tx, args: PriceInvoiceArgs): Promise<PricedInvoi
       depositApplyCents: args.depositApplyCents,
       releaseHoldbackCents: args.releaseHoldbackCents,
     },
-    await loadTaxRatesFor(tx),
+    await loadTaxRatesFor(tx, company.id),
     {
-      taxDeferredOnHoldback: org.taxDeferredOnHoldback,
+      taxDeferredOnHoldback: company.taxDeferredOnHoldback,
       customerExempt: await customerExemptFor(tx, args.projectId),
     },
   );
@@ -369,7 +378,7 @@ async function priceInvoice(tx: Tx, args: PriceInvoiceArgs): Promise<PricedInvoi
     );
   }
 
-  return { org, project, contract, issueDate, state, computed };
+  return { company, project, contract, issueDate, state, computed };
 }
 
 /** What the screen shows before anything is committed. */
@@ -403,7 +412,7 @@ export async function previewInvoice(args: PriceInvoiceArgs): Promise<InvoicePre
       computed: priced.computed,
       state: priced.state,
       holdbackPctTenThou: priced.contract.holdbackPctTenThou,
-      taxDeferredOnHoldback: priced.org.taxDeferredOnHoldback,
+      taxDeferredOnHoldback: priced.company.taxDeferredOnHoldback,
       issueDate: priced.issueDate,
     };
   });
@@ -421,9 +430,9 @@ export async function previewInvoice(args: PriceInvoiceArgs): Promise<InvoicePre
  */
 export async function issueInvoice(args: IssueInvoiceArgs): Promise<IssuedInvoice> {
   return db.transaction(async (tx) => {
-    const { org, project, contract, issueDate, computed } = await priceInvoice(tx, args);
+    const { company, project, contract, issueDate, computed } = await priceInvoice(tx, args);
 
-    const invoiceNumber = await allocateDocumentNumber(tx, 'invoice', yearOf(issueDate));
+    const invoiceNumber = await allocateDocumentNumber(tx, 'invoice', company.id, yearOf(issueDate));
     const status = args.status ?? 'draft';
 
     const [invoice] = await tx
@@ -439,7 +448,7 @@ export async function issueInvoice(args: IssueInvoiceArgs): Promise<IssuedInvoic
         // invented number: the statutory period differs by jurisdiction and the
         // product is white-label.
         dueDate:
-          org.paymentTermsDays === null ? null : addDays(issueDate, org.paymentTermsDays),
+          company.paymentTermsDays === null ? null : addDays(issueDate, company.paymentTermsDays),
         periodFrom: args.periodFrom ?? null,
         periodTo: args.periodTo ?? null,
         subtotalCents: computed.subtotalCents,
@@ -454,7 +463,7 @@ export async function issueInvoice(args: IssueInvoiceArgs): Promise<IssuedInvoic
         percentCompleteTenThou: computed.percentCompleteTenThou,
         previouslyBilledCents: computed.previouslyBilledCents,
         holdbackPctTenThou: contract.holdbackPctTenThou,
-        taxDeferredOnHoldback: org.taxDeferredOnHoldback,
+        taxDeferredOnHoldback: company.taxDeferredOnHoldback,
         notes: args.notes ?? null,
         createdBy: args.createdBy,
       })
@@ -472,7 +481,7 @@ export async function issueInvoice(args: IssueInvoiceArgs): Promise<IssuedInvoic
           ? null
           : holdbackReleaseEligibleDate(
               project.substantialPerformanceDate,
-              org.holdbackReleaseDays,
+              company.holdbackReleaseDays,
             ),
       createdBy: args.createdBy,
     });

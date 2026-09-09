@@ -3,12 +3,14 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { db } from '@/db/client';
 import { documentSequences, organization } from '@/db/schema';
 import { allocateDocumentNumber, tenantYear } from '@/lib/quote/numbering';
+import { FIRST_COMPANY_ID } from '@/lib/company/ids';
+import { seedDeployment } from '../support/organization';
 
 beforeEach(async () => {
   await db.execute(
     sql`truncate table audit_log, document_sequences, organization restart identity cascade`,
   );
-  await db.insert(organization).values({
+  await seedDeployment({
     id: 1,
     legalName: 'Acme Ltd',
     displayName: 'Acme',
@@ -16,8 +18,11 @@ beforeEach(async () => {
   });
 });
 
-const allocate = (kind: 'quote' | 'project' | 'invoice' | 'change_order', year?: number) =>
-  db.transaction((tx) => allocateDocumentNumber(tx, kind, year));
+const allocate = (
+  kind: 'quote' | 'project' | 'invoice' | 'change_order',
+  year?: number,
+  companyId: string = FIRST_COMPANY_ID,
+) => db.transaction((tx) => allocateDocumentNumber(tx, kind, companyId, year));
 
 describe('allocateDocumentNumber', () => {
   it('formats the prefix, year, and a zero-padded sequence', async () => {
@@ -57,7 +62,7 @@ describe('allocateDocumentNumber', () => {
   it('does not burn a number when the transaction rolls back', async () => {
     await expect(
       db.transaction(async (tx) => {
-        await allocateDocumentNumber(tx, 'quote', 2026);
+        await allocateDocumentNumber(tx, 'quote', FIRST_COMPANY_ID, 2026);
         throw new Error('abandoned');
       }),
     ).rejects.toThrow('abandoned');
@@ -65,7 +70,7 @@ describe('allocateDocumentNumber', () => {
   });
 
   it('honours a stored prefix over the built-in default', async () => {
-    await db.insert(documentSequences).values({
+    await db.insert(documentSequences).values({ companyId: FIRST_COMPANY_ID,
       kind: 'quote',
       year: 2026,
       nextSeq: 41,
@@ -75,7 +80,7 @@ describe('allocateDocumentNumber', () => {
   });
 
   it('keeps the stored prefix when the counter advances', async () => {
-    await db.insert(documentSequences).values({ kind: 'quote', year: 2026, prefix: 'EST' });
+    await db.insert(documentSequences).values({ companyId: FIRST_COMPANY_ID, kind: 'quote', year: 2026, prefix: 'EST' });
     await allocate('quote', 2026);
     const [row] = await db
       .select()

@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { PROJECT_TYPE_IDS } from '@/db/seed/project-lists';
 import { db } from '@/db/client';
 import { auditLog, customers, projects, stageHistory } from '@/db/schema';
+import { FIRST_COMPANY_ID } from '@/lib/company/ids';
 
 beforeEach(async () => {
   await db.execute(sql`
@@ -88,7 +89,7 @@ describe('stage history trigger', () => {
     const customer = await seedCustomer();
     const [project] = await db
       .insert(projects)
-      .values({
+      .values({ companyId: FIRST_COMPANY_ID,
         customerId: customer.id,
         projectNumber: 'P-0001',
         name: 'Basement finish',

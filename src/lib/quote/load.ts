@@ -7,6 +7,7 @@ import {
 import type {
   WireLine, WireQuote, WireRateItem, WireTax,
 } from '@/components/worksheet/types';
+import { type Company, companyOf } from '@/lib/company/load';
 import { computeQuote } from '@/lib/quote/totals';
 import type { LineInput } from '@/lib/quote/types';
 
@@ -27,6 +28,8 @@ export const loadQuote = cache(async (quoteId: string): Promise<{
   lines: WireLine[];
   taxes: WireTax[];
   rateItems: WireRateItem[];
+  /** The issuing company, whose letterhead and terms print on the document. */
+  company: Company;
 } | null> => {
   const [row] = await db
     .select({
@@ -44,7 +47,18 @@ export const loadQuote = cache(async (quoteId: string): Promise<{
 
   if (!row) return null;
 
+  /**
+   * BOTH rows, because this loader wants one field from each.
+   *
+   * `targetMarginBp` is a fact about a legal person -- two corporations under
+   * one owner price to different margins -- and `areaUnit` is a fact about the
+   * deployment, since two companies sharing one office measure in the same
+   * units. This is the only reader in the codebase that legitimately needs the
+   * pair, and naming both here is cheaper than pretending one of them belongs
+   * to the other.
+   */
   const [org] = await db.select().from(organization).where(eq(organization.id, 1));
+  const company = await companyOf(db, row.quote.projectId);
 
   const lineRows = await db
     .select()
@@ -119,7 +133,7 @@ export const loadQuote = cache(async (quoteId: string): Promise<{
       totalCostCents: row.quote.totalCostCents,
       marginBp: row.quote.marginBp,
       optionalTotalCents: display.optionalTotalCents,
-      targetMarginBp: org?.targetMarginBp ?? null,
+      targetMarginBp: company.targetMarginBp,
       areaUnit: org?.areaUnit ?? 'sqft',
     },
     lines: lineRows.map((line, index) => ({
@@ -155,5 +169,20 @@ export const loadQuote = cache(async (quoteId: string): Promise<{
       unitLabel: item.unitLabel,
       sellRateTenThou: item.sellRateTenThou.toString(),
     })),
+    /**
+     * The company that issued this quote, returned rather than re-queried.
+     *
+     * The print route needs the whole letterhead -- name, address, HST
+     * registration number, logo, terms -- and it already has to go through this
+     * loader to get the quote. A second `companyOf` call there would be a
+     * second query for a row this function has already read, and worse, a
+     * second PLACE that decides whose letterhead a document carries.
+     *
+     * Nothing here is confidential: every field prints on the document the
+     * customer receives. That distinguishes it from the cost and margin figures
+     * `specs/2026-09-05-estimator-role-design.md` is careful about, which must
+     * not enter the payload at all.
+     */
+    company,
   };
 });

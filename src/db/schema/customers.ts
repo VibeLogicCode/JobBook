@@ -2,6 +2,7 @@ import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 import { boolean, date, index, integer, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { auditColumns } from '@/db/columns';
 import { contractTypeEnum, customerTypeEnum, projectStageEnum } from '@/db/enums';
+import { companies } from '@/db/schema/companies';
 import { leadSources, projectTypes } from '@/db/schema/project-lists';
 
 export const customers = pgTable('customers', {
@@ -42,6 +43,29 @@ export const customers = pgTable('customers', {
 export const projects = pgTable('projects', {
   id: uuid('id').primaryKey().defaultRandom(),
   customerId: uuid('customer_id').notNull().references(() => customers.id),
+  /**
+   * Which company issued this job -- and therefore whose letterhead, whose HST
+   * registration number and whose invoice series every document under it
+   * carries.
+   *
+   * ON `projects`, AND NOWHERE ELSE. Quotes, invoices, expenses, holdback
+   * ledger rows and schedule tasks all reach here through a NOT NULL foreign
+   * key of their own, and every loader already joins projects for the customer
+   * name, so the join is free. Because a job never moves between companies
+   * (the owner's answer, and the thing that makes this shape safe) there is no
+   * update anomaly to defend against -- which is exactly what that answer
+   * buys. If a per-company audit view is ever genuinely wanted, backfilling
+   * `company_id` onto the document tables from here is one mechanical
+   * statement with no ambiguity. Spend it then.
+   *
+   * NOT NULL from the first migration, deliberately. Every job that existed
+   * before companies did was company one's, because company one is the only
+   * company that has ever existed -- so it is correctly stamped now, and
+   * adding a second company later needs no data migration. A nullable column
+   * would push that migration to the day the owner incorporates, which is the
+   * worst possible moment for it.
+   */
+  companyId: uuid('company_id').notNull().references(() => companies.id),
   projectNumber: text('project_number').notNull(),
   name: text('name').notNull(),
   siteAddressLine1: text('site_address_line1'),

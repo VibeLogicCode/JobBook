@@ -67,3 +67,70 @@ export async function ensureCompany(
     })
     .onConflictDoNothing();
 }
+
+/**
+ * Seeds a deployment AND its first company from one set of values.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY THIS EXISTS, AND WHY IT IS NOT SEVENTEEN LITERALS
+ * ---------------------------------------------------------------------------
+ *
+ * Seventeen test files wrote `db.insert(organization).values({ ... })` with
+ * their own literal, and every one of them now also needs the `companies` row
+ * that the same values describe -- because holdback percentages, quote terms,
+ * payment terms and validity windows are read from the COMPANY now, not from
+ * the deployment.
+ *
+ * Adding a second literal to each file would put the same letterhead in two
+ * places in seventeen files, and the first test to update one and not the
+ * other would pass while asserting something the product does not do. So the
+ * split is applied HERE, once, deriving the company's half from the same
+ * object -- exactly the argument `ensureOrganization` above makes for its own
+ * existence, and the §9 lesson applied a second time.
+ *
+ * The filter is against the `companies` table object rather than a list of
+ * names, so a column added to it later is picked up for free and a deployment
+ * fact -- `timezone`, `currency` -- cannot be smuggled across by a typo.
+ *
+ * Values are given ONCE, in the shape `organization` takes. Anything the
+ * company also owns is copied; anything only the company owns can be passed in
+ * `companyOnly`.
+ */
+export async function seedDeployment(
+  values: typeof organization.$inferInsert,
+  companyOnly: Partial<typeof companies.$inferInsert> = {},
+): Promise<void> {
+  await db.insert(organization).values(values);
+
+  const shared = Object.fromEntries(
+    Object.entries(values).filter(([key]) => key !== 'id' && key in companies),
+  );
+
+  const company = {
+    ...shared,
+    ...companyOnly,
+    id: FIRST_COMPANY_ID,
+    legalName: values.legalName,
+    displayName: values.displayName,
+  } as typeof companies.$inferInsert;
+
+  /**
+   * Upsert, not insert.
+   *
+   * A file may have called `ensureCompany()` in its `beforeEach` -- because
+   * tax rates and document sequences cannot be written before a company exists
+   * -- and then call this inside a test to state the letterhead it actually
+   * wants to assert against. A plain insert makes those two mutually
+   * exclusive, and the order they run in is not something a test author should
+   * have to reason about.
+   *
+   * Update rather than ignore, because the caller is DECLARING the letterhead:
+   * `onConflictDoNothing` would silently leave the placeholder in place and
+   * the test would assert against 'Sample Contracting' while its own literal
+   * said 'Acme Ltd'.
+   */
+  await db
+    .insert(companies)
+    .values(company)
+    .onConflictDoUpdate({ target: companies.id, set: company });
+}

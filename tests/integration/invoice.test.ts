@@ -3,12 +3,13 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { PROJECT_TYPE_IDS } from '@/db/seed/project-lists';
 import { db } from '@/db/client';
 import {
-  customerInvoiceTaxes, customerInvoices, customers, holdbackLedger, organization, projects,
-  quotes, taxRates,
+  companies, customerInvoiceTaxes, customerInvoices, customers, holdbackLedger, organization, projects, quotes, taxRates,
 } from '@/db/schema';
 import {
   issueInvoice, jobBillingState, listProjectInvoices, loadInvoice, voidInvoice,
 } from '@/lib/invoice/repository';
+import { FIRST_COMPANY_ID } from '@/lib/company/ids';
+import { seedDeployment } from '../support/organization';
 
 /**
  * The figures divide cleanly, so a wrong answer is obvious rather than
@@ -34,11 +35,11 @@ beforeEach(async () => {
     truncate table audit_log, stage_history, holdback_ledger, customer_invoice_taxes,
     customer_invoice_lines, customer_invoices, quote_taxes, quote_lines, quotes,
     scope_template_items, scope_templates, rate_items, cost_codes, tax_rates,
-    projects, customers, users, organization, document_sequences
+    projects, customers, users, organization, companies, document_sequences
     restart identity cascade
   `);
 
-  await db.insert(organization).values({
+  await seedDeployment({
     id: 1,
     legalName: 'Test Company Ltd',
     displayName: 'Test Company',
@@ -50,7 +51,7 @@ beforeEach(async () => {
     holdbackReleaseDays: 60,
     paymentTermsDays: 28,
   });
-  await db.insert(taxRates).values({
+  await db.insert(taxRates).values({ companyId: FIRST_COMPANY_ID,
     label: 'Sales tax',
     rateTenThou: TAX_13,
     effectiveFrom: '2010-07-01',
@@ -65,7 +66,7 @@ beforeEach(async () => {
 
   const [project] = await db
     .insert(projects)
-    .values({
+    .values({ companyId: FIRST_COMPANY_ID,
       customerId: customerId,
       projectNumber: 'P-0001',
       name: 'Lower level fit-out',
@@ -300,10 +301,13 @@ describe('the deposit', () => {
 
 describe('a jurisdiction without the holdback deferral', () => {
   beforeEach(async () => {
+      // On the COMPANY, not the deployment. The deferral under Excise Tax Act
+      // s.168(7) is a property of the registrant issuing the invoice, and two
+      // corporations under one owner can be in different positions on it.
     await db
-      .update(organization)
+      .update(companies)
       .set({ taxDeferredOnHoldback: false })
-      .where(eq(organization.id, 1));
+      .where(eq(companies.id, FIRST_COMPANY_ID));
   });
 
   it('taxes the whole progress amount and leaves the release untaxed', async () => {
@@ -339,9 +343,9 @@ describe('a jurisdiction without the holdback deferral', () => {
     await acceptContract();
     const draw = await issue({ percentCompleteTenThou: 2500n });
     await db
-      .update(organization)
+      .update(companies)
       .set({ taxDeferredOnHoldback: true })
-      .where(eq(organization.id, 1));
+      .where(eq(companies.id, FIRST_COMPANY_ID));
 
     const row = await headerOf(draw.invoiceId);
     expect(row.taxDeferredOnHoldback).toBe(false);
@@ -355,7 +359,7 @@ describe('the tax snapshot', () => {
     const draw = await issue({ percentCompleteTenThou: 2500n });
 
     await db.update(taxRates).set({ effectiveTo: '2026-09-30' }).where(eq(taxRates.rateTenThou, TAX_13));
-    await db.insert(taxRates).values({
+    await db.insert(taxRates).values({ companyId: FIRST_COMPANY_ID,
       label: 'Sales tax',
       rateTenThou: 1500n,
       effectiveFrom: '2026-10-01',
@@ -372,7 +376,7 @@ describe('the tax snapshot', () => {
   it('charges the rate in force on the issue date, not the rate configured today', async () => {
     await acceptContract();
     await db.update(taxRates).set({ effectiveTo: '2026-09-30' }).where(eq(taxRates.rateTenThou, TAX_13));
-    await db.insert(taxRates).values({
+    await db.insert(taxRates).values({ companyId: FIRST_COMPANY_ID,
       label: 'Sales tax',
       rateTenThou: 1500n,
       effectiveFrom: '2026-10-01',

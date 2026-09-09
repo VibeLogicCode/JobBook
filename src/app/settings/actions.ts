@@ -4,11 +4,12 @@ import { eq } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { db } from '@/db/client';
-import { organization } from '@/db/schema';
+import { companies, organization } from '@/db/schema';
 import { requireCapability } from '@/app/settings/actor';
 import { percentField } from '@/app/settings/percent-schema';
 import { parseRateToTenThou } from '@/lib/money/format';
 import { type ActionResult, refused, saved } from '@/app/settings/result';
+import { primaryOf, readCompanies } from '@/lib/company/load';
 import {
   checkbox,
   formValues,
@@ -30,11 +31,51 @@ import {
  * end up hardcoded instead.
  */
 
-/** Applies a patch to the single organization row. */
+/**
+ * Applies a patch to the deployment row and to the company it describes.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY ONE FUNCTION WRITES TWO TABLES
+ * ---------------------------------------------------------------------------
+ *
+ * Every settings section funnels through here, and the fields they submit
+ * belong to two different things: `timezone` and `currency` are the
+ * DEPLOYMENT's, while the legal name, the HST registration number, the
+ * holdback terms and the quote footer are the ISSUING COMPANY's. A settings
+ * screen should not have to know which, and asking each of the five sections
+ * to route its own fields would be five chances to route one wrongly.
+ *
+ * So the split happens once, here, derived from the `companies` table object
+ * rather than a hand-written list of names -- the same mechanism
+ * `app/setup/actions.ts` uses, and for the same reason: a column added to
+ * `companies` later is carried across for free, and a deployment fact cannot
+ * be smuggled into a company row by a typo.
+ *
+ * WITH TWO COMPANIES this refuses rather than guessing. Writing a legal name
+ * or an HST number to whichever company sorted first would put it on the wrong
+ * corporation's letterhead, and the person would have no way to tell from this
+ * screen that it had happened. The per-company settings screens are where that
+ * choice belongs.
+ */
 async function patchOrganization(
   patch: Record<string, unknown>,
   message: string,
 ): Promise<ActionResult> {
+  const companyOwned = Object.fromEntries(
+    Object.entries(patch).filter(([key]) => key in companies),
+  );
+
+  if (Object.keys(companyOwned).length > 0) {
+    const company = primaryOf(await readCompanies());
+    if (!company) {
+      return refused(
+        'This deployment has more than one company, so these fields have to say which one they ' +
+        'belong to. Edit them from that company’s own settings.',
+      );
+    }
+    await db.update(companies).set(companyOwned).where(eq(companies.id, company.id));
+  }
+
   const rows = await db
     .update(organization)
     .set(patch)

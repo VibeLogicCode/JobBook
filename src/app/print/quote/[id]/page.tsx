@@ -49,16 +49,25 @@ export default async function PrintQuote({ params }: { params: Promise<{ id: str
   const data = await loadQuote(id);
   if (!data) notFound();
 
-  const [org] = await db.select().from(organization).where(eq(organization.id, 1));
-  if (!org) notFound();
+  /**
+   * The COMPANY that issued this quote, from the loader that read the quote.
+   *
+   * This was `organization` at `id = 1`, which was correct for exactly as long
+   * as one company existed. With two it put company one's legal name, HST
+   * registration number and logo on company two's quote -- silently, on a
+   * document the customer signs, and with nothing on the page to suggest
+   * anything was wrong. The letterhead is a fact about the issuer, and the
+   * issuer is a fact about the job.
+   */
+  const company = data.company;
 
   // Inlined, because Chromium fetches this page with only the render secret and
   // would get a 401 from the authenticated file route -- the customer would
   // receive a contract with a broken image where the letterhead should be.
-  const logo = await logoDataUri(org.logoFileId);
+  const logo = await logoDataUri(company.logoFileId);
 
   const { quote, lines, taxes } = data;
-  const holdbackNotice = holdbackNoticeFor(quote.holdbackPctTenThou, org.holdbackTermsText);
+  const holdbackNotice = holdbackNoticeFor(quote.holdbackPctTenThou, company.holdbackTermsText);
   const included = lines.filter((line) => line.isIncluded);
   const upgrades = lines.filter((line) => !line.isIncluded);
 
@@ -118,18 +127,18 @@ export default async function PrintQuote({ params }: { params: Promise<{ id: str
           {logo ? (
             // eslint-disable-next-line @next/next/no-img-element -- a data URI
             // must not go through the image optimiser, which would fetch it.
-            <img src={logo} alt={org.displayName} className="logo" />
+            <img src={logo} alt={company.displayName} className="logo" />
           ) : null}
-          <h1 className="company">{org.displayName}</h1>
-          {org.tagline ? <p className="tagline">{org.tagline}</p> : null}
+          <h1 className="company">{company.displayName}</h1>
+          {company.tagline ? <p className="tagline">{company.tagline}</p> : null}
           <p className="contact">
-            {[org.addressLine1, org.city, org.province, org.postalCode].filter(Boolean).join(', ')}
-            {org.phone ? ` · ${org.phone}` : ''}
-            {org.email ? ` · ${org.email}` : ''}
+            {[company.addressLine1, company.city, company.province, company.postalCode].filter(Boolean).join(', ')}
+            {company.phone ? ` · ${company.phone}` : ''}
+            {company.email ? ` · ${company.email}` : ''}
           </p>
-          {org.taxRegistrationNumber ? (
+          {company.taxRegistrationNumber ? (
             <p className="contact">
-              {org.taxRegistrationLabel ?? 'Tax number'}: {org.taxRegistrationNumber}
+              {company.taxRegistrationLabel ?? 'Tax number'}: {company.taxRegistrationNumber}
             </p>
           ) : null}
         </div>
@@ -365,22 +374,22 @@ export default async function PrintQuote({ params }: { params: Promise<{ id: str
         * `lib/quote/holdback-notice.ts` for why the rule is a tested function
         * rather than a condition here.
         */}
-      {holdbackNotice || org.paymentTermsText ? (
+      {holdbackNotice || company.paymentTermsText ? (
         <section className="terms">
           <h3>Payment</h3>
-          {org.paymentTermsText ? <p>{org.paymentTermsText}</p> : null}
+          {company.paymentTermsText ? <p>{company.paymentTermsText}</p> : null}
           {holdbackNotice ? <p>{holdbackNotice}</p> : null}
         </section>
       ) : null}
 
-      {org.quoteTermsText ? (
+      {company.quoteTermsText ? (
         <section className="terms">
           <h3>Terms</h3>
-          <p>{org.quoteTermsText}</p>
+          <p>{company.quoteTermsText}</p>
         </section>
       ) : null}
 
-      {org.insuranceStatement ? <p className="note">{org.insuranceStatement}</p> : null}
+      {company.insuranceStatement ? <p className="note">{company.insuranceStatement}</p> : null}
 
       <section className="signature">
         <div>
@@ -393,7 +402,7 @@ export default async function PrintQuote({ params }: { params: Promise<{ id: str
         </div>
       </section>
 
-      {org.documentFooterText ? <footer className="note">{org.documentFooterText}</footer> : null}
+      {company.documentFooterText ? <footer className="note">{company.documentFooterText}</footer> : null}
     </div>
   );
 }

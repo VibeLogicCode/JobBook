@@ -2,6 +2,7 @@ import { and, asc, eq, inArray, ne } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { projectStageEnum } from '@/db/enums';
 import { customers, projects, quoteLines, quoteTaxes, quotes } from '@/db/schema';
+import { companyOf } from '@/lib/company/load';
 import { loadTaxRatesFor } from '@/lib/quote/rates';
 // Shared with the quote repository rather than copied. Two implementations of
 // the writer that snapshots tax rows drift the first time a column is added to
@@ -321,7 +322,12 @@ export async function acceptQuoteLines(
      * different total on it.
      */
     const customerExempt = await customerExemptFor(tx, source.projectId);
-    const totals = computeQuote(inputs, await loadTaxRatesFor(tx), {
+    // The issuer of the quote being accepted, which is the same company by
+    // definition -- a job never moves. Its rates, because the acceptance
+    // re-computes under the SOURCE quote's date and must not pick up the other
+    // registrant's tax.
+    const company = await companyOf(tx, source.projectId);
+    const totals = computeQuote(inputs, await loadTaxRatesFor(tx, company.id), {
       onDate: source.quoteDate,
       customerExempt,
     });

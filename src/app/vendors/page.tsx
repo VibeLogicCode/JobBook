@@ -1,8 +1,9 @@
 import type { Metadata } from 'next';
 import { and, asc, eq, ne, sql } from 'drizzle-orm';
 import { db } from '@/db/client';
-import { costCodes, organization, trades, vendorTypes, vendors } from '@/db/schema';
+import { costCodes, trades, vendorTypes, vendors } from '@/db/schema';
 import { ensureVendorLists } from '@/db/seed/vendor-lists';
+import { defaultProvince } from '@/lib/company/load';
 import { resolveActor } from '@/app/settings/actor';
 import { can } from '@/lib/auth/permissions';
 import {
@@ -128,7 +129,10 @@ export default async function VendorsPage({
   const hiddenCount = all.filter(isHidden).length;
   const rows = showRetired ? all : all.filter((row) => !isHidden(row));
 
-  const [org] = await db.select({ province: organization.province }).from(organization);
+  // The issuing company's province, as a pre-fill only. Blank when there are
+  // two companies -- a shared vendor belongs to neither, so there is no
+  // company to ask even in principle.
+  const province = await defaultProvince();
 
   // Every type and every trade, retired and voided included. A vendor already
   // carrying one has to go on displaying it -- retiring "Roofing" must not
@@ -407,7 +411,7 @@ export default async function VendorsPage({
             // Defaulted from the company's own province rather than from a
             // constant: a province written into the product is a tenant's
             // region hardcoded for every other company that buys it.
-            defaultValue={row ? row.province : (org?.province ?? '')}
+            defaultValue={row ? row.province : (province ?? '')}
             disabled={disabled}
           />
           <TextField

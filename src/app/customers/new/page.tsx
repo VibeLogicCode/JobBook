@@ -1,6 +1,7 @@
 import { asc, eq } from 'drizzle-orm';
 import { db } from '@/db/client';
-import { leadSources, organization } from '@/db/schema';
+import { leadSources } from '@/db/schema';
+import { defaultProvince } from '@/lib/company/load';
 import { createCustomer } from '@/app/customers/actions';
 import { CustomerForm } from '@/components/detail/CustomerForm';
 import { Panel } from '@/components/detail/Panel';
@@ -10,12 +11,17 @@ export const dynamic = 'force-dynamic';
 
 export default async function NewCustomerPage() {
   /**
-   * The province default comes from the organization record and nowhere else.
-   * The column carries no database default because that would hardcode one
-   * tenant's region into every deployment, and a contractor who works across a
-   * border still has to be able to change it on the row in front of them.
+   * The province default comes from the issuing company's own address and
+   * nowhere else. The column carries no database default because that would
+   * hardcode one tenant's region into every deployment, and a contractor who
+   * works across a border still has to be able to change it on the row in
+   * front of them.
+   *
+   * Null when there is more than one company: two addresses have no single
+   * answer, and a wrong pre-filled province is harder to notice than a blank
+   * one, because nobody re-reads a field they did not have to fill in.
    */
-  const [org] = await db.select().from(organization).where(eq(organization.id, 1));
+  const province = await defaultProvince();
 
   // Only active, non-void: this is a brand-new customer, so there is no
   // existing value to append a retired option for.
@@ -36,7 +42,7 @@ export default async function NewCustomerPage() {
         <CustomerForm
           action={createCustomer}
           leadSources={leadSourceList}
-          defaultProvince={org?.province ?? ''}
+          defaultProvince={province ?? ''}
           cancelHref="/customers"
           submitLabel="Create customer"
         />

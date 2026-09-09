@@ -1,0 +1,13 @@
+-- What keeps two companies' document numbers apart.
+--
+-- Each company runs its own series, but `quotes.quote_number`,
+-- `customer_invoices.invoice_number` and `projects.project_number` are
+-- globally unique and carry no company of their own -- they reach one through
+-- their project. So two companies both numbering INV-2026-0001 would collide
+-- on an index a long way from the cause, and `document_sequences` refuses them
+-- the same (kind, year, prefix) to stop it at the source.
+--
+-- Nullable, and null for every existing row: company one goes on issuing
+-- INV-2026-0001 exactly as before. A second company set to 'S' issues
+-- INVS-2026-0001.
+ALTER TABLE "companies" ADD COLUMN "document_code_suffix" text;

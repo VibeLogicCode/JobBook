@@ -1,6 +1,7 @@
 import { and, asc, eq } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { customers, projects, quoteLines, quoteTaxes, quotes, taxRates } from '@/db/schema';
+import { companyOf } from '@/lib/company/load';
 import { loadTaxRatesFor } from '@/lib/quote/rates';
 import { computeQuote } from '@/lib/quote/totals';
 import type { LineInput } from '@/lib/quote/types';
@@ -58,7 +59,12 @@ export async function recalculateQuote(quoteId: string): Promise<void> {
       costCodeId: line.costCodeId,
     }));
 
-    const rates: TaxRateInput[] = await loadTaxRatesFor(tx);
+    // The quote's own issuer. A recalculation must not change which
+    // registrant's tax a quote carries -- that is the one thing it is not
+    // allowed to move, since the document may already be in a customer's
+    // hands.
+    const company = await companyOf(tx, quote.projectId);
+    const rates: TaxRateInput[] = await loadTaxRatesFor(tx, company.id);
 
     const totals = computeQuote(inputs, rates, {
       onDate: quote.quoteDate,

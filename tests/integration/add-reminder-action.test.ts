@@ -23,11 +23,15 @@ vi.mock('next/headers', () => ({
 }));
 
 import { db } from '@/db/client';
-import { customers, organization, projects, quotes, reminders, users } from '@/db/schema';
+import { customers, organization, companies, projects, quotes, reminders, users } from '@/db/schema';
+// After the mocks above, deliberately: this pulls in the database client,
+// and the module under test must not be loaded before they are installed.
+import { seedDeployment } from '../support/organization';
 import { createReminderAction } from '@/app/reminders/actions';
 import { addDays, tenantToday } from '@/lib/quote/dates';
 import { listReminders } from '@/lib/reminders/repository';
 import type { FormResult } from '@/components/detail/form-state';
+import { FIRST_COMPANY_ID } from '@/lib/company/ids';
 
 /**
  * A reminder somebody wrote by hand.
@@ -96,7 +100,7 @@ beforeEach(async () => {
     restart identity cascade
   `);
 
-  await db.insert(organization).values({
+  await seedDeployment({
     id: 1,
     legalName: 'Test Company Ltd',
     displayName: 'Test Company',
@@ -128,7 +132,7 @@ beforeEach(async () => {
 
   const [project] = await db
     .insert(projects)
-    .values({
+    .values({ companyId: FIRST_COMPANY_ID,
       customerId,
       projectNumber: 'P-0001',
       name: 'Basement finish',

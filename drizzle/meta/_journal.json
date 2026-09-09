@@ -148,6 +148,27 @@
       "when": 1788981632162,
       "tag": "0020_companies",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1788981911012,
+      "tag": "0021_company_on_projects_rates_and_series",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1788983973929,
+      "tag": "0022_company_document_code_suffix",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1788984311220,
+      "tag": "0023_company_payment_terms_nullable",
+      "breakpoints": true
     }
   ]
 }

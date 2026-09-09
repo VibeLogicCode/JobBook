@@ -4,7 +4,8 @@ import { eq } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { db } from '@/db/client';
-import { organization, taxRates, users } from '@/db/schema';
+import { companies, organization, taxRates, users } from '@/db/schema';
+import { FIRST_COMPANY_ID } from '@/lib/company/ids';
 import { percentField } from '@/app/settings/percent-schema';
 import { type ActionResult, refused, saved } from '@/app/settings/result';
 import {
@@ -96,6 +97,78 @@ async function upsertOrganization(
       createdBy: null,
     })
     .onConflictDoUpdate({ target: organization.id, set: patch });
+
+  await upsertFirstCompany(tx, patch, names);
+}
+
+/**
+ * Writes the FIRST company alongside the deployment row.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY THE WIZARD HAS TO DO THIS, AND WHY IT IS NOT A NEW STEP
+ * ---------------------------------------------------------------------------
+ *
+ * The migration that created `companies` backfills it with an
+ * `INSERT ... SELECT ... FROM organization`, which finds nothing on a database
+ * where setup has never run. So on a FRESH install `companies` is empty, and
+ * every foreign key pointing at it -- `projects.company_id`,
+ * `tax_rates.company_id`, `document_sequences.company_id` -- has nothing to
+ * point at. The wizard's own tax-rate step would be the first thing to fail.
+ *
+ * And it must NOT be a new step the installer answers. The owner asked for
+ * "which company?" at setup and it is the one question that must not be asked:
+ * he does not know his own legal structure yet -- he said so -- and a
+ * contractor looking at a NAS at 11pm knows less. Any answer given at first
+ * run is wrong often enough to matter, and the wrong answer in the "two"
+ * direction burdens every single-company customer forever with a picker they
+ * never wanted. A second company is added later, from Settings, by somebody
+ * who has since spoken to an accountant.
+ *
+ * ---------------------------------------------------------------------------
+ * THE COLUMN SUBSET IS DERIVED, NOT LISTED
+ * ---------------------------------------------------------------------------
+ *
+ * `patch` is whatever step is submitting, keyed by Drizzle property name, and
+ * only some of those keys exist on `companies` -- `timezone` and `currency`
+ * are the deployment's and stay behind. Filtering against the table object
+ * rather than a hand-written list of 36 names is the difference between one
+ * source of truth and two: a column added to `companies` later is picked up
+ * here for free, and a column that only ever belonged to the deployment cannot
+ * be smuggled across by a typo.
+ */
+async function upsertFirstCompany(
+  tx: Executor,
+  patch: Record<string, unknown>,
+  names: { legalName: string; displayName: string },
+): Promise<void> {
+  const owned = Object.fromEntries(
+    Object.entries(patch).filter(([key]) => key in companies),
+  );
+
+  const insert = tx.insert(companies).values({
+    id: FIRST_COMPANY_ID,
+    ...names,
+    ...owned,
+    // Same reasoning as the organization insert above: no actor exists yet.
+    createdBy: null,
+  });
+
+  /**
+   * `DO NOTHING` when this step writes nothing a company owns.
+   *
+   * The locale step is exactly that case -- currency, locale, timezone and
+   * area unit are all the deployment's, so `owned` comes out empty and
+   * `onConflictDoUpdate` with an empty `set` is not a no-op but invalid SQL
+   * (`DO UPDATE SET` followed by nothing). The row still has to be CREATED by
+   * such a step if an earlier one somehow did not, because the foreign keys
+   * pointing at it are NOT NULL.
+   */
+  if (Object.keys(owned).length === 0) {
+    await insert.onConflictDoNothing({ target: companies.id });
+    return;
+  }
+
+  await insert.onConflictDoUpdate({ target: companies.id, set: owned });
 }
 
 // ---------------------------------------------------------------------------
@@ -424,7 +497,15 @@ export async function saveTaxRateStep(
 
     const [row] = await tx
       .insert(taxRates)
-      .values({ ...rest, rateTenThou: rate, createdBy: null })
+      .values({
+        // The company this wizard created in step 1. A rate belongs to a
+        // registrant, not to a deployment -- the Input Tax Credit Information
+        // Regulations put the supplier's own number on the invoice.
+        companyId: FIRST_COMPANY_ID,
+        ...rest,
+        rateTenThou: rate,
+        createdBy: null,
+      })
       .returning({ id: taxRates.id });
     await putSetting(tx, TAX_RATE_ID_KEY, row!.id);
 

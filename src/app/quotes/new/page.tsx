@@ -1,8 +1,9 @@
 import { and, asc, count, eq, inArray } from 'drizzle-orm';
 import { db } from '@/db/client';
 import {
-  customers, leadSources, organization, projects, projectTypes, quotes, scopeTemplates,
+  customers, leadSources, projects, projectTypes, quotes, scopeTemplates,
 } from '@/db/schema';
+import { defaultProvince } from '@/lib/company/load';
 import { startQuote } from '@/app/quotes/new/actions';
 import { StartQuoteForm } from '@/app/quotes/new/StartQuoteForm';
 import { Panel } from '@/components/detail/Panel';
@@ -23,9 +24,20 @@ export default async function NewQuotePage({
   /** Set when the quote is started from a customer or an opportunity. */
   searchParams: Promise<{ customer?: string; opportunity?: string }>;
 }) {
+  /**
+   * The province default comes from the issuing company's own address and
+   * nowhere else. The column carries no database default because that would
+   * hardcode one tenant's region into every deployment, and a contractor who
+   * works across a border still has to be able to change it on the row in
+   * front of them.
+   *
+   * Null when there is more than one company: two addresses have no single
+   * answer, and a wrong pre-filled province is harder to notice than a blank
+   * one, because nobody re-reads a field they did not have to fill in.
+   */
+  const province = await defaultProvince();
   const { customer, opportunity } = await searchParams;
 
-  const [org] = await db.select().from(organization).where(eq(organization.id, 1));
 
   const [customerList, opportunityRows, templateList, projectTypeList, leadSourceList] = await Promise.all([
     db
@@ -128,7 +140,7 @@ export default async function NewQuotePage({
           templates={templateList}
           projectTypes={projectTypeList}
           leadSources={leadSourceList}
-          defaultProvince={org?.province ?? ''}
+          defaultProvince={province ?? ''}
           preselectedCustomerId={preselected}
         />
       </Panel>

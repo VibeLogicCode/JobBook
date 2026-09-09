@@ -26,9 +26,13 @@ vi.mock('next/navigation', () => ({
 
 import { db } from '@/db/client';
 import {
-  customerInvoices, customers, documentSequences, organization, projects, quotes, taxRates, users,
+  companies, customerInvoices, customers, documentSequences, organization, projects, quotes, taxRates, users,
 } from '@/db/schema';
+// After the mocks above, deliberately: this pulls in the database client,
+// and the module under test must not be loaded before they are installed.
+import { seedDeployment } from '../support/organization';
 import { issueCustomerInvoice } from '@/app/projects/[id]/billing/actions';
+import { FIRST_COMPANY_ID } from '@/lib/company/ids';
 
 /**
  * Figures that divide cleanly, so a wrong answer is obvious rather than
@@ -127,11 +131,11 @@ beforeEach(async () => {
     truncate table audit_log, stage_history, holdback_ledger, customer_invoice_taxes,
     customer_invoice_lines, customer_invoices, quote_taxes, quote_lines, quotes,
     scope_template_items, scope_templates, rate_items, cost_codes, tax_rates,
-    projects, customers, users, organization, document_sequences
+    projects, customers, users, organization, companies, document_sequences
     restart identity cascade
   `);
 
-  await db.insert(organization).values({
+  await seedDeployment({
     id: 1,
     legalName: 'Test Company Ltd',
     displayName: 'Test Company',
@@ -153,7 +157,7 @@ beforeEach(async () => {
     isActive: true,
   });
 
-  await db.insert(taxRates).values({
+  await db.insert(taxRates).values({ companyId: FIRST_COMPANY_ID,
     label: 'Sales tax',
     rateTenThou: TAX_13,
     effectiveFrom: '2010-07-01',
@@ -167,7 +171,7 @@ beforeEach(async () => {
 
   const [job] = await db
     .insert(projects)
-    .values({
+    .values({ companyId: FIRST_COMPANY_ID,
       customerId: customer!.id,
       projectNumber: 'P-0001',
       name: 'Work under contract',
@@ -180,7 +184,7 @@ beforeEach(async () => {
 
   const [opportunity] = await db
     .insert(projects)
-    .values({
+    .values({ companyId: FIRST_COMPANY_ID,
       customerId: customer!.id,
       projectNumber: 'P-0002',
       name: 'Nothing won yet',
@@ -364,7 +368,10 @@ describe('the taxable base of a progress draw', () => {
     // The deferral is a setting, not a constant: a jurisdiction without it
     // must still bill correctly, and this is what proves the flag switches the
     // base rather than the base being hardcoded either way.
-    await db.update(organization).set({ taxDeferredOnHoldback: false }).where(eq(organization.id, 1));
+    // On the COMPANY: the deferral belongs to the registrant issuing the
+    // invoice, not to the deployment they happen to share.
+    await db.update(companies).set({ taxDeferredOnHoldback: false })
+      .where(eq(companies.id, FIRST_COMPANY_ID));
 
     await issued({ projectId: jobId, kind: 'progress', percent: '45', issueDate: ISSUE });
     const [row] = await invoiceRows(jobId);

@@ -6,6 +6,7 @@ import { redirect } from 'next/navigation';
 import { z } from 'zod';
 import { db } from '@/db/client';
 import { customers, projects, quotes, stageHistory } from '@/db/schema';
+import { primaryOf, readCompanies } from '@/lib/company/load';
 import { allocateDocumentNumber } from '@/lib/quote/numbering';
 import type { FormResult } from '@/components/detail/form-state';
 import { guard } from '@/lib/auth/guard';
@@ -145,10 +146,38 @@ export async function createProject(
       const problem = await projectTypeProblem(tx, parsed.data.projectTypeId);
       if (problem) throw new Error(problem);
 
-      const projectNumber = await allocateDocumentNumber(tx, 'project');
+      /**
+       * Which company is issuing this job. Written ONCE, here, and never
+       * editable afterwards -- a job does not move between companies, which is
+       * what lets every document under it resolve its letterhead through one
+       * join and lets its number series stay untouched forever.
+       *
+       * `primaryCompany` refuses rather than guessing when there are two. A
+       * job filed under the wrong company would put the wrong legal name and
+       * the wrong HST registration number on every document it ever produces.
+       * Unreachable until "Add a company" exists, which is also when this form
+       * grows a picker.
+       */
+      /**
+       * The UNCACHED read, deliberately.
+       *
+       * `primaryCompany` is `cache()`-wrapped for page rendering, where several
+       * components in one request want the same two rows. An action does one read
+       * and shares it with nobody, so the cache buys nothing here -- and under
+       * test, where there is no request scope, it would hand this action whichever
+       * rows some earlier file happened to load.
+       */
+      const company = primaryOf(await readCompanies());
+      if (!company) {
+        throw new Error(
+          'this deployment has more than one company, so a new job has to say which one it is for',
+        );
+      }
+
+      const projectNumber = await allocateDocumentNumber(tx, 'project', company.id);
       const [row] = await tx
         .insert(projects)
-        .values({ ...parsed.data, projectNumber })
+        .values({ ...parsed.data, projectNumber, companyId: company.id })
         .returning({ id: projects.id });
       if (!row) throw new Error('the job was not saved');
       return row.id;

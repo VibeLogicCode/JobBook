@@ -38,6 +38,9 @@ vi.mock('next/headers', () => ({
 
 import { db } from '@/db/client';
 import { costCodes, customers, expenseTaxes, expenses, organization, projects, users } from '@/db/schema';
+// After the mocks above, deliberately: this pulls in the database client,
+// and the module under test must not be loaded before they are installed.
+import { seedDeployment } from '../support/organization';
 import {
   createExpense,
   createExpenseBatch,
@@ -45,6 +48,7 @@ import {
   voidExpense,
 } from '@/app/expenses/actions';
 import { can } from '@/lib/auth/permissions';
+import { FIRST_COMPANY_ID } from '@/lib/company/ids';
 
 const BOOKKEEPER = 'books@example.invalid';
 const OWNER = 'owner@example.invalid';
@@ -93,7 +97,7 @@ beforeEach(async () => {
     restart identity cascade
   `);
 
-  await db.insert(organization).values({
+  await seedDeployment({
     id: 1,
     legalName: 'Test Holdings Ltd',
     displayName: 'Test Holdings',
@@ -124,7 +128,7 @@ beforeEach(async () => {
     .returning();
   const [project] = await db
     .insert(projects)
-    .values({
+    .values({ companyId: FIRST_COMPANY_ID,
       customerId: customer!.id,
       projectNumber: 'P-9101',
       name: 'Basement finish',

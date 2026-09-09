@@ -8,7 +8,7 @@ import { pointLogoAt } from '@/app/settings/identity/logo/logo';
 import { db } from '@/db/client';
 import { files, organization } from '@/db/schema';
 import { INLINE_TYPES, STORABLE_TYPES } from '@/lib/files/sniff';
-import { ensureOrganization } from '../support/organization';
+import { ensureOrganization, seedDeployment } from '../support/organization';
 import {
   LOGO_MAX_BYTES,
   ORGANIZATION_ENTITY_ID,
@@ -487,7 +487,7 @@ describe('the serve route', () => {
 
 describe('replacing the logo', () => {
   beforeEach(async () => {
-    await db.insert(organization).values({
+    await seedDeployment({
       id: 1,
       legalName: 'Test Holdings Ltd',
       displayName: 'Test Holdings',

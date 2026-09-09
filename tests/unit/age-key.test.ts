@@ -95,7 +95,20 @@ describe('publicKeyFor', () => {
     // "This is not a key" and "this is the wrong key" are different sentences
     // to show somebody who is checking whether his backup is recoverable.
     const { privateKey } = generateAgeKeypair();
-    expect(publicKeyFor(`${privateKey.slice(0, -1)}Q`)).toBeNull();
+
+    /**
+     * The replacement has to be a character the key does not already end with.
+     *
+     * This read `${privateKey.slice(0, -1)}Q`, which failed roughly one run in
+     * thirty-two: `Q` is in the bech32 charset, so whenever a generated key
+     * happened to end in `Q` the "corrupted" string was the valid key and
+     * derivation correctly succeeded. A flake that rare is worse than a
+     * frequent one -- it appears months later, in somebody else's unrelated
+     * change, and reads as a real regression.
+     */
+    const last = privateKey.at(-1)!;
+    const different = last === 'Q' ? 'P' : 'Q';
+    expect(publicKeyFor(`${privateKey.slice(0, -1)}${different}`)).toBeNull();
     expect(publicKeyFor('AGE-SECRET-KEY-1NONSENSE')).toBeNull();
   });
 });

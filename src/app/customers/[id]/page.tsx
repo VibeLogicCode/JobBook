@@ -5,6 +5,7 @@ import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import { cache } from 'react';
 import { db } from '@/db/client';
 import { customers, leadSources, organization, projects, quotes } from '@/db/schema';
+import { defaultProvince } from '@/lib/company/load';
 import { buttonClass } from '@/components/ui/Button';
 import { Notice } from '@/components/ui/Notice';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -66,7 +67,17 @@ export default async function CustomerPage({
   const customer = await loadCustomerRecord(id);
   if (!customer) notFound();
 
-  const [org] = await db.select().from(organization).where(eq(organization.id, 1));
+  /**
+   * `locale` and `timezone` are the deployment's; the province pre-fill is the
+   * issuing company's, and blank when there are two -- a customer is shared
+   * between companies by the owner's own choice, so no company owns its
+   * address.
+   */
+  const [org] = await db
+    .select({ locale: organization.locale, timezone: organization.timezone })
+    .from(organization)
+    .where(eq(organization.id, 1));
+  const province = await defaultProvince();
 
   // Every lead source, retired and voided included -- this customer's own may
   // no longer be offered to new work, and it still has to render and resolve
@@ -216,7 +227,7 @@ export default async function CustomerPage({
           submitLabel="Save customer"
           discardPrompt="Throw away the changes to this customer? Nothing has been saved yet."
         >
-          <CustomerFields customer={customer} leadSources={leadSourceList} defaultProvince={org?.province ?? ''} />
+          <CustomerFields customer={customer} leadSources={leadSourceList} defaultProvince={province ?? ''} />
         </EditSheet>
       ) : null}
 

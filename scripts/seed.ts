@@ -9,14 +9,15 @@
 import { eq, sql } from 'drizzle-orm';
 import { closeDb, db } from '@/db/client';
 import {
-  costCodes, customers, organization, projects, quotes, rateItems, scopeTemplateItems,
+  companies, costCodes, customers, organization, projects, quotes, rateItems, scopeTemplateItems,
   scopeTemplates, taxRates, users,
 } from '@/db/schema';
 import {
-  DEMO_COST_CODES, DEMO_CUSTOMERS, DEMO_ORGANIZATION, DEMO_RATE_ITEMS, DEMO_TAX_RATE,
+  DEMO_COMPANY, DEMO_COST_CODES, DEMO_CUSTOMERS, DEMO_ORGANIZATION, DEMO_RATE_ITEMS, DEMO_TAX_RATE,
   DEMO_TEMPLATES, DEMO_USERS,
 } from '@/db/seed/demo';
 import { seedScheduleTemplates } from '@/db/seed/schedule-templates';
+import { FIRST_COMPANY_ID } from '@/lib/company/ids';
 import { createQuoteFromTemplate } from '@/lib/quote/repository';
 
 async function main() {
@@ -31,11 +32,14 @@ async function main() {
   await db.execute(sql`
     truncate table audit_log, stage_history, quote_taxes, quote_lines, quotes, quote_clauses,
     scope_template_items, scope_templates, rate_items, cost_codes, tax_rates,
-    projects, customers, users, organization, document_sequences, sp_item_map, sync_state
+    projects, customers, users, organization, companies, document_sequences, sp_item_map, sync_state
     restart identity cascade
   `);
 
   await db.insert(organization).values(DEMO_ORGANIZATION);
+  // Before the tax rate and before any project: both carry a NOT NULL
+  // company_id pointing here.
+  await db.insert(companies).values(DEMO_COMPANY);
   await db.insert(taxRates).values(DEMO_TAX_RATE);
   await db.insert(users).values(DEMO_USERS);
 
@@ -114,6 +118,7 @@ async function main() {
         .values({
           ...projectFields,
           customerId: customerRow!.id,
+          companyId: FIRST_COMPANY_ID,
           projectNumber: `P-${String(projectSeq++).padStart(4, '0')}`,
         })
         .returning();

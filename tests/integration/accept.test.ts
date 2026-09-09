@@ -9,6 +9,8 @@ import {
 import { acceptQuoteLines } from '@/lib/quote/accept';
 import { createChangeOrder } from '@/lib/quote/change-order';
 import { contractValueCents, createQuoteFromTemplate, voidQuote } from '@/lib/quote/repository';
+import { FIRST_COMPANY_ID } from '@/lib/company/ids';
+import { seedDeployment } from '../support/organization';
 
 /**
  * The figures are chosen to divide cleanly, so a wrong answer is obvious rather
@@ -32,11 +34,11 @@ beforeEach(async () => {
   await db.execute(sql`
     truncate table audit_log, stage_history, sessions, user_identities, quote_taxes, quote_lines,
     quotes, scope_template_items, scope_templates, rate_items, cost_codes, tax_rates,
-    projects, customers, users, organization, document_sequences
+    projects, customers, users, organization, companies, document_sequences
     restart identity cascade
   `);
 
-  await db.insert(organization).values({
+  await seedDeployment({
     id: 1,
     legalName: 'Test Company Ltd',
     displayName: 'Test Company',
@@ -45,7 +47,7 @@ beforeEach(async () => {
     defaultHoldbackPctTenThou: 1000n,
     quoteTermsText: 'Payable on completion.',
   });
-  await db.insert(taxRates).values({
+  await db.insert(taxRates).values({ companyId: FIRST_COMPANY_ID,
     label: 'Sales tax',
     rateTenThou: 1300n,
     effectiveFrom: '2010-07-01',
@@ -58,7 +60,7 @@ beforeEach(async () => {
     .returning();
   const [project] = await db
     .insert(projects)
-    .values({
+    .values({ companyId: FIRST_COMPANY_ID,
       customerId: customer!.id,
       projectNumber: 'P-0001',
       name: 'Lower level fit-out',
@@ -414,7 +416,7 @@ describe('accepting a subset', () => {
     const { quoteId } = await create({ quoteDate: '2026-01-01' });
     await send(quoteId);
     await db.update(taxRates).set({ effectiveTo: '2026-06-30' }).where(eq(taxRates.label, 'Sales tax'));
-    await db.insert(taxRates).values({
+    await db.insert(taxRates).values({ companyId: FIRST_COMPANY_ID,
       label: 'Sales tax',
       rateTenThou: 1500n,
       effectiveFrom: '2026-07-01',

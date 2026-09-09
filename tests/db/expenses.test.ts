@@ -3,7 +3,8 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { PROJECT_TYPE_IDS } from '@/db/seed/project-lists';
 import { db } from '@/db/client';
 import { costCodes, customers, expenseTaxes, expenses, organization, projects, vendors } from '@/db/schema';
-import { ensureOrganization } from '../support/organization';
+import { ensureCompany, ensureOrganization } from '../support/organization';
+import { FIRST_COMPANY_ID } from '@/lib/company/ids';
 
 /**
  * What the database refuses, and the one thing it must never quietly change.
@@ -35,6 +36,7 @@ beforeEach(async () => {
    * runs after a truncate and a file that runs after a seed must both work.
    */
   await ensureOrganization();
+  await ensureCompany();
 });
 
 /**
@@ -64,7 +66,7 @@ async function seedProject() {
     .returning();
   const [project] = await db
     .insert(projects)
-    .values({
+    .values({ companyId: FIRST_COMPANY_ID,
       customerId: customer!.id,
       projectNumber: 'P-9001',
       name: 'Basement finish',

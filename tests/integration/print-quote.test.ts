@@ -4,7 +4,7 @@ import postgres from 'postgres';
 import { chromium, type Browser } from 'playwright';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
-  customers, organization, projects, quoteLines, quoteTaxes, quotes, taxRates,
+  customers, organization, companies, projects, quoteLines, quoteTaxes, quotes, taxRates,
 } from '@/db/schema';
 import { closeBrowser, renderPdf } from '@/lib/documents/pdf';
 import { formatCents, formatQty, formatRate, parseAmountToCents } from '@/lib/money/format';
