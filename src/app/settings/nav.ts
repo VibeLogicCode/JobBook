@@ -118,6 +118,12 @@ export const SETTINGS_GROUPS: NavGroup[] = [
         summary: 'Who has an account, and what their role permits.',
       },
       {
+        href: '/settings/backup',
+        label: 'Backups',
+        summary:
+          'The key every backup is encrypted to. Generated here, and the private half is shown once.',
+      },
+      {
         href: '/settings/sync',
         label: 'SharePoint mirror',
         summary: 'Optional, off by default, one-way, and not a restore path.',

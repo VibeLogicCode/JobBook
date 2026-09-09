@@ -75,10 +75,10 @@ RUN apt-get update \
        postgresql-client-16 age util-linux curl \
     && rm -rf /var/lib/apt/lists/*
 
-COPY docker/backup.sh docker/restore.sh docker/backup-loop.sh docker/reminder-loop.sh /usr/local/bin/
+COPY docker/backup.sh docker/restore.sh docker/backup-loop.sh docker/reminder-loop.sh docker/read-config.sh /usr/local/bin/
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 
-RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/backup.sh \
+RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/read-config.sh /usr/local/bin/backup.sh \
       /usr/local/bin/restore.sh /usr/local/bin/backup-loop.sh \
       /usr/local/bin/reminder-loop.sh \
     && mkdir -p /data/files /data/backups /data/config \

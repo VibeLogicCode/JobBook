@@ -76,6 +76,25 @@ export function authConfigPath(): string {
 export const MANAGED_KEYS = [
   'AUTH_MODE',
   'LOCAL_USER_EMAIL',
+  /**
+   * Not an authentication key, in a file named `auth.env`.
+   *
+   * The file is the deployment configuration and always was -- the entrypoint
+   * calls it that in its own log line -- and `auth.env` is only what it was
+   * called when authentication was all it held. Renaming it would break every
+   * install that already has one, which is a worse trade than a slightly
+   * inaccurate filename.
+   *
+   * It is here because the backup recipient has exactly the same problem as
+   * the auth settings: the wizard cannot change a container's environment, so
+   * it writes a file and the processes read it at boot. `read-config.sh` is
+   * sourced by `backup-loop.sh` as well as `entrypoint.sh` precisely so this
+   * key reaches the process that encrypts.
+   *
+   * PUBLIC half only. The private half is shown once and never stored -- see
+   * `lib/backup/age-key.ts`.
+   */
+  'BACKUP_AGE_PUBLIC_KEY',
   'CF_ACCESS_TEAM_DOMAIN',
   'CF_ACCESS_AUD',
   'TUNNEL_TOKEN',
@@ -130,6 +149,10 @@ const KNOWN_SECRETS: readonly ManagedKey[] = [
 const KNOWN_IDENTIFIERS: readonly ManagedKey[] = [
   'AUTH_MODE',
   'LOCAL_USER_EMAIL',
+  // A recipient, not a secret. The whole design is that this machine holds a
+  // key it cannot decrypt with, so showing it back is how an operator confirms
+  // the deployment is encrypting to the key he kept.
+  'BACKUP_AGE_PUBLIC_KEY',
   'CF_ACCESS_TEAM_DOMAIN',
   'CF_ACCESS_AUD',
   'APP_PUBLIC_URL',

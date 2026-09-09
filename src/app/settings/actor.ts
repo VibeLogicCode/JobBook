@@ -62,6 +62,9 @@ const SETTINGS_CAPABILITIES = {
   // deployment: it decides whether this company's records leave the box for a
   // Microsoft tenant.
   'sync.configure': 'sync:configure',
+  // Owner only, and on that list for the same reason as the mirror: it
+  // decides whether this company's records are recoverable at all.
+  'backup.configure': 'backup:configure',
 } as const satisfies Record<string, CanonicalCapability>;
 
 export type SettingsCapability = keyof typeof SETTINGS_CAPABILITIES;

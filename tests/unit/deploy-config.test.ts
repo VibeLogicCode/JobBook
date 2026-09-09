@@ -408,6 +408,11 @@ describe('redaction', () => {
   const CLASSIFICATION: Record<ManagedKey, boolean> = {
     AUTH_MODE: false,
     LOCAL_USER_EMAIL: false,
+    // A RECIPIENT. The machine holds a key it cannot decrypt with, which is
+    // the entire design, so showing it back is how an operator confirms the
+    // deployment encrypts to the key he kept. The private half never reaches
+    // this file -- `lib/backup/age-key.ts` says why.
+    BACKUP_AGE_PUBLIC_KEY: false,
     CF_ACCESS_TEAM_DOMAIN: false,
     CF_ACCESS_AUD: false,
     TUNNEL_TOKEN: true,

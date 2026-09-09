@@ -226,11 +226,17 @@ services:
       BACKUP_HEARTBEAT_URL: ${BACKUP_HEARTBEAT_URL:-}
       BACKUP_RETAIN_HOURLY_HOURS: ${BACKUP_RETAIN_HOURLY_HOURS:-48}
       BACKUP_RETAIN_DAILY_DAYS: ${BACKUP_RETAIN_DAILY_DAYS:-30}
+    # Reads the deployment configuration READ-ONLY, because the setup screen
+    # is what writes BACKUP_AGE_PUBLIC_KEY there and this container is its own
+    # entrypoint -- without the mount it would never see a key the app had
+    # just generated, and would exit saying no backups were possible while the
+    # app showed them as configured. See docker/read-config.sh.
     volumes:
       # Reads the same uploaded files the app writes, and writes into the same
       # backup volume, so one artifact set exists rather than two.
       - ${SCOPELINE_DATA:-/volume1/docker/scopeline}/files:/data/files:ro
       - ${SCOPELINE_DATA:-/volume1/docker/scopeline}/backups:/data/backups
+      - ${SCOPELINE_DATA:-/volume1/docker/scopeline}/config:/data/config:ro
       # - /volumeUSB1/usbshare/scopeline-backup:/mnt/backup
     # on-failure, not unless-stopped: an unconfigured key is a permanent
     # condition, and a container that restarts forever on the same fatal

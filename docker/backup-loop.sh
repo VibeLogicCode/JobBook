@@ -21,6 +21,14 @@ set -euo pipefail
 # So: same image, same scripts, its own container, restarted by Docker.
 # ---------------------------------------------------------------------------
 
+# The wizard writes BACKUP_AGE_PUBLIC_KEY here when it generates the keypair
+# itself, and this container is its own entrypoint -- so without this line it
+# would never see a recipient the app had just configured, and would exit
+# claiming no backups were possible while the app showed them as enabled.
+# shellcheck source=/usr/local/bin/read-config.sh
+. /usr/local/bin/read-config.sh
+read_deploy_config
+
 INTERVAL_MINUTES="${BACKUP_INTERVAL_MINUTES:-60}"
 
 case $INTERVAL_MINUTES in
