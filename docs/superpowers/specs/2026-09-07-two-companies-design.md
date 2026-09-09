@@ -66,21 +66,19 @@ asked at all, and what has to be true instead.
 
 ---
 
-## 3. Simple mode (Wave A) — SUPERSEDED
+## 3. Simple mode (Wave A) -- SUPERSEDED
 
-**Superseded 2026-09-09 by
-`2026-09-09-service-and-contract-work-design.md`.** This section argued simple
-mode should key on the job *"not the company"*. The owner corrected it: two
-businesses running different workflows is not two form lengths. The successor
-carries the two-level model, the service/contract vocabulary, and the trade
-starter packs -- and records that this section's claim about AP/AR being
-removable was wrong, since getting paid is not a builder feature.
-
-Left in place rather than deleted, because §9's sequencing table and §1's
-framing still reference it, and because the reasoning it got wrong is worth
-being able to read.
-
-## 3. Simple mode (Wave A)
+> **Superseded 2026-09-09 by
+> `2026-09-09-service-and-contract-work-design.md`.** This section argued
+> simple mode should key on the job *"not the company"*. The owner corrected
+> it: two businesses running different workflows is not two form lengths. The
+> successor carries the two-level model, the service/contract vocabulary and
+> the trade starter packs -- and records that this section's claim about AP/AR
+> being removable was wrong, since getting paid is not a builder feature.
+>
+> Kept rather than deleted, because §1 and §9 still reference it and because
+> the reasoning it got wrong is worth being able to read. **Do not implement
+> from this section.**
 
 Keyed on `project_types`, which is already a maintained database list with a
 case-insensitive uniqueness index and a retire-rather-than-delete rule. It
@@ -105,12 +103,14 @@ is registered.
 
 ### 3.2 Where the flags live, and one deliberate override
 
-Flags go on `project_types` as columns. `src/db/schema/organization.ts:171`
-states the opposite rule in as many words -- it is on the `settings` table
-there, not in `system.ts` as an earlier draft of this line claimed: *"There is deliberately no feature_flags table
--- flags and credentials are environment variables, because a mirrored table
-ends up in SharePoint and in every backup, and secrets must never enter the
-database."*
+Flags go on `project_types` as columns. The codebase states the opposite rule
+in as many words, at `src/db/schema/organization.ts:171` -- on the `settings`
+table there, not in `system.ts`, which is where an earlier draft of this line
+wrongly cited it:
+
+> *"There is deliberately no feature_flags table -- flags and credentials are
+> environment variables, because a mirrored table ends up in SharePoint and in
+> every backup, and secrets must never enter the database."*
 
 **That rule is overridden here, deliberately, and the distinction is what
 makes it safe.** The rule protects CREDENTIALS. A product-shape flag is not
