@@ -250,19 +250,41 @@ already coded and cost-coded -- not the arithmetic.**
 The same rule applies to the target margin and to holdback percentages: a
 statutory default is a fact and may be seeded; a business's margin is not.
 
-### 5.2.4 Cost codes: do not reproduce a proprietary standard
+### 5.2.4 Cost codes: write our own divisions, not an industry standard's
 
-The obvious move for a construction pack is CSI MasterFormat divisions. **Do
-not ship them.** MasterFormat's numbering and titles are CSI's copyrighted
-compilation, and this is a product being sold. Reproducing it wholesale is a
-licensing question, not a technical one.
+**MasterFormat** is the standard construction cost-code numbering in North
+America -- published by the Construction Specifications Institute, and in
+Canada by Construction Specifications Canada. It is the `03 Concrete` /
+`22 Plumbing` / `26 Electrical` system that architects' specifications and
+commercial estimating software are organised around. **NAHB's Chart of
+Accounts** is the residential equivalent. The term is spelled out here because
+the first draft of this section assumed the reader knew it, and the reader
+did not.
 
-What is safe is plain-language divisions that any tradesperson would
-recognise -- Concrete, Framing, Roofing, Electrical, Plumbing -- because short
-functional names are not the protectable part. If MasterFormat alignment is
-ever genuinely wanted, that is a licence to buy, and the owner's own
-accountant-driven chart of accounts is the authority anyway
-(`2026-09-07-generated-codes-design.md` §2).
+Either would be the obvious thing to seed a construction pack with, and it is
+tempting: it is the industry's shared vocabulary, so a pack built on it would
+look immediately familiar.
+
+**Ship neither.** Both are published and sold by their standards bodies, which
+assert copyright on them. Individual words are not protectable -- nobody owns
+"Concrete" -- but the compilation is: the specific selection, numbering and
+arrangement of the whole system. Putting that inside a product that is sold is
+a licensing arrangement rather than a technical decision, and it is the kind
+of exposure that stays invisible until there are customers.
+
+**Owner's decision, 2026-09-09:** *"no i dont want to buy it."* Settled. This
+is not revisited without a deliberate purchase.
+
+So: **plain-language divisions we write ourselves** -- Concrete, Framing,
+Roofing, Electrical, Plumbing, Finishes. Same practical value to a
+tradesperson reading his first screen, none of the exposure.
+
+The practical loss is small in any case. MasterFormat is a commercial and
+institutional convention; a residential contractor typically uses his own
+buckets or whatever his bookkeeper set up. And
+`2026-09-07-generated-codes-design.md` §2 already establishes that the
+accountant's chart of accounts is the authority a cost code has to agree with
+-- not this app's, and not a standards body's.
 
 ### 5.2.5 One pack per trade, rows tagged by posture
 
@@ -442,7 +464,8 @@ that wave ever happens.
   column read after first run. The same electrician does service calls and
   full rewires, which is why posture and trade are separate questions.
 - **A rate pack containing prices.** §5.2.3. Not a scope decision, a rule.
-- **Reproducing MasterFormat.** §5.2.4. A licence to buy, not code to write.
+- **Reproducing MasterFormat or the NAHB chart.** §5.2.4. The owner declined
+  to buy a licence on 2026-09-09, so we write our own divisions.
 - **Any mechanism that updates a seeded row after first run.** §5.2.2. It
   would overwrite a contractor's own prices.
 - **More than four trade packs in this build.** §5.2.6.
