@@ -5,9 +5,10 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
 import { db } from '@/db/client';
-import { projects, quotes } from '@/db/schema';
+import { projectTypes, projects, quotes } from '@/db/schema';
 import type { FormResult } from '@/components/detail/form-state';
 import { guard } from '@/lib/auth/guard';
+import { flagsForProject } from '@/lib/posture/read';
 import { resolvePercentTenThou } from '@/lib/invoice/percent';
 import { issueInvoice } from '@/lib/invoice/repository';
 
@@ -84,12 +85,49 @@ export async function issueCustomerInvoice(
     if (!allowed.ok) return { ok: false, error: allowed.error };
 
     const [project] = await db
-      .select({ recordStatus: projects.recordStatus })
+      .select({ recordStatus: projects.recordStatus, typeName: projectTypes.name })
       .from(projects)
+      .innerJoin(projectTypes, eq(projectTypes.id, projects.projectTypeId))
       .where(eq(projects.id, projectId));
     if (!project) return { ok: false, error: 'that job no longer exists' };
     if (project.recordStatus !== 'active') {
       return { ok: false, error: 'this job is void, so nothing can be billed against it' };
+    }
+
+    /**
+     * ---------------------------------------------------------------------
+     * WHICH KINDS THIS JOB CAN RAISE FOLLOWS ITS PROJECT TYPE
+     * ---------------------------------------------------------------------
+     *
+     * `progress_invoicing` off means one invoice at the end: a service call is
+     * billed once, and offering draws on it is a form somebody fills in and a
+     * document the customer does not expect.
+     *
+     * Read from the JOB's own type and never from the company's posture. That
+     * distinction is what prevents a STRANDED RECEIVABLE, which an earlier
+     * draft of this design created: it removed the `progress` and
+     * `holdback_release` kinds at the company level, so a contract job under a
+     * a service-only company would have withheld 10% on its draws and had no
+     * invoice kind able to bill it back. Money owed, in the ledger, and
+     * un-invoiceable.
+     *
+     * Refused here rather than by narrowing the dropdown, for the reason the
+     * percentage check above gives: a stale tab and a hand-made POST both
+     * arrive at this line.
+     *
+     * The sentence names the project TYPE, because "this job cannot take a
+     * progress draw" leaves somebody looking for a setting on the job, and the
+     * setting is on the type.
+     */
+    const flags = await flagsForProject(db, projectId);
+    if (kind === 'progress' && !flags.progressInvoicing) {
+      return {
+        ok: false,
+        error:
+          `a ${project.typeName} is billed once when the work is done, not in draws. ` +
+          `Bill it as a final invoice, or turn on progress invoicing for ` +
+          `${project.typeName} under Settings if this kind of work does take draws.`,
+      };
     }
 
     /**

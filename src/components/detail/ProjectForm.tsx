@@ -49,6 +49,7 @@ export function ProjectFields({
   customers,
   projectTypes,
   companies = [],
+  constructionActDates = true,
   defaultProvince,
   showRealisedDates = false,
 }: {
@@ -75,7 +76,21 @@ export function ProjectFields({
    */
   companies?: { id: string; label: string }[];
   /**
-   * From `organization.province`. No database default on the column on
+   * From this job's project type. Off hides the substantial performance and
+   * certificate dates.
+   *
+   * Those two dates exist to start the holdback release clock, so on a kind of
+   * work that withholds nothing they are a question with no consequence --
+   * and worse than merely useless: somebody who fills them in on a service
+   * call has been invited to think a release is coming.
+   *
+   * Defaults to TRUE, so a caller that does not pass it gets today's
+   * behaviour. Same direction as the column's own default: the off state is
+   * what would change an existing job.
+   */
+  constructionActDates?: boolean;
+  /**
+   * From `companies.province`. No database default on the column on
    * purpose: a default there would hardcode one tenant's region.
    */
   defaultProvince: string;
@@ -196,6 +211,8 @@ export function ProjectFields({
             defaultValue={project?.actualEnd ?? ''}
             hint="The day work really finished."
           />
+          {constructionActDates ? (
+          <>
           <Field
             label="Substantial performance"
             name="substantialPerformanceDate"
@@ -214,6 +231,8 @@ export function ProjectFields({
             more="Once substantial performance is certified, the certificate has to be published. The statutory period runs from that publication. If the certificate sat on somebody's desk for a fortnight before it went out, using the signing date puts your holdback release two weeks earlier than it really is — which is the wrong direction to be wrong in."
             defaultValue={project?.certificatePublishedDate ?? ''}
           />
+          </>
+          ) : null}
         </FieldGroup>
       ) : null}
     </>
@@ -233,6 +252,7 @@ export function ProjectForm({
   customers,
   projectTypes,
   companies = [],
+  constructionActDates = true,
   defaultProvince,
   cancelHref,
   submitLabel,
@@ -244,6 +264,8 @@ export function ProjectForm({
   projectTypes: ListRowRef[];
   /** Only on create. See `ProjectFields`. */
   companies?: { id: string; label: string }[];
+  /** From the job's project type. See `ProjectFields`. */
+  constructionActDates?: boolean;
   defaultProvince: string;
   cancelHref: string;
   submitLabel: string;
@@ -277,6 +299,7 @@ export function ProjectForm({
         customers={customers}
         projectTypes={projectTypes}
         companies={companies}
+        constructionActDates={constructionActDates}
         defaultProvince={defaultProvince}
         showRealisedDates={showRealisedDates}
       />

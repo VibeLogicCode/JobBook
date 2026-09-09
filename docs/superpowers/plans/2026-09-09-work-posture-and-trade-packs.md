@@ -14,6 +14,32 @@
 
 **Prerequisites already met:** backlog §10b.1 (`LOCAL_USER_EMAIL` optional, `6dbca1d`) — without it no customer reaches the wizard and therefore no customer reaches the packs. And §5.3's structural guard against zero-priced lines is **already built** (`src/lib/quote/unpriced.ts`, `280d5fd`), which is what makes shipping unpriced packs safe.
 
+## What building it changed
+
+**There is ONE gated route, not two.** `/templates/schedule/page.tsx` does not
+exist — schedule templates are listed on `/templates`, merged with scope
+templates into one list with a Kind column. So the guard is: filter them out
+of that list, and refuse `/templates/schedule/[id]`. Both, not either: a
+hidden link is not a mechanism, and a list that still offers them is not a
+guard.
+
+**Task 4, the holdback override UI, is NOT built.** `quotes.holdbackPctTenThou`
+still has no screen. That is deliberate rather than forgotten: the field only
+earns its place alongside a holdback RELEASE form, which is AP/AR work
+(backlog §12). Until then a contract-flagged type is how a job withholds, and
+the flags are editable per type on `/settings/project-types` — which covers
+the owner's actual case, since he decides which of his own job kinds withhold.
+
+**Task 7 is partly done.** Construction Act dates are gated on the flag, and
+the five flags are editable. `scope_inputs` and `schedule_template` are not
+yet gated at the forms — both are cosmetic-tier (a visible field that means
+nothing) rather than the wrong-number tier the other three flags are, and both
+want the same treatment as the dates.
+
+**Tasks 8, 9 and 10 — the trade packs — are not started.**
+
+---
+
 ## Global Constraints
 
 - **Next.js 16.** Read `node_modules/next/dist/docs/` before writing App Router code.
@@ -64,7 +90,7 @@
 
 ---
 
-## Task 1: The flags on `project_types`
+## Task 1: The flags on `project_types` — DONE (migration 0026)
 
 **Files:**
 - Modify: `src/db/schema/project-lists.ts`
@@ -265,7 +291,7 @@ git commit -m "feat: a project type says what paperwork its jobs need"
 
 ---
 
-## Task 2: The posture reader, and which types a company is offered
+## Task 2: The posture reader, and which types a company is offered — DONE
 
 **Files:**
 - Create: `src/lib/posture/read.ts`, `src/lib/posture/defaults.ts`
@@ -386,7 +412,7 @@ git commit -m "feat: a company is offered the kinds of work it actually does"
 
 ---
 
-## Task 3: A service job's quote carries no holdback
+## Task 3: A service job's quote carries no holdback — DONE
 
 **Files:**
 - Modify: `src/lib/quote/repository.ts:192,253`
@@ -487,7 +513,7 @@ git commit -m "feat: a job can withhold a holdback its project type does not"
 
 ---
 
-## Task 5: Invoice kinds follow the flags
+## Task 5: Invoice kinds follow the flags — DONE
 
 **Files:**
 - Modify: `src/app/projects/[id]/billing/actions.ts:34`
@@ -526,7 +552,7 @@ git commit -m "feat: which invoices a job can raise follows what it withheld"
 
 ---
 
-## Task 6: The two gated routes
+## Task 6: The two gated routes — DONE (ONE route, not two — see below)
 
 **Files:**
 - Modify: `src/app/templates/schedule/page.tsx`, `src/app/templates/schedule/[id]/page.tsx`
@@ -545,7 +571,7 @@ git commit -m "feat: no schedule templates where nobody does contract work"
 
 ---
 
-## Task 7: The flags reach the forms
+## Task 7: The flags reach the forms — PARTLY DONE
 
 **Files:**
 - Modify: `src/components/worksheet/` (scope inputs — on `quotes`, at `src/db/schema/quotes.ts:42-45`)

@@ -12,6 +12,7 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { Pill, statusTone } from '@/components/ui/Pill';
 import { AmountCell, TableWrap } from '@/components/ui/Table';
 import { defaultProvince } from '@/lib/company/load';
+import { flagsForProject } from '@/lib/posture/read';
 import { formatBasisPoints, formatCents } from '@/lib/money/format';
 import { setProjectStage, updateProject } from '@/app/projects/actions';
 import { EditSheet } from '@/components/detail/EditSheet';
@@ -112,6 +113,15 @@ export default async function ProjectPage({
     .where(eq(organization.id, 1));
   // A pre-fill, blank when two companies disagree about the answer.
   const province = await defaultProvince();
+  /**
+   * What paperwork this KIND of work needs, read from the job's own type.
+   *
+   * Never from the company's posture: switching a company to service-only must
+   * not remove the substantial-performance date from a contract already signed
+   * -- that date is what makes the billing screen able to say when the
+   * holdback becomes invoiceable.
+   */
+  const flags = await flagsForProject(db, id);
 
   const versions = await db
     .select({
@@ -334,6 +344,7 @@ export default async function ProjectPage({
           discardPrompt={`Throw away the changes to this ${noun.toLowerCase()}? Nothing has been saved yet.`}
         >
           <ProjectFields
+            constructionActDates={flags.constructionActDates}
             project={project}
             customers={customerList}
             projectTypes={projectTypeList}

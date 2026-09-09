@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { and, asc, eq, sql } from 'drizzle-orm';
 import Link from 'next/link';
 import { db } from '@/db/client';
+import { hasContractWork } from '@/lib/posture/read';
 import {
   projectTypes,
   scheduleTemplateTasks,
@@ -103,9 +104,29 @@ export default async function TemplatesPage() {
   // matching how a person alphabetises -- and by id after that so two
   // templates sharing a name still render in the same order on every request
   // rather than however each query happened to come back.
+  /**
+   * Schedule templates are omitted where NOBODY does contract work.
+   *
+   * A task chain with dependencies and a forward pass is contract-work
+   * machinery: three tasks do not want a critical path, and a service-only
+   * business scrolling past them is being shown a feature it will never open.
+   *
+   * Filtered from the LIST here and refused at `/templates/schedule/[id]`,
+   * because a hidden link is not a mechanism -- this codebase has already
+   * written that about the estimator role. Both are needed: this stops it
+   * being offered, the route stops it being reached.
+   *
+   * Asked over the whole deployment rather than per company, because a
+   * schedule template belongs to a project TYPE and every company shares
+   * those. One contract company means these exist.
+   */
+  const showSchedules = await hasContractWork();
+
   const rows: TemplateRow[] = [
     ...scopeRows.map((row) => ({ ...row, kind: 'quote' as const })),
-    ...scheduleRows.map((row) => ({ ...row, kind: 'schedule' as const })),
+    ...(showSchedules
+      ? scheduleRows.map((row) => ({ ...row, kind: 'schedule' as const }))
+      : []),
   ].sort(
     (a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }) || a.id.localeCompare(b.id),
   );

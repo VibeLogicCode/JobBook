@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { checkbox } from '@/app/settings/validate';
 
 /**
  * The shapes and the rules behind the two newest maintained lists --
@@ -16,6 +17,12 @@ export const PROJECT_TYPE_LABELS: Record<string, string> = {
   name: 'Name',
   sortOrder: 'Order',
   reason: 'Reason',
+  posture: 'Offered for',
+  holdback: 'Holdback applies',
+  progressInvoicing: 'Billed in draws',
+  scheduleTemplate: 'Has a schedule',
+  constructionActDates: 'Construction Act dates',
+  scopeInputs: 'Measurements',
 };
 
 export const LEAD_SOURCE_LABELS: Record<string, string> = {
@@ -50,12 +57,43 @@ const optionalOrder = z
 export const projectTypeFields = z.object({
   name: listName,
   sortOrder: optionalOrder,
+  /**
+   * Which kind of work offers this type. `both` is the default and the value
+   * that changes nothing about what any company sees.
+   */
+  posture: z.enum(['both', 'service', 'contract']).default('both'),
+  /**
+   * The five flags, as unchecked-means-false checkboxes.
+   *
+   * `checkbox` maps a missing key to false, which is exactly right on a full
+   * submit -- an unchecked box sends nothing -- and exactly WRONG on a partial
+   * one. Both project-type actions submit the whole record, the way every
+   * settings form in this product does, so there is no partial case to guard.
+   *
+   * They default to TRUE rather than false, so a caller that somehow omitted
+   * them writes today's behaviour. The off state is the one that would change
+   * what a job does.
+   */
+  holdback: checkbox.default(true),
+  progressInvoicing: checkbox.default(true),
+  scheduleTemplate: checkbox.default(true),
+  constructionActDates: checkbox.default(true),
+  scopeInputs: checkbox.default(true),
 });
 
 export type ProjectTypeInput = z.output<typeof projectTypeFields>;
 
 export function toProjectTypeColumns(input: ProjectTypeInput) {
-  return { name: input.name, sortOrder: input.sortOrder };
+  return {
+    name: input.name,
+    sortOrder: input.sortOrder,
+    posture: input.posture,
+    holdback: input.holdback,
+    progressInvoicing: input.progressInvoicing,
+    scheduleTemplate: input.scheduleTemplate,
+    constructionActDates: input.constructionActDates,
+    scopeInputs: input.scopeInputs,
+  };
 }
 
 /* -------------------------------------------------------------------------

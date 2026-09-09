@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { and, asc, eq, ne } from 'drizzle-orm';
 import { notFound } from 'next/navigation';
+import { hasContractWork } from '@/lib/posture/read';
 import { cache } from 'react';
 import { db } from '@/db/client';
 import {
@@ -86,6 +87,26 @@ export default async function ScheduleTemplateDetailPage({
   // A mistyped URL is a 404, not a 500: an id of the wrong shape reaches the
   // driver as `invalid input syntax for type uuid` and surfaces as an error page.
   if (!isUuid(id)) notFound();
+
+  /**
+   * Refused where NOBODY in this deployment does contract work.
+   *
+   * On the ROUTE and not only on the link that reaches it. A hidden nav entry
+   * is not a mechanism -- this codebase has already written that about the
+   * estimator role -- and `/templates` filtering these out of its list is the
+   * other half of the same rule, not a substitute for it. A bookmark, a stale
+   * tab and a typed URL all arrive here.
+   *
+   * `notFound` rather than a refusal sentence, deliberately: under service-only
+   * this concept does not exist rather than being withheld, so "not found" is
+   * the true answer and a permission-shaped message would suggest asking
+   * somebody for access to it.
+   *
+   * `hasContractWork` fails OPEN on an unreadable database -- a blip must not
+   * 404 a template somebody is editing.
+   */
+  if (!(await hasContractWork())) notFound();
+
   const state = await resolveActor();
   const allowed = state.actor ? can(state.actor.role, 'rates:edit') : false;
   const mayVoid = state.actor ? can(state.actor.role, 'record:void') : false;

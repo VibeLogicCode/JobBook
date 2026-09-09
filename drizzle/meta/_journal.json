@@ -183,6 +183,13 @@
       "when": 1788985857270,
       "tag": "0025_organization_keeps_only_the_deployment",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1788988099728,
+      "tag": "0026_project_type_flags",
+      "breakpoints": true
     }
   ]
 }

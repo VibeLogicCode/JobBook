@@ -7,6 +7,7 @@ import {
 import { addDays, tenantToday, yearOf } from '@/lib/quote/dates';
 import { loadTaxRatesFor } from '@/lib/quote/rates';
 import { companyOf } from '@/lib/company/load';
+import { flagsForProject } from '@/lib/posture/read';
 import { allocateDocumentNumber } from '@/lib/quote/numbering';
 import type { TaxRateInput } from '@/lib/quote/tax';
 import { expandTemplate, type ScopeInputs, type TemplateItem } from '@/lib/quote/template';
@@ -127,6 +128,9 @@ export async function createQuoteFromTemplate(args: {
 }): Promise<{ quoteId: string; quoteNumber: string }> {
   return db.transaction(async (tx) => {
     const company = await companyOf(tx, args.projectId);
+    // In the same transaction as the write, so the paperwork the quote is
+    // built with is the paperwork the type had when it was built.
+    const flags = await flagsForProject(tx, args.projectId);
     const customerExempt = await customerExemptFor(tx, args.projectId);
 
     const [template] = await tx
@@ -199,7 +203,30 @@ export async function createQuoteFromTemplate(args: {
         totalCents: totals.totalCents,
         totalCostCents: totals.totalCostCents,
         marginBp: totals.marginBp,
-        holdbackPctTenThou: company.defaultHoldbackPctTenThou,
+        /**
+         * The company's default, but ONLY if this kind of job withholds
+         * anything.
+         *
+         * ---------------------------------------------------------------------
+         * THE MOST IMPORTANT LINE IN THE POSTURE WORK
+         * ---------------------------------------------------------------------
+         *
+         * This copies the issuing company's default onto every new quote, and
+         * without the flag check a service job's accepted quote carries 10%
+         * and its final invoice withholds it -- silently, on a document the
+         * customer signs, with the arithmetic entirely innocent. The design's
+         * first revision described the override that was meant to prevent this
+         * and never named this call site.
+         *
+         * NULL rather than 0n when the flag is off. `contractOf` in
+         * `lib/invoice/repository.ts` already reads absence as "the contract
+         * withholds nothing" and refuses to fall back to a company default in
+         * as many words, and `lib/quote/holdback-notice.ts` refuses to print
+         * the paragraph on a null. Writing 0n would be a second
+         * representation of one fact, and both of those would then have two
+         * shapes to refuse instead of one.
+         */
+        holdbackPctTenThou: flags.holdback ? company.defaultHoldbackPctTenThou : null,
         terms: company.quoteTermsText,
         paymentTermsText: company.paymentTermsText,
         createdBy: args.createdBy,
@@ -232,6 +259,9 @@ export async function createBlankQuote(args: {
 }): Promise<{ quoteId: string; quoteNumber: string }> {
   return db.transaction(async (tx) => {
     const company = await companyOf(tx, args.projectId);
+    // In the same transaction as the write, so the paperwork the quote is
+    // built with is the paperwork the type had when it was built.
+    const flags = await flagsForProject(tx, args.projectId);
     const customerExempt = await customerExemptFor(tx, args.projectId);
 
     const quoteDate = args.quoteDate ?? (await tenantToday(tx));
@@ -260,7 +290,30 @@ export async function createBlankQuote(args: {
         totalCents: totals.totalCents,
         totalCostCents: totals.totalCostCents,
         marginBp: totals.marginBp,
-        holdbackPctTenThou: company.defaultHoldbackPctTenThou,
+        /**
+         * The company's default, but ONLY if this kind of job withholds
+         * anything.
+         *
+         * ---------------------------------------------------------------------
+         * THE MOST IMPORTANT LINE IN THE POSTURE WORK
+         * ---------------------------------------------------------------------
+         *
+         * This copies the issuing company's default onto every new quote, and
+         * without the flag check a service job's accepted quote carries 10%
+         * and its final invoice withholds it -- silently, on a document the
+         * customer signs, with the arithmetic entirely innocent. The design's
+         * first revision described the override that was meant to prevent this
+         * and never named this call site.
+         *
+         * NULL rather than 0n when the flag is off. `contractOf` in
+         * `lib/invoice/repository.ts` already reads absence as "the contract
+         * withholds nothing" and refuses to fall back to a company default in
+         * as many words, and `lib/quote/holdback-notice.ts` refuses to print
+         * the paragraph on a null. Writing 0n would be a second
+         * representation of one fact, and both of those would then have two
+         * shapes to refuse instead of one.
+         */
+        holdbackPctTenThou: flags.holdback ? company.defaultHoldbackPctTenThou : null,
         terms: company.quoteTermsText,
         paymentTermsText: company.paymentTermsText,
         createdBy: args.createdBy,
@@ -338,6 +391,7 @@ export async function reviseQuote(args: {
 
     const quoteDate = await tenantToday(tx);
     const company = await companyOf(tx, source.projectId);
+    const flags = await flagsForProject(tx, source.projectId);
     const customerExempt = await customerExemptFor(tx, source.projectId);
     const totals = computeQuote(carried, await loadTaxRatesFor(tx, company.id), { onDate: quoteDate, customerExempt });
 

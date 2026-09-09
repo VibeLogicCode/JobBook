@@ -3,6 +3,9 @@ import { db } from '@/db/client';
 import { projectTypes, projects, scheduleTemplates, scopeTemplates } from '@/db/schema';
 import { resolveActor } from '@/app/settings/actor';
 import { can } from '@/lib/auth/permissions';
+import { primaryOf, readCompanies } from '@/lib/company/load';
+import { postureOf } from '@/lib/posture/read';
+import { POSTURE_DEFAULTS } from '@/lib/posture/types';
 import {
   createProjectType,
   setProjectTypeActive,
@@ -37,6 +40,23 @@ const REFUSAL = 'Your role can read the project type list but not change it.';
 export default async function ProjectTypesPage() {
   const state = await resolveActor();
   const allowed = state.actor ? can(state.actor.role, 'rates:edit') : false;
+
+  /**
+   * What a NEW type is pre-set to, from the company's posture.
+   *
+   * A service-only business gets the five flags off and turns back on what it
+   * wants, rather than the reverse. That is the only thing posture does on
+   * this screen -- the flags themselves are per type, and nothing here reads
+   * posture to decide how an existing type behaves.
+   *
+   * With two companies of different postures there is no single answer, so it
+   * falls back to everything on: the fuller form is the safe direction, since
+   * a flag left on is a field somebody ignores and a flag wrongly off is a
+   * holdback nobody was told about.
+   */
+  const newTypeDefaults = POSTURE_DEFAULTS[
+    postureOf(primaryOf(await readCompanies()))
+  ];
   const mayVoid = state.actor ? can(state.actor.role, 'record:void') : false;
 
   // Voided rows stay in the list rather than being filtered away -- their name
@@ -103,7 +123,11 @@ export default async function ProjectTypesPage() {
               resetOnSuccess
             >
               <FieldGrid>
-                <ProjectTypeFields idPrefix="new-project-type" disabled={!allowed} />
+                <ProjectTypeFields
+                  idPrefix="new-project-type"
+                  defaults={newTypeDefaults}
+                  disabled={!allowed}
+                />
               </FieldGrid>
             </ActionForm>
           </SheetButton>
