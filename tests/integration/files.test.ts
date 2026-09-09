@@ -39,7 +39,7 @@ import {
 const ACTOR = '11111111-2222-4333-8444-555555555555';
 
 beforeAll(async () => {
-  process.env.FILES_ROOT = await mkdtemp(path.join(tmpdir(), 'scopeline-files-'));
+  process.env.FILES_ROOT = await mkdtemp(path.join(tmpdir(), 'jobbook-files-'));
 });
 
 /**

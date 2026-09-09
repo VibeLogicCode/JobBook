@@ -1,4 +1,4 @@
-# Reaching Scopeline: HTTPS and sign-in
+# Reaching JobBook: HTTPS and sign-in
 
 Three postures. The setup wizard's **Access** step writes the configuration; the
 compose profiles here provide the containers. Choose one — they are mutually
@@ -43,10 +43,10 @@ Caddy issues a certificate from its own authority. Every browser will warn once
 until that authority is trusted:
 
 ```sh
-docker compose -f docker-compose.app.yml cp proxy:/data/caddy/pki/authorities/local/root.crt ./scopeline-root.crt
+docker compose -f docker-compose.app.yml cp proxy:/data/caddy/pki/authorities/local/root.crt ./jobbook-root.crt
 ```
 
-Install `scopeline-root.crt` as a trusted root on each device — Windows:
+Install `jobbook-root.crt` as a trusted root on each device — Windows:
 *Manage user certificates → Trusted Root Certification Authorities*; macOS:
 Keychain Access, then set it to *Always Trust*; Android and iOS: install the
 profile and enable full trust.

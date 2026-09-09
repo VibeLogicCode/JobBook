@@ -8,7 +8,7 @@
 
 **Tech Stack:** Next.js 16, React 19, TypeScript 6, PostgreSQL 16, Drizzle ORM 0.45, Vitest 3, zod, Docker Compose.
 
-**Spec:** `docs/superpowers/specs/2026-08-30-scopeline-design.md` and `docs/superpowers/specs/2026-08-30-ui-design.md`
+**Spec:** `docs/superpowers/specs/2026-08-30-jobbook-design.md` and `docs/superpowers/specs/2026-08-30-ui-design.md`
 
 **Plan 1 of 5 for Phase 1.** Later plans: (2) application and worksheet UI, (3) PDF documents, (4) SharePoint sync and backup, (5) first-run setup and accountant export.
 
@@ -58,7 +58,7 @@ Every task's requirements implicitly include this section.
 
 ```json
 {
-  "name": "scopeline",
+  "name": "jobbook",
   "version": "0.1.0",
   "private": true,
   "engines": { "node": ">=22" },

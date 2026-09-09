@@ -1,6 +1,6 @@
 # Licensing and Expiry — Contractor Quote & Project Management System
 
-**Companion to** `2026-08-30-distribution-and-updates.md` (sections 2 and 3.4), `2026-08-30-scopeline-design.md` (sections 8.2, 8.4, 8.6) and `2026-09-04-sso-design.md` (sections 5, 10)
+**Companion to** `2026-08-30-distribution-and-updates.md` (sections 2 and 3.4), `2026-08-30-jobbook-design.md` (sections 8.2, 8.4, 8.6) and `2026-09-04-sso-design.md` (sections 5, 10)
 Date: 2026-09-04
 Status: Awaiting review
 

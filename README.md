@@ -1,4 +1,4 @@
-# Scopeline
+# JobBook
 
 Quoting, documents and job costing for a general contractor. Square footage and
 room counts in, a priced quote out, a PDF the customer signs, and a record of
@@ -9,9 +9,25 @@ no cloud bill, no data leaving the box unless the operator turns the SharePoint
 mirror on.
 
 The name is the product's, not a customer's. Every company-specific string —
-name, address, tax number, logo, terms, tax rates — lives in the
-`organization` record and is set at setup. A test fails the build if a tenant's
-details appear in the source.
+name, address, tax number, logo, terms, tax rates — lives in the `companies`
+record and is set at setup. A test fails the build if a tenant's details
+appear in the source.
+
+**One deployment can issue documents as two companies.** Sister corporations
+under one owner share customers, the rate book and the subcontractor list, and
+each keeps its own legal name, HST registration number and document series.
+`organization` holds what the deployment owns — timezone, currency, units;
+`companies` holds what a legal person owns. A job belongs to one company and
+never moves, which is what lets every document under it resolve its letterhead
+through one join.
+
+**A company says what kind of work it does** — service, contract, or both —
+and each job type carries the paperwork that kind of work needs: holdback,
+progress draws, a schedule, Construction Act dates. A service call does not
+withhold a holdback nobody agreed to. Starter packs for general contracting,
+electrical, plumbing and HVAC give a fresh install job types, cost codes and a
+rate-book skeleton instead of five empty lists — **with no prices in it**, on
+purpose.
 
 ## Running it
 
@@ -78,6 +94,18 @@ looks like a broken migration rather than a forgotten command.
 `db:migrate:dev` is there for the rare case you want the development database
 alone.
 
+## Deploying it
+
+`deploy/synology/README.md` is the full guide for a Synology NAS, which is the
+target this is built for. The short version:
+
+**The NAS does not build the image.** The runtime stage is the Playwright base
+image, because the PDF pipeline drives real Chromium — over 2GB, and `next
+build` on top of it wants more RAM than a small NAS has. Push a `v*` tag and
+`.github/workflows/release.yml` builds and publishes to GitHub Container
+Registry; the NAS runs `docker compose pull`. `docker save` to a `.tar` still
+works for a NAS with no internet.
+
 ## Layout
 
 | Path | What is in it |
@@ -87,7 +115,11 @@ alone.
 | `src/db` | Drizzle schema, enums, shared audit columns, demo seed |
 | `drizzle` | Migrations, including the triggers and the no-DELETE grant |
 | `src/app` | Next.js routes, the worksheet, and the print document |
+| `src/db/seed/packs` | Trade starter packs. Content, and the loader that retires what a pack does not want |
+| `src/lib/company` | Which company issues a document, and the code on its numbers |
+| `src/lib/posture` | Service work against contract work, and the per-job-type flags |
 | `docker` | Container entrypoint, backup and restore |
+| `deploy/synology` | The NAS deployment: compose file, `.env.example`, and the guide |
 | `docs/superpowers` | Specifications and plans. Read these before changing behaviour |
 
 ## Two rules that explain most of the code

@@ -12,7 +12,7 @@
  * name is silent at compile time and at runtime, and the failure -- a sheet
  * that never closes -- looks exactly like the bug this was written to fix.
  */
-export const SAVED_EVENT = 'scopeline:saved';
+export const SAVED_EVENT = 'jobbook:saved';
 
 /** What rides along, so a banner can say what happened rather than "Done". */
 export interface SavedEventDetail {
@@ -35,7 +35,7 @@ export type SavedEvent = CustomEvent<SavedEventDetail>;
  * the two must not be treated the same for the purpose of asking before a
  * dismissal throws work away.
  */
-export const REFUSED_EVENT = 'scopeline:refused';
+export const REFUSED_EVENT = 'jobbook:refused';
 
 /** What rides along -- the refusal reason, for a listener that wants to say why. */
 export interface RefusedEventDetail {

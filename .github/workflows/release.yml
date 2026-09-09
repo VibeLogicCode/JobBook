@@ -1,0 +1,136 @@
+# Builds the image and publishes it to GitHub Container Registry.
+#
+# ---------------------------------------------------------------------------
+# WHY THE NAS DOES NOT BUILD
+# ---------------------------------------------------------------------------
+#
+# The runtime stage is `mcr.microsoft.com/playwright:v1.62.1-noble`, because
+# the PDF pipeline drives real Chromium and Playwright refuses to drive a
+# build it did not ship with. That base is over 2GB, and `next build` on top
+# of it wants more RAM than a DS220+ has. A NAS asked to do this either takes
+# most of an hour or gets OOM-killed halfway, and the failure looks like a
+# broken Dockerfile rather than a small machine.
+#
+# So the build happens here, once, and every NAS runs `docker compose pull`.
+# That is also the answer to the update problem recorded in backlog §10b.4: a
+# 1.3GB tar copied by hand per customer is a support burden that grows with
+# every sale, and a registry makes an update one command.
+#
+# ---------------------------------------------------------------------------
+# THE TAR PATH IS NOT REPLACED
+# ---------------------------------------------------------------------------
+#
+# `docker save` still works and `deploy/synology/README.md` still documents
+# it, because two real cases need it: a NAS with no internet access, and a
+# first install where pulling 2GB over a domestic connection is slower than
+# walking a USB stick over. Registry-first, tar-when-you-must.
+name: release
+
+on:
+  push:
+    # A tag is the deliberate act. Pushing to a branch builds nothing, so an
+    # ordinary commit cannot become somebody's production image by accident.
+    tags: ['v*']
+  # For a first run, or to rebuild a tag whose publish failed.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Image tag to publish (e.g. v0.1.0)'
+        required: true
+
+concurrency:
+  # Two publishes of one tag would race on `latest`.
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # The suite, before anything reaches the registry.
+  #
+  # A tag push triggers `test.yml` on its own too, but in PARALLEL -- so
+  # without this the image could be published while the suite was still
+  # running, and a red build after a green publish tells somebody nothing they
+  # can act on. Called rather than copied, so there is one definition of what
+  # "tests pass" means.
+  test:
+    uses: ./.github/workflows/test.yml
+
+  image:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # What lets the built-in GITHUB_TOKEN push to ghcr.io. No personal
+      # access token, and nothing to rotate.
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The TAG, not the default branch.
+          #
+          # A `workflow_dispatch` run checks out the default branch unless told
+          # otherwise, so without this, re-publishing `v0.1.0` by hand would
+          # build whatever is on `main` and label it `v0.1.0` -- an image whose
+          # name is a lie about what is in it, which is the worst kind of
+          # release bug because nothing about it looks wrong.
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Work out the version
+        id: version
+        run: |
+          if [ -n "${{ inputs.tag }}" ]; then
+            echo "value=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Lowercased, because a repository owner may have capitals in their name
+      # and a registry reference may not. `docker pull ghcr.io/Owner/...`
+      # fails with "invalid reference format", which reads as a typo.
+      - name: Lowercase the image name
+        id: image
+        run: echo "name=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          # amd64 ONLY, deliberately. Every x86_64 Synology model runs this;
+          # the ARM models (some smaller DS2xx/DS4xx) cannot run it and are
+          # told so in the deploy README rather than being handed an image
+          # that starts and then fails on the browser. Adding arm64 here would
+          # double the build time to serve a model this has not been tested on.
+          platforms: linux/amd64
+          tags: |
+            ${{ steps.image.outputs.name }}:${{ steps.version.outputs.value }}
+            ${{ steps.image.outputs.name }}:latest
+          # Layer cache in the registry, so a rebuild that only changed
+          # application code does not re-pull and re-install node_modules.
+          cache-from: type=registry,ref=${{ steps.image.outputs.name }}:buildcache
+          cache-to: type=registry,ref=${{ steps.image.outputs.name }}:buildcache,mode=max
+
+      - name: Say what to run on the NAS
+        run: |
+          {
+            echo "## Published"
+            echo
+            echo '```'
+            echo "${{ steps.image.outputs.name }}:${{ steps.version.outputs.value }}"
+            echo '```'
+            echo
+            echo "On the NAS, in the folder holding docker-compose.yml:"
+            echo
+            echo '```sh'
+            echo "SCOPELINE_IMAGE=${{ steps.image.outputs.name }}:${{ steps.version.outputs.value }} \\"
+            echo "  docker compose pull && docker compose up -d"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

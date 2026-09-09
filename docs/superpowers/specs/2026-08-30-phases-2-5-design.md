@@ -1,6 +1,6 @@
 # Phases 2–5 Design — Contractor Quote & Project Management System
 
-**Companion to** `2026-08-30-scopeline-design.md` (Phase 1) and `2026-08-30-ui-design.md`
+**Companion to** `2026-08-30-jobbook-design.md` (Phase 1) and `2026-08-30-ui-design.md`
 Date: 2026-08-30
 Status: Awaiting review
 

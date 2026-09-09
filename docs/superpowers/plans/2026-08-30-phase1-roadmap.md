@@ -4,7 +4,7 @@
 
 **Why not write all five in full now.** Plans 2–5 call code Plan 1 has not built. A UI plan written today would specify React against an API whose shape is still theoretical, and a sync plan would assume a schema that testing may still move. That code gets rewritten, which is waste rather than diligence. What genuinely needs deciding up front are the **seams between plans**, and those are fixed here.
 
-**Specs:** `2026-08-30-scopeline-design.md`, `2026-08-30-ui-design.md`
+**Specs:** `2026-08-30-jobbook-design.md`, `2026-08-30-ui-design.md`
 
 ---
 

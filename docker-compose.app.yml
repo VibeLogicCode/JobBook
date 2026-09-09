@@ -12,7 +12,7 @@
 # database container from docker-compose.yml. It did: same directory, same
 # default project, same service name -- and recreating it here without the
 # published port left every local database test unable to connect.
-name: scopeline
+name: jobbook
 
 services:
   db:

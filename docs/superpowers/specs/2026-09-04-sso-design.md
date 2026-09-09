@@ -1,6 +1,6 @@
 # Multi-Provider SSO — Contractor Quote & Project Management System
 
-**Companion to** `2026-08-30-scopeline-design.md` (sections 2.1, 3.3, 4, 7, 8.6) and `2026-08-30-distribution-and-updates.md`
+**Companion to** `2026-08-30-jobbook-design.md` (sections 2.1, 3.3, 4, 7, 8.6) and `2026-08-30-distribution-and-updates.md`
 Date: 2026-09-04
 Status: Awaiting review
 

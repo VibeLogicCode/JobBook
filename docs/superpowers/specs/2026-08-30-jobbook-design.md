@@ -652,7 +652,7 @@ No manual list or column creation. The chain is:
 
 ```
 Drizzle schema  ->  npm run generate:sharepoint  ->  PnP template XML
-                                                 ->  Provision-Scopeline.ps1
+                                                 ->  Provision-JobBook.ps1
 ```
 
 A code generator reads the Drizzle table definitions and emits a PnP provisioning template plus a PowerShell wrapper. Running the wrapper creates or updates every list, field, view, and index, and applies the permission model from section 7.2.

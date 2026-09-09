@@ -1,5 +1,14 @@
 name: test
-on: [push, pull_request]
+
+# `workflow_call` as well as the ordinary triggers, so `release.yml` can make
+# publishing an image depend on this passing rather than merely running
+# beside it. A tag push starts both workflows; without the dependency the
+# image can reach the registry while the suite is still going, and a red
+# build after a green publish is worth nothing.
+on:
+  push:
+  pull_request:
+  workflow_call:
 
 jobs:
   test:

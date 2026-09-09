@@ -1,6 +1,6 @@
 # Distribution and Updates
 
-**Companion to** `2026-08-30-scopeline-design.md`
+**Companion to** `2026-08-30-jobbook-design.md`
 Date: 2026-08-30
 Status: Awaiting review
 
@@ -24,7 +24,7 @@ Three locations, and only one of them is public.
 private repo (source)
   └─ GitHub Actions, on tag v*
        ├─ docker build   (multi-stage, source-free runtime stage)
-       ├─ push           ghcr.io/<owner>/scopeline:X.Y.Z   [private]
+       ├─ push           ghcr.io/<owner>/jobbook:X.Y.Z   [private]
        └─ commit         version.json -> public manifest repo
 
 customer mini PC

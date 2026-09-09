@@ -30,7 +30,7 @@
 	# clicking through the warning forever.
 	pki {
 		ca local {
-			name "Scopeline local authority"
+			name "JobBook local authority"
 		}
 	}
 }

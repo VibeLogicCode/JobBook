@@ -1,21 +1,22 @@
-# Scopeline on a Synology NAS, from a pre-built image -- no git, no source, no
+# JobBook on a Synology NAS, from a pre-built image -- no git, no source, no
 # `docker build` on the box. See docker-compose.app.yml at the repo root for
 # the source-based version this is derived from; the comments there explain
 # decisions this file inherits without repeating them all.
 #
 # Load the image once, on this machine, before `up`:
 #
-#   docker load -i scopeline.tar
+#   docker load -i jobbook.tar
 #   docker compose -f deploy/synology/docker-compose.yml up -d
 #
 # then open http://<this NAS's LAN address>:${APP_PORT:-38080}. See README.md
 # in this folder for the full runbook -- copying the tar over, the folders to
 # create first, the .env values that must be set, and the first-run wizard.
 #
-# Every `build:` in the source compose file becomes `image: scopeline:latest`
+# Every `build:` in the source compose file becomes an `image:` reference,
+# because the NAS never builds -- see JOBBOOK_IMAGE below.
 # here. Nothing else about the service definitions changes: same healthchecks,
 # same restart policies, same environment contract. What DOES change is where
-# the data lives -- bind mounts under /volume1/docker/scopeline/ instead of
+# the data lives -- bind mounts under /volume1/docker/jobbook/ instead of
 # named volumes, because a named volume is hard to find in File Station, hard
 # to back up by hand, and easy to lose in a Container Manager project reset.
 # The database directory is the one that matters most.
@@ -29,7 +30,29 @@
 # domain, Cloudflare Tunnel or in-app SSO is wanted later, read
 # docker/README-access.md in the source repo and extend this file the same way
 # docker-compose.app.yml does -- the environment variables are identical.
-name: scopeline
+# ---------------------------------------------------------------------------
+# WHERE THE IMAGE COMES FROM
+# ---------------------------------------------------------------------------
+#
+# `JOBBOOK_IMAGE` selects it, and defaults to `jobbook:latest` -- the tag
+# `docker load` produces from a `.tar`, so an offline install needs no change
+# to this file at all.
+#
+# Pulling from a registry instead means one line in `.env`:
+#
+#   JOBBOOK_IMAGE=ghcr.io/<owner>/jobbook:v0.1.0
+#
+# A VERSION and not `latest`, for a deployment somebody else depends on: with a
+# tag you know what is running and can go back to it, and a `docker compose
+# pull` on `latest` is an upgrade nobody asked for, applied whenever the
+# container next restarts.
+#
+# All three services share the variable because they are the same image with
+# different entrypoints -- the app, the reminder loop, the backup loop. Two of
+# them running a different build than the third is a combination nothing has
+# been tested in.
+
+name: jobbook
 
 services:
   # ---------------------------------------------------------------------------
@@ -48,7 +71,7 @@ services:
   # The uids are facts about the two images, not guesses -- 70 is `postgres` in
   # postgres:16-alpine, 1001 is `pwuser` in this app's own image, which its
   # Dockerfile switches to with `USER pwuser`. Check with:
-  #   docker run --rm --entrypoint sh scopeline:latest -c 'id -u'
+  #   docker run --rm --entrypoint sh jobbook:latest -c 'id -u'
   #
   # Uses the postgres image only because it is already being pulled; nothing
   # here is Postgres-specific, and it keeps a NAS with no internet from needing
@@ -66,7 +89,7 @@ services:
         chown -R 1001:1001 /host/files /host/backups /host/config
         echo "data folders ready"
     volumes:
-      - ${SCOPELINE_DATA:-/volume1/docker/scopeline}:/host
+      - ${JOBBOOK_DATA:-/volume1/docker/jobbook}:/host
     restart: 'no'
 
   db:
@@ -82,7 +105,7 @@ services:
       # Bind mount, not a named volume: this is the one directory that must be
       # findable, and backupable by hand, from File Station if everything else
       # about Docker on this box is ever forgotten.
-      - ${SCOPELINE_DATA:-/volume1/docker/scopeline}/db:/var/lib/postgresql/data
+      - ${JOBBOOK_DATA:-/volume1/docker/jobbook}/db:/var/lib/postgresql/data
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U quote']
       interval: 5s
@@ -91,7 +114,7 @@ services:
     restart: unless-stopped
 
   app:
-    image: scopeline:latest
+    image: ${JOBBOOK_IMAGE:-jobbook:latest}
     depends_on:
       init-folders:
         condition: service_completed_successfully
@@ -170,12 +193,12 @@ services:
       # terminating TLS in front of it.
       - '${APP_BIND:-0.0.0.0}:${APP_PORT:-38080}:3000'
     volumes:
-      - ${SCOPELINE_DATA:-/volume1/docker/scopeline}/files:/data/files
-      - ${SCOPELINE_DATA:-/volume1/docker/scopeline}/backups:/data/backups
+      - ${JOBBOOK_DATA:-/volume1/docker/jobbook}/files:/data/files
+      - ${JOBBOOK_DATA:-/volume1/docker/jobbook}/backups:/data/backups
       # Where the setup wizard writes the deployment configuration. A file
       # rather than database rows, because these are credentials and a
       # database row is mirrored to SharePoint and lands in every backup.
-      - ${SCOPELINE_DATA:-/volume1/docker/scopeline}/config:/data/config
+      - ${JOBBOOK_DATA:-/volume1/docker/jobbook}/config:/data/config
       # The USB drive attached to the NAS, at the same path BACKUP_USB_DIR
       # names. Commented out rather than guessed: an unset host path silently
       # becomes an anonymous volume, which is a backup destination on the same
@@ -183,7 +206,7 @@ services:
       # USB storage under /volumeUSB1/... or /volumeUSB2/... by default --
       # confirm the exact path for this NAS (Control Panel > External Devices,
       # or `ls /volumeUSB1` over SSH) before uncommenting.
-      # - /volumeUSB1/usbshare/scopeline-backup:/mnt/backup
+      # - /volumeUSB1/usbshare/jobbook-backup:/mnt/backup
     restart: unless-stopped
 
   # The backup schedule, in its own container.
@@ -197,7 +220,7 @@ services:
   # named `backup` that is quietly taking none looks exactly like one that is
   # working.
   backup:
-    image: scopeline:latest
+    image: ${JOBBOOK_IMAGE:-jobbook:latest}
     depends_on:
       init-folders:
         condition: service_completed_successfully
@@ -234,10 +257,10 @@ services:
     volumes:
       # Reads the same uploaded files the app writes, and writes into the same
       # backup volume, so one artifact set exists rather than two.
-      - ${SCOPELINE_DATA:-/volume1/docker/scopeline}/files:/data/files:ro
-      - ${SCOPELINE_DATA:-/volume1/docker/scopeline}/backups:/data/backups
-      - ${SCOPELINE_DATA:-/volume1/docker/scopeline}/config:/data/config:ro
-      # - /volumeUSB1/usbshare/scopeline-backup:/mnt/backup
+      - ${JOBBOOK_DATA:-/volume1/docker/jobbook}/files:/data/files:ro
+      - ${JOBBOOK_DATA:-/volume1/docker/jobbook}/backups:/data/backups
+      - ${JOBBOOK_DATA:-/volume1/docker/jobbook}/config:/data/config:ro
+      # - /volumeUSB1/usbshare/jobbook-backup:/mnt/backup
     # on-failure, not unless-stopped: an unconfigured key is a permanent
     # condition, and a container that restarts forever on the same fatal
     # message buries it in a log nobody reads. Exited(1) beside a running app
@@ -256,7 +279,7 @@ services:
   # against a database that does not yet have `reminders` in it would fail
   # every hour on a fresh deployment until somebody read the log.
   reminders:
-    image: scopeline:latest
+    image: ${JOBBOOK_IMAGE:-jobbook:latest}
     depends_on:
       app:
         condition: service_healthy
@@ -281,7 +304,7 @@ services:
     restart: unless-stopped
 
 # No top-level `volumes:` section -- every mount above is a bind mount to
-# /volume1/docker/scopeline/..., created ahead of time (see README.md), not a
+# /volume1/docker/jobbook/..., created ahead of time (see README.md), not a
 # named volume Docker manages on its own. That is the deliberate difference
 # from docker-compose.app.yml: on this NAS, the database directory has to be
 # something File Station and a manual tar backup can both find.

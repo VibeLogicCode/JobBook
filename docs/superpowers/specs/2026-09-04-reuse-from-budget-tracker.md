@@ -26,7 +26,7 @@ the alternative is worse for this product. A shared library between two
 applications maintained by one person, deployed on different schedules to
 different customers, means every change has to be evaluated against two sets of
 requirements before it can ship to either — and the requirements diverge
-immediately. Scopeline needs tax on a holdback and a Construction Act clock;
+immediately. JobBook needs tax on a holdback and a Construction Act clock;
 Budget Tracker needs merchant categorisation and a savings goal. Nothing about
 those futures is shared.
 
@@ -215,7 +215,7 @@ decoration.
 
 - **Their app shell.** This product's rail plus bottom tab bar is already built
   and already carries the destinations this domain needs.
-- **Their route-group layout** beyond what `scopeline-design.md` §62 already
+- **Their route-group layout** beyond what `jobbook-design.md` §62 already
   adopts.
 - **Their notification stack.** `distribution-and-updates.md` §4.2 already
   records why: email from the app was cut, since the realistic failure is the
