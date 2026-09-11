@@ -55,6 +55,18 @@ export const SETTINGS_GROUPS: NavGroup[] = [
         summary: 'Which legal company issues a job. Most businesses have one.',
       },
       {
+        /**
+         * Directly after Companies, because it is the same question one level
+         * down: which legal company, then what that company does. It also has
+         * to be FINDABLE by somebody who answered it wrong at first run --
+         * the wizard promises this field is changeable afterwards, and for a
+         * while it was not changeable anywhere.
+         */
+        href: '/settings/work',
+        label: 'The kind of work',
+        summary: 'Service work, contract work or both. Decides which job types and fields you get.',
+      },
+      {
         href: '/settings/contact',
         label: 'Contact',
         summary: 'The address and contact block printed on quotes.',

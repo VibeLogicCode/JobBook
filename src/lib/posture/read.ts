@@ -86,6 +86,15 @@ export type ProjectTypeRow = typeof projectTypes.$inferSelect;
 /**
  * The project types a company may file NEW work under.
  *
+ * ONE company's answer. The two new-work pickers use `offeredWork` /
+ * `postureIsOffered` instead, because they run over a projection they have
+ * already read and because `/quotes/new` picks its company in the same submit
+ * as its type -- there is no single posture to filter by at the moment it
+ * renders. This stays for the per-company question, which the settings screens
+ * and a company-scoped picker will want; `tests/unit/posture.test.ts` asserts
+ * the two agree wherever there is one company, so they cannot drift into two
+ * different opinions about the same fact.
+ *
  * Active and non-void, then filtered by the posture tag. Retired types are
  * excluded here and resolved everywhere else, which is the rule every
  * maintained list in this product follows -- a job already filed as a

@@ -7,8 +7,10 @@ vi.mock('next/headers', () => ({
 }));
 
 import { db } from '@/db/client';
-import { companies, organization, users } from '@/db/schema';
-import { saveContact, saveFinancial, saveIdentity, saveLocale } from '@/app/settings/actions';
+import { companies, organization, projectTypes, users } from '@/db/schema';
+import {
+  saveContact, saveFinancial, saveIdentity, saveLocale, saveWorkPosture,
+} from '@/app/settings/actions';
 import { loadSettings } from '@/app/settings/load';
 import { FIRST_COMPANY_ID } from '@/lib/company/ids';
 // After the mocks above, deliberately: this pulls in the database client.
@@ -238,5 +240,87 @@ describe('what the screens read', () => {
      * a save lands on a company nobody chose.
      */
     expect(context.companyId).toBeNull();
+  });
+});
+
+/**
+ * The kind of work is changeable after first run, which for a while it was
+ * not.
+ *
+ * The setup wizard asks it, tells the installer *"Both of these are
+ * changeable afterwards"*, and then closes itself permanently -- and no
+ * settings screen touched the column. A contractor who answered Service work
+ * in his first five minutes and then signed a contract job had no way back
+ * short of SQL. These are the assertions that keep the promise true.
+ */
+describe('what kind of work a company does', () => {
+  it('changes it, and only for the company the form named', async () => {
+    const result = await saveWorkPosture(
+      null,
+      form({ workPosture: 'service', companyId: secondId }),
+    );
+    expect(result.ok).toBe(true);
+
+    const [second] = await db.select().from(companies).where(eq(companies.id, secondId));
+    expect(second!.workPosture).toBe('service');
+
+    // The sister corporation is untouched. Two companies under one owner
+    // genuinely differ here -- one dispatches service, one builds -- which is
+    // why the column is on `companies` and not on the deployment.
+    const [first] = await db.select().from(companies).where(eq(companies.id, FIRST_COMPANY_ID));
+    expect(first!.workPosture).toBe('both');
+  });
+
+  it('refuses a posture that is not one of the three', async () => {
+    const result = await saveWorkPosture(
+      null,
+      form({ workPosture: 'builder', companyId: secondId }),
+    );
+    expect(result.ok).toBe(false);
+  });
+
+  it('leaves every project type flag exactly as it was', async () => {
+    /**
+     * The one thing this save must never do.
+     *
+     * A project type is where the paperwork rules live, and re-deriving them
+     * from a posture change would silently alter the terms of contracts
+     * already signed under those types: a job that agreed to a holdback would
+     * stop withholding it because somebody edited a dropdown in Settings.
+     *
+     * Posture decides what is OFFERED on new work. Nothing else.
+     */
+    const before = await db
+      .select({ id: projectTypes.id, holdback: projectTypes.holdback,
+        progressInvoicing: projectTypes.progressInvoicing, scopeInputs: projectTypes.scopeInputs })
+      .from(projectTypes)
+      .orderBy(projectTypes.id);
+    expect(before.length).toBeGreaterThan(0);
+
+    expect((await saveWorkPosture(null, form({ workPosture: 'service', companyId: secondId }))).ok)
+      .toBe(true);
+
+    const after = await db
+      .select({ id: projectTypes.id, holdback: projectTypes.holdback,
+        progressInvoicing: projectTypes.progressInvoicing, scopeInputs: projectTypes.scopeInputs })
+      .from(projectTypes)
+      .orderBy(projectTypes.id);
+    expect(after).toEqual(before);
+  });
+
+  it('falls back to the only company when the form names none', async () => {
+    // A single-company install renders no hidden field, because it has no such
+    // concept. Here there are two, so naming none must be refused rather than
+    // guessed -- the same rule every other screen in this file follows.
+    await db.update(companies).set({ isActive: false }).where(eq(companies.id, secondId));
+    const result = await saveWorkPosture(null, form({ workPosture: 'contract' }));
+    expect(result.ok).toBe(true);
+    const [first] = await db.select().from(companies).where(eq(companies.id, FIRST_COMPANY_ID));
+    expect(first!.workPosture).toBe('contract');
+  });
+
+  it('refuses when two companies are active and the form names neither', async () => {
+    const result = await saveWorkPosture(null, form({ workPosture: 'service' }));
+    expect(result.ok).toBe(false);
   });
 });

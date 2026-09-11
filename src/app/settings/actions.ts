@@ -10,6 +10,7 @@ import { percentField } from '@/app/settings/percent-schema';
 import { parseRateToTenThou } from '@/lib/money/format';
 import { type ActionResult, refused, saved } from '@/app/settings/result';
 import { resolveSettingsCompany } from '@/lib/company/settings-target';
+import { POSTURES, type WorkPosture } from '@/lib/posture/types';
 import {
   checkbox,
   formValues,
@@ -177,6 +178,58 @@ export async function saveIdentity(
   if (!parsed.success) return invalid(parsed.error, identityLabels);
 
   return patchOrganization(parsed.data, 'Identity and branding saved.', namedCompany(formData));
+}
+
+// ---------------------------------------------------------------------------
+// The kind of work
+// ---------------------------------------------------------------------------
+
+const postureLabels = { workPosture: 'Kind of work' };
+
+const postureSchema = z.object({
+  workPosture: z.enum(POSTURES as readonly [WorkPosture, ...WorkPosture[]], {
+    message: 'must be service work, contract work or both',
+  }),
+});
+
+/**
+ * Changes what kind of work a company does.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY THIS EXISTS AT ALL
+ * ---------------------------------------------------------------------------
+ *
+ * The setup wizard asks the question and then told the installer *"Both of
+ * these are changeable afterwards"* -- and nothing could change it. The
+ * column was written once, at first run, by a screen that permanently closes
+ * itself. The design said the same thing in as many words: *"Changeable in
+ * Settings afterwards, always."* This is that screen's half of it.
+ *
+ * ---------------------------------------------------------------------------
+ * WHAT IT DOES AND DOES NOT TOUCH
+ * ---------------------------------------------------------------------------
+ *
+ * ONE column. It does not re-derive a single project type's flags, and it must
+ * not: a type is where the paperwork rules live, and rewriting them from a
+ * posture change would silently alter the terms of contracts already signed
+ * under those types. Posture decides what is OFFERED on new work -- the jobs
+ * in flight go on computing exactly what they computed yesterday.
+ *
+ * So switching to service-only stops offering contract types and stops asking
+ * for measurements on new service jobs. It does not remove a holdback from a
+ * job that agreed to one.
+ */
+export async function saveWorkPosture(
+  _previous: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  const guard = await requireCapability('organization.edit');
+  if (!guard.ok) return guard.result;
+
+  const parsed = postureSchema.safeParse(formValues(formData));
+  if (!parsed.success) return invalid(parsed.error, postureLabels);
+
+  return patchOrganization(parsed.data, 'The kind of work saved.', namedCompany(formData));
 }
 
 // ---------------------------------------------------------------------------
