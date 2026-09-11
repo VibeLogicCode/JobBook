@@ -1,7 +1,10 @@
 import { eq, inArray, sql } from 'drizzle-orm';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { db } from '@/db/client';
-import { costCodes, lineGroups, projectTypes, rateItems, trades, vendorTypes } from '@/db/schema';
+import {
+  costCodes, customers, lineGroups, projectTypes, projects, quoteLines, rateItems,
+  scopeTemplateItems, scopeTemplates, trades, vendorTypes,
+} from '@/db/schema';
 import { DEFAULT_PROJECT_TYPES, PROJECT_TYPE_IDS } from '@/db/seed/project-lists';
 import {
   DEFAULT_TRADES, DEFAULT_VENDOR_TYPES, ensureVendorLists, seedVendorLists, seedVendorTypes,
@@ -11,7 +14,10 @@ import { loadPack, retiredByPack } from '@/db/seed/packs/load';
 import { loadedPack, packHasSeededLists } from '@/db/seed/packs/marker';
 import { PACKS } from '@/db/seed/packs/registry';
 import { TRADES } from '@/db/seed/packs/types';
-import { unpricedProblem } from '@/lib/quote/unpriced';
+import { unpricedLineCodes, unpricedProblem, unsendableProblem } from '@/lib/quote/unpriced';
+import { createQuoteFromTemplate } from '@/lib/quote/repository';
+import { FIRST_COMPANY_ID } from '@/lib/company/ids';
+import { seedDeployment } from '../support/organization';
 import { offeredTypes } from '@/lib/posture/read';
 
 /**
@@ -46,8 +52,8 @@ beforeEach(async () => {
    */
   await db.execute(sql`
     truncate table audit_log, quote_taxes, quote_lines, quotes, scope_template_items,
-      scope_templates, rate_items, cost_codes, projects, settings, line_groups, trades,
-      vendor_types, project_types
+      scope_templates, rate_items, cost_codes, projects, customers, organization, companies,
+      document_sequences, settings, line_groups, trades, vendor_types, project_types
     restart identity cascade
   `);
   await db.insert(projectTypes).values(DEFAULT_PROJECT_TYPES.map((type) => ({
@@ -293,6 +299,227 @@ describe('the posture decides what paperwork a pack row arrives with', () => {
     // filing a job that withholds a holdback.
     expect(row!.holdback).toBe(false);
     expect(row!.isActive).toBe(true);
+  });
+});
+
+/**
+ * The starter scope templates, which are what turns a rate book into something
+ * that writes a quote.
+ *
+ * Without them "Build the lines from" offers nothing on a fresh install and
+ * every quote is assembled line by line by somebody standing in a customer's
+ * basement. The rate book is a list of prices; a template is the knowledge of
+ * what a job CONSISTS of -- that a water heater swap is the tank, the labour
+ * and the permit, and that forgetting the permit is how the job loses money.
+ */
+describe('the starter scope templates', () => {
+  it('ships three for each of the four trades and none for the plain start', async () => {
+    for (const trade of TRADES) {
+      const pack = PACKS[trade];
+      if (trade === 'none') {
+        // A template names rate items and this pack ships none. An empty
+        // template offered from a picker is worse than an empty picker.
+        expect(pack.scopeTemplates, trade).toHaveLength(0);
+        continue;
+      }
+      expect(pack.scopeTemplates.length, trade).toBeGreaterThanOrEqual(3);
+    }
+  });
+
+  it('names only its own project types and its own rate items', async () => {
+    /**
+     * The failure this catches is a first-run CRASH:
+     * `scope_template_items.rate_item_id` is NOT NULL with a foreign key, so a
+     * template naming an item no pack inserts would raise a constraint
+     * violation inside the wizard's transaction, on somebody's first five
+     * minutes, with the step left incomplete.
+     */
+    for (const trade of TRADES) {
+      const pack = PACKS[trade];
+      const itemIds = new Set(pack.rateItems.map((item) => item.id));
+      const typeIds = new Set(pack.projectTypes.map((type) => type.id));
+
+      for (const template of pack.scopeTemplates) {
+        expect(typeIds.has(template.projectTypeId), `${trade}: ${template.name}`).toBe(true);
+        expect(template.items.length, `${trade}: ${template.name}`).toBeGreaterThan(0);
+        for (const item of template.items) {
+          expect(itemIds.has(item.rateItemId), `${trade}: ${template.name}`).toBe(true);
+        }
+      }
+    }
+  });
+
+  it('carries a line group its own pack ships', async () => {
+    // `scope_template_items.line_group` is free text, and a group nobody has
+    // heard of appears as a heading on a printed quote.
+    for (const trade of TRADES) {
+      const pack = PACKS[trade];
+      const names = new Set(pack.lineGroups.map((group) => group.name));
+      for (const template of pack.scopeTemplates) {
+        for (const item of template.items) {
+          expect(names.has(item.lineGroup), `${trade}: ${item.lineGroup}`).toBe(true);
+        }
+      }
+    }
+  });
+
+  it('states a fixed quantity wherever it says fixed', async () => {
+    // `fixed` with no `fixedQtyMilli` derives zero, and a zero-derived line is
+    // DROPPED by `expandTemplate` -- so the permit line would silently not be
+    // on the quote, which is the exact mistake the template exists to prevent.
+    for (const trade of TRADES) {
+      for (const template of PACKS[trade].scopeTemplates) {
+        for (const item of template.items) {
+          if (item.qtySource === 'fixed') {
+            expect(item.fixedQtyMilli, `${trade}: ${template.name}`).toBeGreaterThan(0n);
+          }
+        }
+      }
+    }
+  });
+
+  it('loads them into the database with their lines', async () => {
+    await db.transaction((tx) => loadPack(tx, 'plumbing', 'both'));
+
+    const templates = await db
+      .select({ id: scopeTemplates.id, name: scopeTemplates.name })
+      .from(scopeTemplates);
+    expect(templates.map((row) => row.name)).toContain('Water heater replacement');
+
+    const heater = templates.find((row) => row.name === 'Water heater replacement')!;
+    const items = await db
+      .select({ lineGroup: scopeTemplateItems.lineGroup, qtySource: scopeTemplateItems.qtySource })
+      .from(scopeTemplateItems)
+      .where(eq(scopeTemplateItems.scopeTemplateId, heater.id));
+
+    // Tank, labour, permit.
+    expect(items).toHaveLength(3);
+    expect(items.map((row) => row.lineGroup)).toContain('Permits');
+    expect(items.map((row) => row.qtySource)).toContain('manual');
+  });
+
+  it('expands into a real quote whose lines all need a price', async () => {
+    /**
+     * The end-to-end shape of a first hour: pick the trade, start a quote from
+     * a starter template, and get a worklist of the prices to put in.
+     *
+     * `unpricedLineCodes` is what the worksheet warns from and what
+     * `setQuoteStatus` refuses to send on, so this asserts the template is
+     * safe to ship: every line arrives unpriced and the quote cannot go out
+     * until they are dealt with.
+     */
+    await db.transaction((tx) => loadPack(tx, 'plumbing', 'both'));
+    await seedDeployment({
+      legalName: 'Sample Plumbing Ltd.',
+      displayName: 'Sample Plumbing',
+      timezone: 'America/Toronto',
+      quoteValidityDays: 30,
+    });
+
+    const [template] = await db
+      .select({ id: scopeTemplates.id, projectTypeId: scopeTemplates.projectTypeId })
+      .from(scopeTemplates)
+      .where(eq(scopeTemplates.name, 'Water heater replacement'));
+
+    const [customer] = await db
+      .insert(customers)
+      .values({ name: 'Sample Client', customerType: 'residential' })
+      .returning({ id: customers.id });
+    const [project] = await db
+      .insert(projects)
+      .values({
+        name: 'Tank replacement',
+        projectNumber: 'P-2026-8001',
+        customerId: customer!.id,
+        companyId: FIRST_COMPANY_ID,
+        projectTypeId: template!.projectTypeId,
+      })
+      .returning({ id: projects.id });
+
+    const { quoteId } = await createQuoteFromTemplate({
+      projectId: project!.id,
+      scopeTemplateId: template!.id,
+      // No measurements: this template needs none. The counts are numbers and
+      // the area is the raw string the form sends.
+      scope: { areaSqftMilli: 0n, washroomCount: 0, kitchenCount: 0, bedroomCount: 0 },
+    });
+
+    const lines = await db
+      .select({
+        code: quoteLines.code,
+        calcMode: quoteLines.calcMode,
+        unitPriceTenThou: quoteLines.unitPriceTenThou,
+        isAllowance: quoteLines.isAllowance,
+      })
+      .from(quoteLines)
+      .where(eq(quoteLines.quoteId, quoteId));
+
+    // The tank and the labour and the permit reached the quote...
+    expect(lines.map((row) => row.code).sort()).toEqual(['LAB-PL', 'PERMIT', 'WH-40']);
+    // ...and every one of them is waiting for a price, named so the owner can
+    // go and put one in rather than hunting a column of zeros.
+    expect(unpricedLineCodes(lines).sort()).toEqual(['LAB-PL', 'PERMIT', 'WH-40']);
+    expect(unsendableProblem(lines)).toContain('WH-40');
+  });
+
+  it('withholds a measurement template from a company that measures nothing', async () => {
+    /**
+     * The renovation templates are driven by floor area. Under a service-only
+     * company every general-pack type has `scope_inputs` off, so no area is
+     * collected -- and `expandTemplate` drops a zero-derived line, which would
+     * leave the demolition, drywall, flooring and painting quietly absent from
+     * a quote that still looked complete.
+     */
+    await db.transaction((tx) => loadPack(tx, 'general', 'service'));
+    expect(await db.select().from(scopeTemplates)).toHaveLength(0);
+  });
+
+  it('ships them to a builder, who does measure', async () => {
+    await db.transaction((tx) => loadPack(tx, 'general', 'both'));
+    const names = (await db.select().from(scopeTemplates)).map((row) => row.name);
+    expect(names).toContain('Bathroom renovation');
+    expect(names).toContain('Basement finishing');
+  });
+
+  it('does not duplicate the lines when a pack is loaded twice', async () => {
+    // `scope_templates` has no unique index on its name, so the second load
+    // skips on the id -- and appending this run's items again would silently
+    // double every line on a template the owner may have since edited.
+    await db.transaction((tx) => loadPack(tx, 'hvac', 'both'));
+    const first = await db.select().from(scopeTemplateItems);
+    await db.transaction((tx) => loadPack(tx, 'hvac', 'both'));
+    const second = await db.select().from(scopeTemplateItems);
+    expect(second).toHaveLength(first.length);
+  });
+
+  it('skips a template whose rate item the owner already had under that code', async () => {
+    /**
+     * The crash this read-back prevents. A pack's insert skips on a code
+     * collision, so the pack's id is not in the database -- and a template
+     * naming it would violate the foreign key inside the wizard's own
+     * transaction.
+     *
+     * `MAINT` here stands for a row the owner created before reaching the
+     * trade step, which is the real sequence: the seasonal maintenance
+     * template is one line, so losing that line leaves nothing to write and
+     * the template is skipped rather than written empty.
+     */
+    await db.insert(rateItems).values({
+      code: 'MAINT',
+      description: 'My own maintenance visit',
+      unitLabel: 'visit',
+      calcMode: 'flat',
+      sellRateTenThou: 1_500_000n,
+      costRateTenThou: 0n,
+      isActive: true,
+    });
+
+    await db.transaction((tx) => loadPack(tx, 'hvac', 'both'));
+
+    const names = (await db.select().from(scopeTemplates)).map((row) => row.name);
+    expect(names).not.toContain('Seasonal maintenance visit');
+    // The other two are unaffected, and nothing threw.
+    expect(names).toContain('Furnace replacement');
   });
 });
 

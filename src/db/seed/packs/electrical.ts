@@ -27,6 +27,7 @@ const C = 'e2000000-0000-4a00-9000-0000000000';
 const R = 'e3000000-0000-4a00-9000-0000000000';
 const G = 'e4000000-0000-4a00-9000-0000000000';
 const S = 'e5000000-0000-4a00-9000-0000000000';
+const M = 'e6000000-0000-4a00-9000-0000000000';
 
 export const ELECTRICAL_PACK: TradePack = {
   trade: 'electrical',
@@ -159,5 +160,67 @@ export const ELECTRICAL_PACK: TradePack = {
     { id: `${S}03`, name: 'Fire alarm', sortOrder: 30 },
     { id: `${S}04`, name: 'Low voltage and data', sortOrder: 40 },
     { id: `${S}05`, name: 'Crane or lift hire', sortOrder: 50 },
+  ],
+
+  /**
+   * Three jobs an electrical contractor quotes most weeks.
+   *
+   * The service call is two lines and is the point: a call-out plus the hours,
+   * and the hours are `manual` because nobody knows them until they have
+   * looked at the job. The rewire shows what the measurements are FOR -- a
+   * circuit per 500 square feet and three receptacles a bedroom is how that
+   * quote is actually estimated, and it is arithmetic nobody should be doing
+   * on a notepad in a customer's hallway.
+   *
+   * NO PRICES, like everything else in this file. The quote arrives as a
+   * worklist of prices to fill in, and cannot be sent until they are filled.
+   */
+  scopeTemplates: [
+    {
+      id: `${M}01`,
+      name: 'Service call',
+      projectTypeId: `${T}01`,
+      description: 'A call-out and the time on site. Add materials as you use them.',
+      items: [
+        { rateItemId: `${R}03`, qtySource: 'fixed', fixedQtyMilli: 1_000n, lineGroup: 'Labour', sortOrder: 10 },
+        { rateItemId: `${R}01`, qtySource: 'manual', lineGroup: 'Labour', sortOrder: 20 },
+        { rateItemId: `${R}04`, qtySource: 'manual', lineGroup: 'Materials', sortOrder: 30 },
+      ],
+    },
+    {
+      id: `${M}02`,
+      name: 'Panel upgrade',
+      projectTypeId: `${T}03`,
+      description: 'A 200A panel, the labour, the circuits moved over, and the permit.',
+      items: [
+        { rateItemId: `${R}08`, qtySource: 'fixed', fixedQtyMilli: 1_000n, lineGroup: 'Materials', sortOrder: 10 },
+        { rateItemId: `${R}01`, qtySource: 'manual', lineGroup: 'Labour', sortOrder: 20 },
+        { rateItemId: `${R}07`, qtySource: 'manual', lineGroup: 'Materials', sortOrder: 30 },
+        // The line that gets forgotten and then absorbed. On the template, so
+        // that leaving it out takes an action rather than an oversight.
+        { rateItemId: `${R}09`, qtySource: 'fixed', fixedQtyMilli: 1_000n, lineGroup: 'Permits', sortOrder: 40 },
+      ],
+    },
+    {
+      id: `${M}03`,
+      name: 'Rewire, by floor area',
+      projectTypeId: `${T}04`,
+      description: 'Circuits from the floor area, devices from the bedroom count. Check both against the plan.',
+      items: [
+        // One 15A circuit per 500 sqft. 1/500 is 0.002, which is 20n.
+        { rateItemId: `${R}07`, qtySource: 'area', qtyMultiplierTenThou: 20n, lineGroup: 'Materials', sortOrder: 10 },
+        // Three receptacles a bedroom, and one switch.
+        { rateItemId: `${R}04`, qtySource: 'bedrooms', qtyMultiplierTenThou: 30_000n, lineGroup: 'Materials', sortOrder: 20 },
+        { rateItemId: `${R}05`, qtySource: 'bedrooms', lineGroup: 'Materials', sortOrder: 30 },
+        { rateItemId: `${R}01`, qtySource: 'manual', lineGroup: 'Labour', sortOrder: 40 },
+        { rateItemId: `${R}09`, qtySource: 'fixed', fixedQtyMilli: 1_000n, lineGroup: 'Permits', sortOrder: 50 },
+        /**
+         * OPTIONAL, so it starts excluded and prints as something the customer
+         * may add. An optional line cannot silently inflate a quote, which is
+         * what lets a shipped template offer an upgrade at all.
+         */
+        { rateItemId: `${R}06`, qtySource: 'manual', isOptional: true, lineGroup: 'Available upgrades', sortOrder: 60 },
+      ],
+    },
   ],
 };

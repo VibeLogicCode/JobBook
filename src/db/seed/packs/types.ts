@@ -197,6 +197,70 @@ export interface PackNamedRow {
   sortOrder: number;
 }
 
+/**
+ * One line of a starter scope template.
+ *
+ * `qtySource` is the engine's own enum and the reason templates are worth
+ * shipping at all: `fixed` for a thing there is one of, `manual` for the hours
+ * somebody types after looking at the job, and `area` / `washrooms` /
+ * `kitchens` / `bedrooms` for the lines that follow a measurement. A rewire
+ * quoted at one circuit per 500 square feet is a multiplier, not arithmetic
+ * done in somebody's head at a kitchen table.
+ */
+export interface PackScopeTemplateItem {
+  /** The pack's own rate item id. */
+  rateItemId: string;
+  qtySource: 'area' | 'washrooms' | 'kitchens' | 'bedrooms' | 'fixed' | 'manual';
+  /** 1 is `10000n`. One circuit per 500 sqft is `20n`. Defaults to 1. */
+  qtyMultiplierTenThou?: bigint;
+  /** Required by `fixed`, meaningless otherwise. 1 is `1000n`. */
+  fixedQtyMilli?: bigint;
+  /** Starts EXCLUDED, so a template cannot silently inflate a quote. */
+  isOptional?: boolean;
+  /** A placeholder the customer spends against. Exempt from the price guard. */
+  isAllowance?: boolean;
+  /** Free text on the line, matching one of the pack's line group names. */
+  lineGroup: string;
+  sortOrder: number;
+}
+
+/**
+ * A starter scope template: the shape of a job this trade quotes often.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY THESE MATTER MORE THAN THE RATE BOOK
+ * ---------------------------------------------------------------------------
+ *
+ * A rate book is a list of prices. A template is the KNOWLEDGE of what a job
+ * consists of -- that a water heater swap is the tank, the labour and the
+ * permit, and that forgetting the permit is how a quote loses money. Without
+ * one, "Build the lines from" offers nothing and every quote is assembled
+ * from scratch by somebody standing in a customer's basement.
+ *
+ * ---------------------------------------------------------------------------
+ * THEY CARRY NO PRICES EITHER, AND THAT IS SAFE NOW
+ * ---------------------------------------------------------------------------
+ *
+ * The items they name are the pack's own unpriced rate items, so a quote built
+ * from one arrives as a worklist of prices to fill in -- which is the most
+ * useful first screen this product can show. It is safe because the worksheet
+ * names every unpriced line and `setQuoteStatus` refuses to send the quote
+ * until they are priced. Before that guard existed, shipping these would have
+ * risked a customer receiving a document with the price of real work silently
+ * missing.
+ *
+ * QUANTITIES are not prices and are shipped: a three-piece bathroom rough-in
+ * is one per washroom whoever is quoting it.
+ */
+export interface PackScopeTemplate {
+  id: string;
+  name: string;
+  /** The pack's own project type id. */
+  projectTypeId: string;
+  description: string;
+  items: readonly PackScopeTemplateItem[];
+}
+
 export interface TradePack {
   trade: Trade;
   projectTypes: readonly PackProjectType[];
@@ -205,4 +269,6 @@ export interface TradePack {
   lineGroups: readonly PackNamedRow[];
   /** Subcontractor kinds this trade actually hires. */
   trades: readonly PackNamedRow[];
+  /** The jobs this trade quotes often, as line lists. May be empty. */
+  scopeTemplates: readonly PackScopeTemplate[];
 }

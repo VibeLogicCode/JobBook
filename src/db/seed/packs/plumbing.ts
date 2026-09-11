@@ -20,6 +20,7 @@ const C = 'f2000000-0000-4a00-9000-0000000000';
 const R = 'f3000000-0000-4a00-9000-0000000000';
 const G = 'f4000000-0000-4a00-9000-0000000000';
 const S = 'f5000000-0000-4a00-9000-0000000000';
+const M = 'f6000000-0000-4a00-9000-0000000000';
 
 const SERVICE_FLAGS = {
   holdback: false,
@@ -123,5 +124,59 @@ export const PLUMBING_PACK: TradePack = {
     { id: `${S}03`, name: 'Excavation', sortOrder: 30 },
     { id: `${S}04`, name: 'Tile', sortOrder: 40 },
     { id: `${S}05`, name: 'Gas fitting', sortOrder: 50 },
+  ],
+
+  /**
+   * Three jobs a plumber quotes most weeks.
+   *
+   * The water heater is the one worth shipping: a tank, the labour and the
+   * permit. Quoting it without the permit is how a same-day job loses its
+   * margin, and a template is what makes leaving it out deliberate.
+   *
+   * The rough-in is per WASHROOM, which is the measurement that drives it, and
+   * the fixtures are optional because whether the customer supplies his own is
+   * the first thing he asks.
+   *
+   * NO PRICES.
+   */
+  scopeTemplates: [
+    {
+      id: `${M}01`,
+      name: 'Service call',
+      projectTypeId: `${T}01`,
+      description: 'A call-out and the time on site, with drain clearing offered if it turns out to be that.',
+      items: [
+        { rateItemId: `${R}03`, qtySource: 'fixed', fixedQtyMilli: 1_000n, lineGroup: 'Labour', sortOrder: 10 },
+        { rateItemId: `${R}01`, qtySource: 'manual', lineGroup: 'Labour', sortOrder: 20 },
+        { rateItemId: `${R}04`, qtySource: 'fixed', fixedQtyMilli: 1_000n, isOptional: true, lineGroup: 'Available upgrades', sortOrder: 30 },
+      ],
+    },
+    {
+      id: `${M}02`,
+      name: 'Water heater replacement',
+      projectTypeId: `${T}04`,
+      description: 'Tank, labour and permit. The permit is the line that gets forgotten.',
+      items: [
+        { rateItemId: `${R}07`, qtySource: 'fixed', fixedQtyMilli: 1_000n, lineGroup: 'Fixtures', sortOrder: 10 },
+        { rateItemId: `${R}01`, qtySource: 'manual', lineGroup: 'Labour', sortOrder: 20 },
+        { rateItemId: `${R}10`, qtySource: 'fixed', fixedQtyMilli: 1_000n, lineGroup: 'Permits', sortOrder: 30 },
+      ],
+    },
+    {
+      id: `${M}03`,
+      name: 'Bathroom rough-in',
+      projectTypeId: `${T}05`,
+      description: 'One three-piece rough-in per washroom, with the fixtures offered separately.',
+      items: [
+        { rateItemId: `${R}09`, qtySource: 'washrooms', lineGroup: 'Materials', sortOrder: 10 },
+        { rateItemId: `${R}08`, qtySource: 'manual', lineGroup: 'Materials', sortOrder: 20 },
+        { rateItemId: `${R}01`, qtySource: 'manual', lineGroup: 'Labour', sortOrder: 30 },
+        { rateItemId: `${R}10`, qtySource: 'fixed', fixedQtyMilli: 1_000n, lineGroup: 'Permits', sortOrder: 40 },
+        // Optional because "are you supplying the fixtures" is the first thing
+        // the customer asks, and the answer is often no.
+        { rateItemId: `${R}05`, qtySource: 'washrooms', isOptional: true, lineGroup: 'Available upgrades', sortOrder: 50 },
+        { rateItemId: `${R}06`, qtySource: 'washrooms', isOptional: true, lineGroup: 'Available upgrades', sortOrder: 60 },
+      ],
+    },
   ],
 };

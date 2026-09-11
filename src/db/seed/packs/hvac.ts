@@ -20,6 +20,7 @@ const C = 'a2000000-0000-4a00-9000-0000000000';
 const R = 'a3000000-0000-4a00-9000-0000000000';
 const G = 'a4000000-0000-4a00-9000-0000000000';
 const S = 'a5000000-0000-4a00-9000-0000000000';
+const M = 'a6000000-0000-4a00-9000-0000000000';
 
 const SERVICE_FLAGS = {
   holdback: false,
@@ -130,5 +131,51 @@ export const HVAC_PACK: TradePack = {
     { id: `${S}03`, name: 'Sheet metal', sortOrder: 30 },
     { id: `${S}04`, name: 'Drywall patching', sortOrder: 40 },
     { id: `${S}05`, name: 'Crane or lift hire', sortOrder: 50 },
+  ],
+
+  /**
+   * Three jobs an HVAC contractor quotes most weeks, and the maintenance visit
+   * is deliberately one line.
+   *
+   * A seasonal maintenance call is a single flat charge. A template of one line
+   * looks like it is not worth shipping until you count how many times a year
+   * it is quoted -- it is the most repeated document in this trade, and it
+   * carries the same holdback-free, draw-free paperwork as the service call.
+   *
+   * NO PRICES.
+   */
+  scopeTemplates: [
+    {
+      id: `${M}01`,
+      name: 'Service call',
+      projectTypeId: `${T}01`,
+      description: 'A call-out and the time on site.',
+      items: [
+        { rateItemId: `${R}03`, qtySource: 'fixed', fixedQtyMilli: 1_000n, lineGroup: 'Labour', sortOrder: 10 },
+        { rateItemId: `${R}01`, qtySource: 'manual', lineGroup: 'Labour', sortOrder: 20 },
+      ],
+    },
+    {
+      id: `${M}02`,
+      name: 'Seasonal maintenance visit',
+      projectTypeId: `${T}02`,
+      description: 'One visit, one charge. The document you write most often.',
+      items: [
+        { rateItemId: `${R}04`, qtySource: 'fixed', fixedQtyMilli: 1_000n, lineGroup: 'Labour', sortOrder: 10 },
+      ],
+    },
+    {
+      id: `${M}03`,
+      name: 'Furnace replacement',
+      projectTypeId: `${T}04`,
+      description: 'Furnace, labour and permit, with a thermostat and ducting offered as upgrades.',
+      items: [
+        { rateItemId: `${R}05`, qtySource: 'fixed', fixedQtyMilli: 1_000n, lineGroup: 'Equipment', sortOrder: 10 },
+        { rateItemId: `${R}01`, qtySource: 'manual', lineGroup: 'Labour', sortOrder: 20 },
+        { rateItemId: `${R}10`, qtySource: 'fixed', fixedQtyMilli: 1_000n, lineGroup: 'Permits', sortOrder: 30 },
+        { rateItemId: `${R}09`, qtySource: 'fixed', fixedQtyMilli: 1_000n, isOptional: true, lineGroup: 'Available upgrades', sortOrder: 40 },
+        { rateItemId: `${R}07`, qtySource: 'manual', isOptional: true, lineGroup: 'Available upgrades', sortOrder: 50 },
+      ],
+    },
   ],
 };

@@ -1,6 +1,9 @@
 import { inArray, sql } from 'drizzle-orm';
 import { db } from '@/db/client';
-import { costCodes, lineGroups, projectTypes, rateItems, settings, trades } from '@/db/schema';
+import {
+  costCodes, lineGroups, projectTypes, rateItems, scopeTemplateItems, scopeTemplates, settings,
+  trades,
+} from '@/db/schema';
 import { PACK_LOADED_KEY } from '@/db/seed/packs/marker';
 import { DEFAULT_PROJECT_TYPES } from '@/db/seed/project-lists';
 import { seedVendorTypes } from '@/db/seed/vendor-lists';
@@ -224,6 +227,125 @@ export async function loadPack(
         isActive: true,
       })))
       .onConflictDoNothing();
+  }
+
+  /**
+   * The starter templates, LAST of the content and guarded by a read-back.
+   *
+   * ---------------------------------------------------------------------------
+   * WHY THE SURVIVORS ARE READ RATHER THAN ASSUMED
+   * ---------------------------------------------------------------------------
+   *
+   * Every insert above skips on conflict, which means a row the owner already
+   * had under the same NAME or CODE keeps its own id and the pack's id is not
+   * in the database. `scope_template_items.rate_item_id` is NOT NULL with a
+   * foreign key, so a template naming a skipped item would raise a constraint
+   * violation INSIDE the wizard's transaction -- a first-run crash, on
+   * somebody's first five minutes, with the step left incomplete and nothing
+   * on screen that a person without IT support could act on.
+   *
+   * So the ids that actually exist are read back, and a template is written
+   * only with the lines whose items survived. A template that lost all of them
+   * is skipped rather than written empty: an empty template on the "build the
+   * lines from" picker is a promise the product does not keep.
+   */
+  if (pack.scopeTemplates.length > 0) {
+    const wantedItems = [...new Set(
+      pack.scopeTemplates.flatMap((template) => template.items.map((item) => item.rateItemId)),
+    )];
+    const wantedTypes = [...new Set(pack.scopeTemplates.map((row) => row.projectTypeId))];
+
+    const [liveItems, liveTypes] = await Promise.all([
+      executor.select({ id: rateItems.id }).from(rateItems).where(inArray(rateItems.id, wantedItems)),
+      executor.select({ id: projectTypes.id }).from(projectTypes)
+        .where(inArray(projectTypes.id, wantedTypes)),
+    ]);
+    const haveItem = new Set(liveItems.map((row) => row.id));
+    const haveType = new Set(liveTypes.map((row) => row.id));
+
+    /**
+     * A template that needs measurements is not shipped for a kind of job that
+     * does not ask for them.
+     *
+     * `expandTemplate` DROPS a line whose derived quantity is zero, which is
+     * the right rule -- a basement with no kitchen should not produce a kitchen
+     * line somebody has to delete. But it means an area-driven renovation
+     * template loaded for a service-only company, whose types have
+     * `scope_inputs` off and so collect no floor area, would expand to the bin,
+     * the labour and the permit with the demolition, drywall, flooring and
+     * painting quietly absent. A quote missing the actual work, offered from a
+     * picker, is worse than a picker that does not offer it.
+     */
+    const measured = new Set(['area', 'washrooms', 'kitchens', 'bedrooms']);
+    const flagsOf = (projectTypeId: string) => {
+      const type = pack.projectTypes.find((row) => row.id === projectTypeId);
+      return type ? packRowFlags(type, posture) : null;
+    };
+
+    const writable = pack.scopeTemplates
+      .filter((template) => haveType.has(template.projectTypeId))
+      .filter((template) => {
+        if (!template.items.some((item) => measured.has(item.qtySource))) return true;
+        const flags = flagsOf(template.projectTypeId);
+        // Unknown type: offered. Failing open here matches every other posture
+        // reader -- an extra template is a nuisance, a missing one is work
+        // somebody has to remember unaided.
+        return flags === null || flags.scopeInputs;
+      })
+      .map((template) => ({
+        template,
+        items: template.items.filter((item) => haveItem.has(item.rateItemId)),
+      }))
+      .filter((entry) => entry.items.length > 0);
+
+    if (writable.length > 0) {
+      await executor
+        .insert(scopeTemplates)
+        .values(writable.map(({ template }) => ({
+          id: template.id,
+          name: template.name,
+          projectTypeId: template.projectTypeId,
+          description: template.description,
+          isActive: true,
+        })))
+        .onConflictDoNothing();
+
+      /**
+       * Only for the templates this call actually created.
+       *
+       * `scope_templates` has no unique index on its name, so a second run
+       * skips on the ID -- and appending this run's items to a template the
+       * owner has since edited would silently duplicate every line on it. Read
+       * back again, and write items only where none exist.
+       */
+      const created = await executor
+        .select({ id: scopeTemplates.id })
+        .from(scopeTemplates)
+        .where(inArray(scopeTemplates.id, writable.map(({ template }) => template.id)));
+      const existingItems = await executor
+        .select({ scopeTemplateId: scopeTemplateItems.scopeTemplateId })
+        .from(scopeTemplateItems)
+        .where(inArray(scopeTemplateItems.scopeTemplateId, created.map((row) => row.id)));
+      const alreadyFilled = new Set(existingItems.map((row) => row.scopeTemplateId));
+
+      const rows = writable
+        .filter(({ template }) => !alreadyFilled.has(template.id))
+        .flatMap(({ template, items }) =>
+          items.map((item) => ({
+            scopeTemplateId: template.id,
+            rateItemId: item.rateItemId,
+            qtySource: item.qtySource,
+            qtyMultiplierTenThou: item.qtyMultiplierTenThou ?? 10_000n,
+            fixedQtyMilli: item.fixedQtyMilli ?? null,
+            isOptional: item.isOptional ?? false,
+            isAllowance: item.isAllowance ?? false,
+            lineGroup: item.lineGroup,
+            sortOrder: item.sortOrder,
+          })),
+        );
+
+      if (rows.length > 0) await executor.insert(scopeTemplateItems).values(rows);
+    }
   }
 
   if (pack.lineGroups.length > 0) {

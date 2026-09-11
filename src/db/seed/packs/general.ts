@@ -39,6 +39,7 @@ import type { TradePack } from '@/db/seed/packs/types';
 
 const C = 'c9000000-0000-4a00-9000-0000000000';
 const R = 'ca000000-0000-4a00-9000-0000000000';
+const M = 'cb000000-0000-4a00-9000-0000000000';
 
 /**
  * Plain-language divisions with our own numbering.
@@ -150,6 +151,81 @@ export const GENERAL_PACK: TradePack = {
     name: trade.name,
     sortOrder: trade.sortOrder,
   })),
+
+  /**
+   * Three renovations, priced from the floor area.
+   *
+   * ---------------------------------------------------------------------------
+   * THE MULTIPLIERS ARE THE CONTENT
+   * ---------------------------------------------------------------------------
+   *
+   * Drywall and paint are taken at THREE TIMES the floor area, because walls
+   * and a ceiling are what gets boarded and painted, not the floor. A basement
+   * partition run is one and a half times. Those factors are the estimating
+   * knowledge a starter template can honestly carry -- they are ratios, not
+   * prices, and they are the same ratios whoever is quoting.
+   *
+   * Every one of them is a STARTING POINT on a row the owner can change on the
+   * template or on the quote. A contractor who boards to nine feet will want
+   * more; the template's job is to stop the line being forgotten, not to be
+   * right about his house.
+   *
+   * The finishes ALLOWANCE is on each of them on purpose: it is exempt from
+   * the unpriced-line guard, because an allowance with no figure yet is what
+   * an allowance is, and it is how a renovation quote states "your choice of
+   * tile, up to this much" without pretending to know.
+   *
+   * NO PRICES.
+   */
+  scopeTemplates: [
+    {
+      id: `${M}01`,
+      name: 'Bathroom renovation',
+      projectTypeId: PROJECT_TYPE_IDS.bathroom,
+      description: 'Strip out, board, floor and paint, from the room area. Drywall and paint are taken at three times the floor.',
+      items: [
+        { rateItemId: `${R}04`, qtySource: 'area', lineGroup: 'Demolition', sortOrder: 10 },
+        { rateItemId: `${R}05`, qtySource: 'fixed', fixedQtyMilli: 1_000n, lineGroup: 'Demolition', sortOrder: 20 },
+        { rateItemId: `${R}07`, qtySource: 'area', qtyMultiplierTenThou: 30_000n, lineGroup: 'Drywall', sortOrder: 30 },
+        { rateItemId: `${R}09`, qtySource: 'area', lineGroup: 'Flooring', sortOrder: 40 },
+        { rateItemId: `${R}08`, qtySource: 'area', qtyMultiplierTenThou: 30_000n, lineGroup: 'Finishing', sortOrder: 50 },
+        { rateItemId: `${R}01`, qtySource: 'manual', lineGroup: 'General', sortOrder: 60 },
+        { rateItemId: `${R}10`, qtySource: 'fixed', fixedQtyMilli: 1_000n, lineGroup: 'General', sortOrder: 70 },
+        { rateItemId: `${R}11`, qtySource: 'fixed', fixedQtyMilli: 1_000n, isAllowance: true, lineGroup: 'Finishing', sortOrder: 80 },
+      ],
+    },
+    {
+      id: `${M}02`,
+      name: 'Kitchen renovation',
+      projectTypeId: PROJECT_TYPE_IDS.kitchen,
+      description: 'Strip out, board, floor and paint, with a finishes allowance for cabinets and counters.',
+      items: [
+        { rateItemId: `${R}04`, qtySource: 'area', lineGroup: 'Demolition', sortOrder: 10 },
+        { rateItemId: `${R}05`, qtySource: 'fixed', fixedQtyMilli: 1_000n, lineGroup: 'Demolition', sortOrder: 20 },
+        { rateItemId: `${R}07`, qtySource: 'area', qtyMultiplierTenThou: 20_000n, lineGroup: 'Drywall', sortOrder: 30 },
+        { rateItemId: `${R}09`, qtySource: 'area', lineGroup: 'Flooring', sortOrder: 40 },
+        { rateItemId: `${R}08`, qtySource: 'area', qtyMultiplierTenThou: 20_000n, lineGroup: 'Finishing', sortOrder: 50 },
+        { rateItemId: `${R}01`, qtySource: 'manual', lineGroup: 'General', sortOrder: 60 },
+        { rateItemId: `${R}10`, qtySource: 'fixed', fixedQtyMilli: 1_000n, lineGroup: 'General', sortOrder: 70 },
+        { rateItemId: `${R}11`, qtySource: 'fixed', fixedQtyMilli: 1_000n, isAllowance: true, lineGroup: 'Finishing', sortOrder: 80 },
+      ],
+    },
+    {
+      id: `${M}03`,
+      name: 'Basement finishing',
+      projectTypeId: PROJECT_TYPE_IDS.basement,
+      description: 'Partition walls at one and a half times the floor area, boarded and painted at three times.',
+      items: [
+        { rateItemId: `${R}06`, qtySource: 'area', qtyMultiplierTenThou: 15_000n, lineGroup: 'Framing', sortOrder: 10 },
+        { rateItemId: `${R}07`, qtySource: 'area', qtyMultiplierTenThou: 30_000n, lineGroup: 'Drywall', sortOrder: 20 },
+        { rateItemId: `${R}08`, qtySource: 'area', qtyMultiplierTenThou: 30_000n, lineGroup: 'Finishing', sortOrder: 30 },
+        { rateItemId: `${R}09`, qtySource: 'area', lineGroup: 'Flooring', sortOrder: 40 },
+        { rateItemId: `${R}01`, qtySource: 'manual', lineGroup: 'Framing', sortOrder: 50 },
+        { rateItemId: `${R}10`, qtySource: 'fixed', fixedQtyMilli: 1_000n, lineGroup: 'General', sortOrder: 60 },
+        { rateItemId: `${R}11`, qtySource: 'fixed', fixedQtyMilli: 1_000n, isAllowance: true, lineGroup: 'Finishing', sortOrder: 70 },
+      ],
+    },
+  ],
 };
 
 /**
@@ -187,6 +263,12 @@ export const NONE_PACK: TradePack = {
     sortOrder: group.sortOrder,
   })),
   trades: [],
+  /**
+   * None, necessarily: a template names rate items and this pack ships none.
+   * A template whose lines pointed at nothing would be an empty quote offered
+   * from a picker, which is worse than an empty picker.
+   */
+  scopeTemplates: [],
 };
 
 /** Kept so a reader can see the catch-all is deliberate rather than missed. */
