@@ -11,6 +11,7 @@ import {
   TextField,
 } from '@/components/settings/Fields';
 import { Notice } from '@/components/ui/Notice';
+import { offersContract, postureOf } from '@/lib/posture/read';
 import { Reveal } from '@/components/ui/Reveal';
 import { StepPanel } from '@/components/setup/StepPanel';
 
@@ -51,6 +52,27 @@ function monthOptions(locale: string): Option[] {
 export default async function FinancialStepPage() {
   const gate = await requireOpenSetup('financial');
   const org = gate.org;
+
+  /**
+   * Whether to ask about holdback at all.
+   *
+   * The trade step is step 3 and this is step 5, so by now the company has
+   * said what kind of work it does -- and asking a one-van service outfit for
+   * a default holdback percentage, a holdback label, a release period, a tax
+   * deferral and a terms paragraph is five questions about something that
+   * never happens on its jobs. That was the owner's actual request: *"second
+   * as a small 1 man shop"*, a simpler path, not the same path with different
+   * defaults.
+   *
+   * `postureOf` fails OPEN -- a null company reads as `both` and every field
+   * appears. The dangerous direction is the other one: hiding holdback from
+   * somebody who withholds it.
+   *
+   * Nothing is REMOVED by this. Every one of these fields stays editable under
+   * Settings, and `saveFinancialStep` leaves the columns at their defaults
+   * rather than writing blanks over them.
+   */
+  const holdbackApplies = offersContract(postureOf(org));
 
   return (
     <StepPanel slug="financial" gate={gate}>
@@ -116,6 +138,8 @@ export default async function FinancialStepPage() {
           {/* An amount withheld from each payment and released later. Stored
               per quote rather than company-wide, so a job that withholds
               nothing prints no holdback block at all. */}
+          {holdbackApplies ? (
+            <>
           <div className="sm:col-span-2">
             <h3 className="t-heading mt-2">Holdback</h3>
             <p className="mt-1 max-w-prose t-small text-muted">
@@ -175,6 +199,23 @@ export default async function FinancialStepPage() {
             defaultValue={org?.holdbackTermsText}
             placeholder="The paragraph that prints under the holdback block"
           />
+            </>
+          ) : (
+            <div className="sm:col-span-2">
+              <Notice tone="info" title="No holdback questions — you said service work only">
+                <p>
+                  Five fields skipped: the default percentage, its label, the release period, the
+                  tax deferral and the terms paragraph. None of them apply to a job that is
+                  dispatched and billed once.
+                </p>
+                <p className="mt-2">
+                  They are all still there under Settings → Financial if you ever sign a contract
+                  that withholds one, and a job type can turn holdback back on by itself without
+                  changing what your company is.
+                </p>
+              </Notice>
+            </div>
+          )}
 
           <div className="sm:col-span-2">
             <h3 className="t-heading mt-2">Payment, insurance and margin</h3>

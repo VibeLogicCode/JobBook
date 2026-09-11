@@ -1,6 +1,6 @@
 import { and, asc, eq } from 'drizzle-orm';
 import { db } from '@/db/client';
-import { projectTypes, projects } from '@/db/schema';
+import { projectTypes, projects, quotes } from '@/db/schema';
 import { readCompanies } from '@/lib/company/load';
 import {
   ALL_FLAGS_ON,
@@ -101,6 +101,68 @@ export async function offeredTypes(companyPosture: WorkPosture): Promise<Project
   return rows.filter((row) => typeIsOffered(row.posture, companyPosture));
 }
 
+/**
+ * What kinds of work this DEPLOYMENT takes on, as two booleans.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY A DEPLOYMENT-WIDE ANSWER AND NOT ONE COMPANY'S
+ * ---------------------------------------------------------------------------
+ *
+ * `offeredTypes` takes one company's posture, which is the right question to
+ * ask about a company and the wrong one to ask on a form: `/quotes/new`
+ * chooses its COMPANY in the same submit as its type of work, so at the moment
+ * the picker renders there is no company to filter by. With two companies
+ * there may be two different answers.
+ *
+ * So a type is offered if ANY active company would offer it -- the same shape,
+ * and the same reasoning, as `hasContractWork` behind the two gated schedule
+ * routes. The action then re-checks, because a picker is not a mechanism.
+ *
+ * Fails OPEN in both directions: no readable company means both true and every
+ * type is offered. Posture shortens forms; it protects nothing.
+ */
+export interface OfferedWork {
+  contract: boolean;
+  service: boolean;
+}
+
+/**
+ * The pure half, over rows somebody has already read.
+ *
+ * Split exactly the way `readCompanies` / `primaryOf` is split, and for the
+ * reason that work discovered the hard way: a `cache()` is request-scoped in
+ * production and process-wide under one test fork, so a cached reader used as
+ * a data source hands the second test file the first file's rows. A page that
+ * has the companies in hand -- `/quotes/new` reads them for its company
+ * picker -- passes them here and pays for no second query.
+ */
+export function offeredWorkFrom(
+  rows: readonly { workPosture: WorkPosture; isActive: boolean }[],
+): OfferedWork {
+  const active = rows.filter((row) => row.isActive);
+  // Fail open. See the header.
+  if (active.length === 0) return { contract: true, service: true };
+  return {
+    contract: active.some((row) => offersContract(row.workPosture)),
+    service: active.some((row) => offersService(row.workPosture)),
+  };
+}
+
+export async function offeredWork(): Promise<OfferedWork> {
+  return offeredWorkFrom(await readCompanies());
+}
+
+/**
+ * Whether a type tagged `posture` may take NEW work here.
+ *
+ * Pure, so every branch is assertable without a database -- and separate from
+ * the read above so a page filtering forty rows pays for one query, not forty.
+ */
+export function postureIsOffered(posture: WorkPosture, offered: OfferedWork): boolean {
+  if (posture === 'both') return true;
+  return posture === 'contract' ? offered.contract : offered.service;
+}
+
 type Executor = typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 /**
@@ -159,6 +221,36 @@ export async function flagsForProject(
     .from(projects)
     .innerJoin(projectTypes, eq(projectTypes.id, projects.projectTypeId))
     .where(eq(projects.id, projectId));
+
+  return row ?? ALL_FLAGS_ON;
+}
+
+/**
+ * The flags for the type the quote's JOB is filed under.
+ *
+ * A third shape of the same question, and it earns its place: the worksheet
+ * page reads four things in one `Promise.all`, and `flagsForProject` would
+ * have had to wait for the quote to come back first to learn its project id.
+ * One join instead of a serial round trip in front of the first paint.
+ *
+ * Fails OPEN like the other two -- see `flagsFor`.
+ */
+export async function flagsForQuote(
+  executor: Executor,
+  quoteId: string,
+): Promise<ProjectTypeFlags> {
+  const [row] = await executor
+    .select({
+      holdback: projectTypes.holdback,
+      progressInvoicing: projectTypes.progressInvoicing,
+      scheduleTemplate: projectTypes.scheduleTemplate,
+      constructionActDates: projectTypes.constructionActDates,
+      scopeInputs: projectTypes.scopeInputs,
+    })
+    .from(quotes)
+    .innerJoin(projects, eq(projects.id, quotes.projectId))
+    .innerJoin(projectTypes, eq(projectTypes.id, projects.projectTypeId))
+    .where(eq(quotes.id, quoteId));
 
   return row ?? ALL_FLAGS_ON;
 }

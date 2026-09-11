@@ -3,6 +3,7 @@ import { asc, eq } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { customers, projectTypes } from '@/db/schema';
 import { defaultProvince, readCompanies } from '@/lib/company/load';
+import { offeredWorkFrom, postureIsOffered } from '@/lib/posture/read';
 import { createProject } from '@/app/projects/actions';
 import { Panel } from '@/components/detail/Panel';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -35,7 +36,8 @@ export default async function NewProjectPage({
    * is what retiring rather than deleting is for -- but it must not be offered
    * on new work.
    */
-  const offeredCompanies = (await readCompanies())
+  const companyRows = await readCompanies();
+  const offeredCompanies = companyRows
     .filter((company) => company.isActive)
     .map((company) => ({
       id: company.id,
@@ -60,11 +62,27 @@ export default async function NewProjectPage({
 
   // Only active, non-void: this is a brand-new opportunity, so there is no
   // existing value to append a retired option for.
-  const projectTypeList = await db
-    .select({ id: projectTypes.id, name: projectTypes.name, isActive: projectTypes.isActive, recordStatus: projectTypes.recordStatus })
+  const projectTypeRows = await db
+    .select({
+      id: projectTypes.id, name: projectTypes.name, isActive: projectTypes.isActive,
+      recordStatus: projectTypes.recordStatus, posture: projectTypes.posture,
+    })
     .from(projectTypes)
     .where(eq(projectTypes.recordStatus, 'active'))
     .orderBy(asc(projectTypes.sortOrder), asc(projectTypes.name));
+
+  /**
+   * Only the kinds of work this deployment takes on. A contract-tagged type
+   * stays in the table under a service-only company -- switching back to
+   * `Both` re-offers it, which a pack that never inserted it could not do --
+   * but it is not offered here.
+   *
+   * `createProject` does not refuse one that is submitted anyway: posture is
+   * not a permission, and `lib/project-lists/guards.ts` settled this shape for
+   * retired rows already. Filtered from the picker, accepted if it arrives.
+   */
+  const offered = offeredWorkFrom(companyRows);
+  const projectTypeList = projectTypeRows.filter((row) => postureIsOffered(row.posture, offered));
 
   return (
     <div className="grid max-w-4xl gap-4 px-4 py-4 sm:px-6">

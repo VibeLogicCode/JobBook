@@ -4,6 +4,7 @@ import {
   customers, leadSources, projects, projectTypes, quotes, scopeTemplates,
 } from '@/db/schema';
 import { defaultProvince, readCompanies } from '@/lib/company/load';
+import { offeredWorkFrom, postureIsOffered } from '@/lib/posture/read';
 import { startQuote } from '@/app/quotes/new/actions';
 import { StartQuoteForm } from '@/app/quotes/new/StartQuoteForm';
 import { Panel } from '@/components/detail/Panel';
@@ -36,8 +37,9 @@ export default async function NewQuotePage({
    * one, because nobody re-reads a field they did not have to fill in.
    */
   const province = await defaultProvince();
+  const companyRows = await readCompanies();
   // Active companies only; the form renders nothing when there is one.
-  const offeredCompanies = (await readCompanies())
+  const offeredCompanies = companyRows
     .filter((company) => company.isActive)
     .map((company) => ({
       id: company.id,
@@ -64,8 +66,13 @@ export default async function NewQuotePage({
         name: projects.name,
         projectNumber: projects.projectNumber,
         stage: projects.stage,
+        // Its type's flag, so attaching a quote to an existing service job
+        // does not put four measurement boxes on the form. Joined rather than
+        // fetched per row once the picker changes.
+        scopeInputs: projectTypes.scopeInputs,
       })
       .from(projects)
+      .innerJoin(projectTypes, eq(projectTypes.id, projects.projectTypeId))
       .where(eq(projects.recordStatus, 'active'))
       .orderBy(asc(projects.projectNumber)),
 
@@ -84,7 +91,11 @@ export default async function NewQuotePage({
     // non-void ones: this is a brand-new opportunity, so there is no existing
     // value to append a retired option for, unlike the picker on an edit form.
     db
-      .select({ id: projectTypes.id, name: projectTypes.name, isActive: projectTypes.isActive, recordStatus: projectTypes.recordStatus })
+      .select({
+        id: projectTypes.id, name: projectTypes.name, isActive: projectTypes.isActive,
+        recordStatus: projectTypes.recordStatus, posture: projectTypes.posture,
+        scopeInputs: projectTypes.scopeInputs,
+      })
       .from(projectTypes)
       .where(eq(projectTypes.recordStatus, 'active'))
       .orderBy(asc(projectTypes.sortOrder), asc(projectTypes.name)),
@@ -126,6 +137,24 @@ export default async function NewQuotePage({
 
   // An opportunity in the query string implies its customer, so the form opens
   // on the right pair rather than making the owner re-pick what they came from.
+  /**
+   * Types this deployment actually takes on.
+   *
+   * A service-only shop loads the electrical pack and gets `Rewire` and
+   * `New installation` with it, tagged `contract` -- correct rows to have,
+   * because switching to `Both` later must re-offer them rather than needing a
+   * pack reload (design section 3.2). They simply are not offered here.
+   *
+   * `startQuote` does NOT re-check, and that is deliberate. Posture is not a
+   * permission -- it shortens forms and protects nothing -- so this is exactly
+   * the case `lib/project-lists/guards.ts` already decided for RETIRED rows:
+   * not offered on new work, still accepted if submitted, because refusing
+   * would refuse something the owner may have kept on purpose. A service shop
+   * that takes one contract job a year turns the flags on and files it.
+   */
+  const offered = offeredWorkFrom(companyRows);
+  const offeredTypes = projectTypeList.filter((row) => postureIsOffered(row.posture, offered));
+
   const fromOpportunity = opportunityList.find((row) => row.id === opportunity);
   const preselected =
     fromOpportunity?.customerId ??
@@ -147,7 +176,7 @@ export default async function NewQuotePage({
           customers={customerList}
           opportunities={opportunityList}
           templates={templateList}
-          projectTypes={projectTypeList}
+          projectTypes={offeredTypes}
           companies={offeredCompanies}
           leadSources={leadSourceList}
           defaultProvince={province ?? ''}

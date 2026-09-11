@@ -56,12 +56,21 @@ export function Worksheet({
   taxes,
   rateItems,
   relations,
+  scopeInputs = true,
 }: {
   quote: WireQuote;
   lines: WireLine[];
   taxes: WireTax[];
   rateItems: WireRateItem[];
   relations: WireRelations;
+  /**
+   * Whether this job's TYPE asks for measurements at all.
+   *
+   * Defaults to true, which is both the flag's own default and the fail-open
+   * direction: an unreadable project type shows the measurements rather than
+   * hiding a square footage somebody's template quantities depend on.
+   */
+  scopeInputs?: boolean;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -102,7 +111,17 @@ export function Worksheet({
   // Measurements belong to an estimate. A change order amends accepted work at
   // stated quantities; it was never expanded from a template, so a square
   // footage on it would drive nothing and read as an unanswered question.
-  const scopeEditable = editable && quote.kind === 'estimate';
+  //
+  // And to a KIND OF JOB that has measurements. `scopeInputs` off is a service
+  // call: floor area, washrooms, kitchens and bedrooms are four questions
+  // nobody asks before changing a breaker. This is the flag's first and only
+  // consumer -- it was a column with no reader until now.
+  //
+  // `hasScope` below is deliberately NOT gated. A job measured under a type
+  // whose flag was turned off afterwards goes on SHOWING what was measured;
+  // hiding a figure the quantities were built from would make the lines
+  // unexplainable. Off means "stop asking", never "forget what was answered".
+  const scopeEditable = editable && quote.kind === 'estimate' && scopeInputs;
   const hasScope =
     relations.templateName !== null ||
     quote.areaSqftMilli !== null ||

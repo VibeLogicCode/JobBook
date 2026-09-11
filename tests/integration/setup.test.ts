@@ -368,6 +368,93 @@ describe('each step persists independently', () => {
   });
 });
 
+/**
+ * The owner's second company shape: *"second as a small 1 man shop"*.
+ *
+ * The trade step (3) is answered before the financial step (5), so by the time
+ * the longest form in the wizard renders, the company has already said whether
+ * it withholds holdback on anything. Asking a one-van service outfit for a
+ * default percentage, a label, a release period, a tax deferral and a terms
+ * paragraph is five questions about something that never happens on its jobs.
+ *
+ * What these assert is the half a hidden field cannot: that NOT ASKING leaves
+ * the columns at their defaults instead of writing blanks and a false over
+ * them. An unsent checkbox parses as `false`, so the naive version of this
+ * change would have stored `tax_deferred_on_holdback = false` for every
+ * service company -- a wrong answer to a question nobody was asked.
+ */
+describe('a service-only company is asked less', () => {
+  const WITHOUT_HOLDBACK = Object.fromEntries(
+    Object.entries(FINANCIAL).filter(([key]) => !key.toLowerCase().includes('holdback')),
+  ) as Record<string, string>;
+
+  async function stepsThroughLocale(workPosture: string): Promise<void> {
+    expect(messageOf(await saveCompanyStep(null, form(COMPANY)))).toContain('created');
+    expect((await saveContactStep(null, form(CONTACT))).ok).toBe(true);
+    expect((await saveTradeStep(null, form({ ...TRADE, workPosture }))).ok).toBe(true);
+    expect((await saveLocaleStep(null, form(LOCALE))).ok).toBe(true);
+  }
+
+  it('saves the step with no holdback fields on the form at all', async () => {
+    await stepsThroughLocale('service');
+
+    // The five keys are absent, exactly as the rendered form leaves them.
+    // `holdbackReleaseDays` used to be `requiredInt`, which made this submit
+    // fail with "Holdback release days is required" -- a step refusing itself
+    // over a field it never showed.
+    const result = await saveFinancialStep(null, form(WITHOUT_HOLDBACK));
+    expect(messageOf(result)).toBe('Financial and legal settings saved.');
+
+    const saved = await readDeployment();
+    // Column defaults, untouched: NOT NULL DEFAULT 60, and DEFAULT true.
+    expect(saved?.holdbackReleaseDays).toBe(60);
+    expect(saved?.taxDeferredOnHoldback).toBe(true);
+    expect(saved?.defaultHoldbackPctTenThou).toBeNull();
+    expect(saved?.holdbackLabel).toBeNull();
+    expect(saved?.holdbackTermsText).toBeNull();
+    // And the rest of the step still landed. The point is a shorter form, not
+    // a step that quietly saves less of what it did ask.
+    expect(saved?.paymentTermsDays).toBe(21);
+    expect(saved?.taxRegistrationNumber).toBe('GB000000000');
+    expect(saved?.targetMarginBp).toBe(2250);
+  });
+
+  it('ignores holdback fields submitted by a service-only company anyway', async () => {
+    await stepsThroughLocale('service');
+
+    // A stale tab, or a form somebody re-posted by hand. The company says it
+    // does not do contract work, so the answer is the same as not asking:
+    // defaults kept, nothing written.
+    const result = await saveFinancialStep(null, form(FINANCIAL));
+    expect(result.ok).toBe(true);
+
+    const saved = await readDeployment();
+    expect(saved?.defaultHoldbackPctTenThou).toBeNull();
+    expect(saved?.holdbackReleaseDays).toBe(60);
+  });
+
+  it('still stores every holdback field for a company that does contract work', async () => {
+    await stepsThroughLocale('both');
+
+    expect((await saveFinancialStep(null, form(FINANCIAL))).ok).toBe(true);
+
+    const saved = await readDeployment();
+    // 7.5% as ten-thousandths of the FRACTION: 0.075. Not 75000.
+    expect(saved?.defaultHoldbackPctTenThou).toBe(750n);
+    expect(saved?.holdbackReleaseDays).toBe(90);
+    expect(saved?.holdbackLabel).toBe('Retention');
+    expect(saved?.taxDeferredOnHoldback).toBe(true);
+  });
+
+  it('stores them for a contract-only company too', async () => {
+    // `contract` and `both` differ in which TYPES are offered, never in
+    // whether holdback is asked about.
+    await stepsThroughLocale('contract');
+    expect((await saveFinancialStep(null, form(FINANCIAL))).ok).toBe(true);
+    expect((await readDeployment())?.defaultHoldbackPctTenThou).toBe(750n);
+  });
+});
+
 describe('a partial setup can be resumed', () => {
   it('remembers which steps are done, from the database and not from memory', async () => {
     await saveCompanyStep(null, form(COMPANY));

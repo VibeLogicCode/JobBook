@@ -8,7 +8,9 @@ import {
 import { PROJECT_TYPE_IDS } from '@/db/seed/project-lists';
 import { FIRST_COMPANY_ID } from '@/lib/company/ids';
 import { createBlankQuote, createQuoteFromTemplate } from '@/lib/quote/repository';
-import { flagsForProject, offeredTypes, typeIsOffered } from '@/lib/posture/read';
+import {
+  flagsForProject, flagsForQuote, offeredTypes, offeredWork, postureIsOffered, typeIsOffered,
+} from '@/lib/posture/read';
 import { seedDeployment } from '../support/organization';
 
 /**
@@ -274,6 +276,115 @@ describe('which types a company is offered', () => {
     expect(names).not.toContain('Service call');
     // Retired, not gone: the job already filed under it still reads it.
     expect((await flagsForProject(db, serviceProjectId)).holdback).toBe(false);
+  });
+});
+
+/**
+ * What the two new-work PICKERS show, which is the half the design promised
+ * and nothing delivered for a while.
+ *
+ * `offeredTypes` above answers for one company's posture and was correct from
+ * the first commit -- and was called by nothing, so `/quotes/new` and
+ * `/projects/new` went on listing every type in the table. A service-only
+ * electrician who loaded the electrical pack was still offered `Rewire`.
+ *
+ * The rows stay in the table on purpose: switching back to `Both` re-offers
+ * them, which a pack that had never inserted them could not do.
+ */
+describe('what the new-work pickers offer', () => {
+  /** What the pages do: read the rows, then filter them by what is offered. */
+  async function offeredNames(): Promise<string[]> {
+    const offered = await offeredWork();
+    const rows = await db
+      .select({ name: projectTypes.name, posture: projectTypes.posture })
+      .from(projectTypes)
+      .where(eq(projectTypes.isActive, true));
+    return rows.filter((row) => postureIsOffered(row.posture, offered)).map((row) => row.name);
+  }
+
+  it('hides contract types from a service-only company', async () => {
+    await db.update(companies).set({ workPosture: 'service' })
+      .where(eq(companies.id, FIRST_COMPANY_ID));
+
+    const names = await offeredNames();
+    expect(names).toContain('Service call');
+    expect(names).not.toContain('Rewire');
+    // The nine migration-0018 types are tagged `both`, so a service company
+    // keeps them. This is why the pack retires the ones it does not want --
+    // posture alone would leave a solo electrician with 'Custom home'.
+    expect(names).toContain('Basement');
+  });
+
+  it('hides service types from a contract-only company', async () => {
+    await db.update(companies).set({ workPosture: 'contract' })
+      .where(eq(companies.id, FIRST_COMPANY_ID));
+
+    const names = await offeredNames();
+    expect(names).toContain('Rewire');
+    expect(names).not.toContain('Service call');
+  });
+
+  it('offers both halves under both, which is today behaviour', async () => {
+    // The seeded company is `both` by column default, so this asserts the
+    // change is backward compatible by construction.
+    const names = await offeredNames();
+    expect(names).toContain('Service call');
+    expect(names).toContain('Rewire');
+  });
+
+  it('leaves a contract type in the table for a service-only company', async () => {
+    await db.update(companies).set({ workPosture: 'service' })
+      .where(eq(companies.id, FIRST_COMPANY_ID));
+
+    // Not offered, not retired, not gone. Switching back re-offers it, which
+    // is the design's own rule about the switch (section 3.2) -- and the
+    // in-flight rewire goes on computing its holdback either way.
+    const [row] = await db.select().from(projectTypes).where(eq(projectTypes.id, CONTRACT_TYPE));
+    expect(row!.isActive).toBe(true);
+    expect((await flagsForProject(db, contractProjectId)).holdback).toBe(true);
+
+    await db.update(companies).set({ workPosture: 'both' })
+      .where(eq(companies.id, FIRST_COMPANY_ID));
+    expect(await offeredNames()).toContain('Rewire');
+  });
+
+  it('offers everything when no active company can be read', async () => {
+    // Fails OPEN. Posture shortens forms and protects nothing, so a blip must
+    // show a builder too many fields rather than hide the ones he needs.
+    await db.update(companies).set({ isActive: false })
+      .where(eq(companies.id, FIRST_COMPANY_ID));
+    const names = await offeredNames();
+    expect(names).toContain('Service call');
+    expect(names).toContain('Rewire');
+  });
+});
+
+/**
+ * `scope_inputs`, which was a column with a migration, a default, a settings
+ * checkbox and no reader at all until the worksheet and the start-quote form
+ * began asking for it.
+ */
+describe('whether a job is measured', () => {
+  it('reports the flag through the quote, not just the project', async () => {
+    const { quoteId } = await createBlankQuote({ projectId: serviceProjectId });
+    const flags = await flagsForQuote(db, quoteId);
+    // No floor area, washrooms, kitchens or bedrooms on a service call.
+    expect(flags.scopeInputs).toBe(false);
+    expect(flags.holdback).toBe(false);
+  });
+
+  it('asks for measurements on contract work', async () => {
+    const { quoteId } = await createBlankQuote({ projectId: contractProjectId });
+    expect((await flagsForQuote(db, quoteId)).scopeInputs).toBe(true);
+  });
+
+  it('fails open on a quote it cannot read', async () => {
+    // Same direction as `flagsFor` and `flagsForProject`: an unreadable row
+    // must not silently drop a measurement the template quantities were
+    // built from.
+    const flags = await flagsForQuote(db, '11111111-1111-1111-1111-111111111111');
+    expect(flags.scopeInputs).toBe(true);
+    expect(flags.holdback).toBe(true);
   });
 });
 

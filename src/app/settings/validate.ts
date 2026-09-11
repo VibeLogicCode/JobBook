@@ -33,6 +33,25 @@ export const checkbox = z
   .optional()
   .transform((value) => value ?? false);
 
+/**
+ * A field whose CONTROL may not be on the page.
+ *
+ * A browser sends no key for an input that was never rendered, and every
+ * builder here starts at `z.string()` -- so absence arrives as "expected
+ * string, received undefined" and the whole step refuses itself over a field
+ * it deliberately did not show. That is how the setup wizard's financial step
+ * first broke when it stopped asking a service-only company about holdback.
+ *
+ * Absent is folded into BLANK rather than made optional, so the builder's own
+ * "blank means null" rule stays the single answer to "nothing was given" --
+ * one rule, not two that disagree the day one of them changes.
+ *
+ * `checkbox` needs no wrapper: an unticked box is already this same absence,
+ * which is why it is the one builder above that handles it itself.
+ */
+export const whenShown = <T extends z.ZodType>(field: T) =>
+  z.preprocess((value) => (value === undefined ? '' : value), field);
+
 /** A whole number, or NULL when the field is left blank. */
 export const optionalInt = (min: number, max: number) =>
   z

@@ -6,7 +6,9 @@ import {
   POSTURE_LABELS,
   POSTURES,
 } from '@/lib/posture/types';
-import { offersContract, offersService, postureOf, typeIsOffered } from '@/lib/posture/read';
+import {
+  offeredWorkFrom, offersContract, offersService, postureIsOffered, postureOf, typeIsOffered,
+} from '@/lib/posture/read';
 
 /**
  * The posture vocabulary and the rules that follow from it.
@@ -122,5 +124,94 @@ describe('what a new type is pre-set to', () => {
     // `FLAG_KEYS` drives the two loops above and the settings form, so a flag
     // missing from it is a flag nothing checks.
     expect([...FLAG_KEYS].sort()).toEqual(Object.keys(ALL_FLAGS_ON).sort());
+  });
+});
+
+/**
+ * What kinds of work the DEPLOYMENT takes on, which is what the two new-work
+ * pickers filter by.
+ *
+ * The design's promise was that a service-only shop is not shown contract
+ * types, and for a while nothing kept it: `offeredTypes` was written, tested,
+ * and called by nobody, so a solo electrician still saw `New installation` in
+ * the picker. These are the rules the pickers now read.
+ */
+describe('what work is offered here', () => {
+  const company = (workPosture: 'both' | 'service' | 'contract', isActive = true) => ({
+    workPosture,
+    isActive,
+  });
+
+  it('offers everything when no company can be read', () => {
+    // Fails OPEN, deliberately and in both directions. Posture shortens
+    // forms; it protects nothing, and the dangerous failure is the other one
+    // -- a database blip that hid contract work from a builder.
+    expect(offeredWorkFrom([])).toEqual({ contract: true, service: true });
+  });
+
+  it('offers only service work to a service-only company', () => {
+    expect(offeredWorkFrom([company('service')])).toEqual({ contract: false, service: true });
+  });
+
+  it('offers only contract work to a contract-only company', () => {
+    expect(offeredWorkFrom([company('contract')])).toEqual({ contract: true, service: false });
+  });
+
+  it('offers both halves to one company that does both', () => {
+    expect(offeredWorkFrom([company('both')])).toEqual({ contract: true, service: true });
+  });
+
+  it('offers a half that ANY active company does', () => {
+    /**
+     * Two sister corporations, one dispatching service and one building. The
+     * type list is shared -- `project_types` is not company-scoped -- so a
+     * type either company can file work under has to be offered. Narrowing to
+     * one company's posture would hide the other company's own job types.
+     */
+    const rows = [company('service'), company('contract')];
+    expect(offeredWorkFrom(rows)).toEqual({ contract: true, service: true });
+  });
+
+  it('ignores a retired company', () => {
+    // A retired company still resolves for every document it ever issued, and
+    // must not go on shaping the forms for new work.
+    const rows = [company('service'), company('contract', false)];
+    expect(offeredWorkFrom(rows)).toEqual({ contract: false, service: true });
+  });
+
+  it('always offers a type tagged both', () => {
+    for (const offered of [
+      { contract: false, service: true },
+      { contract: true, service: false },
+      { contract: true, service: true },
+    ]) {
+      expect(postureIsOffered('both', offered)).toBe(true);
+    }
+  });
+
+  it('offers a tagged type only when that half of the work is done here', () => {
+    const serviceOnly = { contract: false, service: true };
+    expect(postureIsOffered('service', serviceOnly)).toBe(true);
+    expect(postureIsOffered('contract', serviceOnly)).toBe(false);
+
+    const contractOnly = { contract: true, service: false };
+    expect(postureIsOffered('service', contractOnly)).toBe(false);
+    expect(postureIsOffered('contract', contractOnly)).toBe(true);
+  });
+
+  it('agrees with the per-company rule for a single company', () => {
+    /**
+     * `typeIsOffered` answers for ONE company and `postureIsOffered` for the
+     * deployment. With one company they must say the same thing -- two rules
+     * about the same fact are two rules that drift.
+     */
+    for (const companyPosture of POSTURES) {
+      const offered = offeredWorkFrom([company(companyPosture)]);
+      for (const typePosture of POSTURES) {
+        expect(postureIsOffered(typePosture, offered)).toBe(
+          typeIsOffered(typePosture, companyPosture),
+        );
+      }
+    }
   });
 });

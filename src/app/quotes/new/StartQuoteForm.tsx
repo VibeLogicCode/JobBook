@@ -24,6 +24,8 @@ export interface OpportunityOption {
   projectNumber: string;
   stage: string;
   quoteCount: number;
+  /** From its project type: whether this kind of job is measured at all. */
+  scopeInputs: boolean;
 }
 
 export interface TemplateOption {
@@ -64,8 +66,15 @@ export function StartQuoteForm({
   customers: CustomerOption[];
   opportunities: OpportunityOption[];
   templates: TemplateOption[];
-  /** Every project type, for the new-opportunity picker below. */
-  projectTypes: ListRowRef[];
+  /**
+   * The project types NEW work may be filed under, already filtered by what
+   * kinds of work this deployment takes on -- see the page.
+   *
+   * `scopeInputs` rides along so the measurement fields can disappear for a
+   * kind of job that has no measurements, without a second round trip once
+   * the type is chosen.
+   */
+  projectTypes: (ListRowRef & { scopeInputs: boolean })[];
   /**
    * The companies a NEW opportunity may be filed under, active only.
    *
@@ -89,6 +98,7 @@ export function StartQuoteForm({
   const [customerChoice, setCustomerChoice] = useState(preselectedCustomerId ?? '');
   const [opportunityChoice, setOpportunityChoice] = useState('');
   const [templateChoice, setTemplateChoice] = useState('');
+  const [typeChoice, setTypeChoice] = useState('');
 
   const creatingCustomer = customerChoice === NEW;
   // A customer created in this same submit has nothing to attach to yet, so the
@@ -96,6 +106,21 @@ export function StartQuoteForm({
   const creatingOpportunity = creatingCustomer || opportunityChoice === NEW;
 
   const mine = opportunities.filter((row) => row.customerId === customerChoice);
+
+  /**
+   * Whether to ask for measurements, from the kind of job this quote is for.
+   *
+   * Read from whichever half of the form is in play: the type just chosen for
+   * a new opportunity, or the type of the existing one being attached to.
+   * Unknown -- nothing chosen yet -- means yes, which is the fail-open
+   * direction every other posture reader here takes: an extra field is a
+   * nuisance, a missing one loses a measurement the template needed.
+   */
+  const chosenType = projectTypes.find((row) => row.id === typeChoice);
+  const chosenOpportunity = opportunities.find((row) => row.id === opportunityChoice);
+  const measured = creatingOpportunity
+    ? (chosenType?.scopeInputs ?? true)
+    : (chosenOpportunity?.scopeInputs ?? true);
 
   return (
     <form action={formAction} className="grid gap-6">
@@ -207,6 +232,8 @@ export function StartQuoteForm({
               name="newOpportunityTypeId"
               required
               placeholder="Choose a type of work"
+              value={typeChoice}
+              onChange={(event) => setTypeChoice(event.target.value)}
               options={listOptions(projectTypes)}
             />
             <SelectField
@@ -252,8 +279,11 @@ export function StartQuoteForm({
         />
 
         {/* Measurements drive a template's quantities and are meaningless
-            without one: a blank quote has nothing to multiply them by. */}
-        {templateChoice ? (
+            without one: a blank quote has nothing to multiply them by -- and
+            meaningless on a kind of job that is not measured, which is what
+            `scope_inputs` off says. Both conditions, because they are two
+            different reasons. */}
+        {templateChoice && measured ? (
           <div className="grid gap-3 sm:grid-cols-2">
             <Field
               label="Floor area"

@@ -9,6 +9,7 @@ import { loadRelations } from '@/app/quotes/[id]/related';
 import { loadAcceptanceSiblings } from '@/app/quotes/[id]/siblings';
 import { PageParentLink } from '@/components/ui/PageHeader';
 import { Worksheet } from '@/components/worksheet/Worksheet';
+import { flagsForQuote } from '@/lib/posture/read';
 import { loadQuote } from '@/lib/quote/load';
 
 export const dynamic = 'force-dynamic';
@@ -35,13 +36,16 @@ export async function generateMetadata({
 
 export default async function QuotePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  // All four reads hit the same row set, so they go out together rather than
-  // stacking round trips in front of the first paint.
-  const [data, relations, siblings, owner] = await Promise.all([
+  // All five reads hit the same row set, so they go out together rather than
+  // stacking round trips in front of the first paint. `flagsForQuote` joins
+  // through to the project type rather than waiting on `loadQuote` for the
+  // project id, which is the only reason it exists as its own reader.
+  const [data, relations, siblings, owner, flags] = await Promise.all([
     loadQuote(id),
     loadRelations(id),
     loadAcceptanceSiblings(id),
     loadOwningProject(id),
+    flagsForQuote(db, id),
   ]);
   if (!data) notFound();
 
@@ -73,6 +77,7 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
         taxes={data.taxes}
         rateItems={data.rateItems}
         relations={relations}
+        scopeInputs={flags.scopeInputs}
       />
       {/* Its own band rather than a slot in `Acceptance`, which renders
           nothing at all once a quote is won, declined or superseded. Chasing

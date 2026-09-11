@@ -19,6 +19,7 @@ import {
   optionalText,
   requiredInt,
   requiredText,
+  whenShown,
 } from '@/app/settings/validate';
 import { configuredOidcProviders } from '@/app/setup/environment';
 import { persistStep } from '@/app/setup/persist';
@@ -36,6 +37,7 @@ import {
 import { type SetupStepSlug, stepAt } from '@/app/setup/steps';
 import { authMode } from '@/lib/auth/mode';
 import { forgetSoleOwner } from '@/lib/auth/sole-owner';
+import { offersContract, postureOf } from '@/lib/posture/read';
 
 /**
  * First-run setup: one action per step, each persisting as it completes.
@@ -463,11 +465,23 @@ const financialSchema = z
       .or(z.literal(''))
       .optional()
       .transform((value) => (value === '' || value === undefined ? null : value)),
+    /**
+     * The holdback five, every one of them wrapped.
+     *
+     * A service-only company is shown none of these (see the step's page), so
+     * the form sends no key for any of them. `checkbox` already treats absence
+     * as its off state; the other four would refuse the whole step, which is
+     * exactly what happened the first time this ran.
+     *
+     * `holdbackReleaseDays` was `requiredInt` and is now optional: the column
+     * is NOT NULL DEFAULT 60, and the action below omits the key rather than
+     * writing a null into it.
+     */
     taxDeferredOnHoldback: checkbox,
-    defaultHoldbackPct: percentField({ min: 0, max: 100 }),
-    holdbackLabel: optionalText(100),
-    holdbackTermsText: optionalText(4000),
-    holdbackReleaseDays: requiredInt(0, 3650),
+    defaultHoldbackPct: whenShown(percentField({ min: 0, max: 100 })),
+    holdbackLabel: whenShown(optionalText(100)),
+    holdbackTermsText: whenShown(optionalText(4000)),
+    holdbackReleaseDays: whenShown(optionalInt(0, 3650)),
     paymentTermsDays: optionalInt(0, 3650),
     paymentTermsText: optionalText(4000),
     insuranceStatement: optionalText(500),
@@ -503,17 +517,47 @@ export async function saveFinancialStep(
   const parsed = financialSchema.safeParse(formValues(formData));
   if (!parsed.success) return invalid(parsed.error, financialLabels);
 
-  const { defaultHoldbackPct, targetMargin, ...rest } = parsed.data;
+  const {
+    defaultHoldbackPct, targetMargin,
+    taxDeferredOnHoldback, holdbackLabel, holdbackTermsText, holdbackReleaseDays,
+    ...rest
+  } = parsed.data;
 
   return persistStep('financial', async (tx, gate) => {
+    /**
+     * The holdback half, only when the company does contract work.
+     *
+     * The step does not SHOW these to a service-only company, so the form
+     * sends nothing for them -- and an unsent checkbox parses as `false`,
+     * which would write `tax_deferred_on_holdback = false` over a default of
+     * true and a blank over a release period of 60. Omitting the keys leaves
+     * every column at its default, which is what "not asked" has to mean.
+     *
+     * `postureOf` fails open, so an unreadable company writes the fields as
+     * submitted rather than silently dropping a holdback somebody typed.
+     */
+    const holdback = offersContract(postureOf(gate.org))
+      ? {
+          taxDeferredOnHoldback,
+          holdbackLabel,
+          holdbackTermsText,
+          // Already in ten-thousandths of a fraction, converted by the shared
+          // percentage parser.
+          defaultHoldbackPctTenThou: defaultHoldbackPct,
+          // NOT NULL in the database, so absence means "leave the default"
+          // rather than "store nothing".
+          ...(holdbackReleaseDays === null ? {} : { holdbackReleaseDays }),
+        }
+      : {};
+
     await upsertOrganization(
       tx,
       {
         ...rest,
-        // Already in ten-thousandths of a fraction, converted by the shared
-        // percentage parser. Basis points are the same scale, so a target
-        // margin needs no second conversion beyond dropping the bigint.
-        defaultHoldbackPctTenThou: defaultHoldbackPct,
+        ...holdback,
+        // Basis points are the same scale as the percentage parser's output,
+        // so a target margin needs no second conversion beyond dropping the
+        // bigint.
         targetMarginBp: targetMargin === null ? null : Number(targetMargin),
       },
       null,
