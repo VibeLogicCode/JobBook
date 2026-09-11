@@ -63,16 +63,27 @@ import {
  * must not look like a MasterFormat division list.
  */
 
-/** Which trades have a pack. `none` is the deliberate plain start. */
-export type Trade = 'general' | 'electrical' | 'plumbing' | 'hvac' | 'none';
+/**
+ * Which trades have a pack. `none` is the deliberate plain start.
+ *
+ * `machining` is the fifth, added at the owner's request and after the design
+ * said four. See `machining.ts` for why it is a different case from the four
+ * construction trades that were declined: it is a different SHAPE of quote --
+ * setup once, run per piece, material by weight -- rather than another list of
+ * the same shape.
+ */
+export type Trade = 'general' | 'electrical' | 'plumbing' | 'hvac' | 'machining' | 'none';
 
-export const TRADES: readonly Trade[] = ['general', 'electrical', 'plumbing', 'hvac', 'none'];
+export const TRADES: readonly Trade[] = [
+  'general', 'electrical', 'plumbing', 'hvac', 'machining', 'none',
+];
 
 export const TRADE_LABELS: Record<Trade, string> = {
   general: 'General contracting and renovation',
   electrical: 'Electrical',
   plumbing: 'Plumbing',
   hvac: 'Heating, ventilation and air conditioning',
+  machining: 'Machine shop and fabrication',
   none: 'Something else, or start empty',
 };
 
@@ -81,6 +92,7 @@ export const TRADE_SUMMARIES: Record<Trade, string> = {
   electrical: 'Service calls through to full rewires.',
   plumbing: 'Repairs, fixtures, rough-in and re-piping.',
   hvac: 'Service, replacement and new installations.',
+  machining: 'CNC, wire EDM and welding. Setup, run time, material and outside processing.',
   none: 'Job types and line groups only. Everything else you build as you go.',
 };
 

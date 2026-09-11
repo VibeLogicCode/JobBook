@@ -24,10 +24,14 @@ through one join.
 **A company says what kind of work it does** — service, contract, or both —
 and each job type carries the paperwork that kind of work needs: holdback,
 progress draws, a schedule, Construction Act dates. A service call does not
-withhold a holdback nobody agreed to. Starter packs for general contracting,
-electrical, plumbing and HVAC give a fresh install job types, cost codes and a
-rate-book skeleton instead of five empty lists — **with no prices in it**, on
-purpose.
+withhold a holdback nobody agreed to. Starter packs for general
+contracting, electrical, plumbing, HVAC and machine shop work give a fresh
+install job types, cost codes, a rate-book skeleton, the quote templates that
+trade writes weekly and its standard exclusions — instead of five empty
+lists, and **with no prices in it**, on purpose. A quote cannot be sent while a
+line on it has no price, which is what makes shipping an unpriced rate book
+safe. Another trade's lists can be added later from Settings; that path adds
+only, and never retires or reprices anything.
 
 ## Running it
 

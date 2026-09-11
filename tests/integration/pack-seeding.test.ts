@@ -13,7 +13,7 @@ import { ensureLineGroups } from '@/db/seed/line-groups';
 import { addStarterPack, loadPack, retiredByPack } from '@/db/seed/packs/load';
 import { loadedPack, packHasSeededLists } from '@/db/seed/packs/marker';
 import { PACKS } from '@/db/seed/packs/registry';
-import { TRADES } from '@/db/seed/packs/types';
+import { packRowFlags, TRADES } from '@/db/seed/packs/types';
 import { unpricedLineCodes, unpricedProblem, unsendableProblem } from '@/lib/quote/unpriced';
 import { createQuoteFromTemplate } from '@/lib/quote/repository';
 import { FIRST_COMPANY_ID } from '@/lib/company/ids';
@@ -329,6 +329,96 @@ describe('the posture decides what paperwork a pack row arrives with', () => {
  * So every assertion below is either "the rows arrived" or "the thing that was
  * already here is exactly as it was".
  */
+/**
+ * The machine shop pack, and the one thing about it that is a correctness
+ * question rather than a content question.
+ *
+ * Ontario's Construction Act governs an IMPROVEMENT TO LAND. Statutory
+ * holdback, substantial performance, publication and last-supply dates are all
+ * facts about construction; selling a machined part is a sale of goods. So a
+ * manufacturing job type must never carry them, whatever the shop answered
+ * about service and contract work -- and left to the posture defaults, a shop
+ * that answered "Both" would have got a 10% holdback on a quote for fifty
+ * brackets.
+ */
+describe('the machine shop pack', () => {
+  it('never carries holdback or Construction Act dates, under any posture', async () => {
+    for (const posture of ['both', 'service', 'contract'] as const) {
+      for (const type of PACKS.machining.projectTypes) {
+        const flags = packRowFlags(type, posture);
+        expect(flags.holdback, `${type.name} under ${posture}`).toBe(false);
+        expect(flags.constructionActDates, `${type.name} under ${posture}`).toBe(false);
+        // A part order has no floor area and no critical path either.
+        expect(flags.scopeInputs, `${type.name} under ${posture}`).toBe(false);
+        expect(flags.scheduleTemplate, `${type.name} under ${posture}`).toBe(false);
+      }
+    }
+  });
+
+  it('bills tooling and a supply agreement in stages, and nothing else', async () => {
+    // The one flag that genuinely varies here: a fixture is often half up
+    // front, and a supply agreement is billed against releases over a year.
+    const staged = PACKS.machining.projectTypes
+      .filter((type) => packRowFlags(type, 'both').progressInvoicing)
+      .map((type) => type.name);
+    expect(staged.sort()).toEqual(['Supply agreement', 'Tooling or fixture']);
+  });
+
+  it('charges setup once on every template', async () => {
+    /**
+     * The line that makes a run of five expensive per piece and a run of five
+     * hundred cheap. Leaving it off is the commonest way a short run loses
+     * money, so it is `fixed` at one on all four templates rather than left to
+     * be remembered.
+     */
+    for (const template of PACKS.machining.scopeTemplates) {
+      const setup = template.items.find((item) => item.rateItemId.endsWith('01'));
+      expect(setup, template.name).toBeDefined();
+      expect(setup!.qtySource, template.name).toBe('fixed');
+      expect(setup!.fixedQtyMilli, template.name).toBe(1_000n);
+    }
+  });
+
+  it('loads into the database, flags and all', async () => {
+    await db.transaction((tx) => loadPack(tx, 'machining', 'contract'));
+
+    const rows = await db
+      .select()
+      .from(projectTypes)
+      .where(inArray(projectTypes.id, PACKS.machining.projectTypes.map((type) => type.id)));
+    expect(rows).toHaveLength(PACKS.machining.projectTypes.length);
+    // `contract` posture, and still no holdback anywhere: the pack states the
+    // flags rather than taking the defaults.
+    for (const row of rows) {
+      expect(row.holdback, row.name).toBe(false);
+      expect(row.constructionActDates, row.name).toBe(false);
+    }
+
+    const codes = (await db.select().from(costCodes)).map((row) => row.code);
+    expect(codes).toContain('M-30');
+    const items = (await db.select().from(rateItems)).map((row) => row.code);
+    expect(items).toContain('EDM-WIRE');
+    expect(items).toContain('SETUP');
+  });
+
+  it('retires the builder types on a first run, like every other pack', async () => {
+    await db.transaction((tx) => loadPack(tx, 'machining', 'service'));
+
+    const builder = await db
+      .select({ name: projectTypes.name, isActive: projectTypes.isActive })
+      .from(projectTypes)
+      .where(inArray(projectTypes.id, retiredByPack('machining')));
+    expect(builder.length).toBeGreaterThan(0);
+    for (const row of builder) expect(row.isActive, row.name).toBe(false);
+
+    // `Other` survives every pack: an installation with no way to file an odd
+    // job is one where somebody invents a type to get past the form.
+    const [other] = await db
+      .select().from(projectTypes).where(eq(projectTypes.id, PROJECT_TYPE_IDS.other));
+    expect(other!.isActive).toBe(true);
+  });
+});
+
 describe('adding a trade after setup', () => {
   it('brings the lists without retiring anything', async () => {
     /**

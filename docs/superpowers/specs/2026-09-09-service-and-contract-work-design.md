@@ -458,7 +458,7 @@ Splittable: posture first, packs second.
 - **A pack containing prices, or zero prices without a guard.** §5.3.
 - **MasterFormat or the NAHB chart.** §5.4. Declined by the owner.
 - **Any mechanism updating a seeded row.** §5.2.
-- **More than four packs.** §5.6.
+- **More than four packs.** §5.6. **Superseded 2026-09-10** — see the addendum at the end.
 - **Payable-side holdback.** §4.3. Real exposure, unwritten code, recorded.
 - **An invented statutory holdback default.** §4.4.
 - **A third posture between service and contract.** Offered and declined. A
@@ -507,3 +507,54 @@ in itself, and a reason not to size an audit by a grep somebody remembered.
 The service/contract vocabulary, the `'both'` default, never updating a seeded
 row, the copyright reasoning in §5.4, excluding vendors and customers from
 packs, and that `React.cache` is the right mechanism for §6.1. Unchanged.
+
+---
+
+## Addendum, 2026-09-10: a fifth pack, and what the packs now carry
+
+Five things in this document have been overtaken by work done on 2026-09-10.
+They are recorded here rather than edited in place, because the reasoning that
+was right at the time is still worth reading.
+
+**§9 declined more than four packs.** A fifth now ships: `machining`, a machine
+shop and fabrication pack, at the owner's request. The original limit stands
+and still excludes landscaping, roofing, painting and drywall — each pack wants
+somebody who does that trade to read it. This one is a different case: a
+different SHAPE of quote rather than another list of the same shape. Setup is
+charged once per job, run time is per piece, material is by weight, outside
+processing is by the lot.
+
+It forced a correctness decision this document did not anticipate. **Holdback
+and the Construction Act dates are off on every one of its job types, whatever
+posture the company answered.** The Act governs an improvement to land; selling
+a machined part is a sale of goods, with no statutory holdback, no substantial
+performance date and nothing to publish. Left to `POSTURE_DEFAULTS`, a shop
+answering "Both" would have received job types carrying a 10% holdback on a
+quote for fifty brackets. The per-type flags are what made that expressible —
+§1's argument arriving in a case §1 did not have in mind.
+
+**§5.5's posture tags did nothing for two of the packs.** A `both`-tagged row
+with no stated flags fell through to the column defaults, which are a builder's
+full paperwork — so a one-van renovator who answered "Service work" and loaded
+the general pack got holdback, draws, a schedule and four measurement boxes on
+all nine job types. `packRowFlags` now takes the company's answer for a
+`both`-tagged row.
+
+**§5.7 listed what a pack contains.** It now also contains scope templates —
+the two to four jobs that trade quotes weekly, as line lists with quantities —
+and saved exclusions and assumptions. A rate book is a list of prices; a
+template is the knowledge of what a job consists of.
+
+**§5.3's zero-price guard was one call site and is now two.**
+`unpricedProblem` refused an unpriced line added by hand;
+`createQuoteFromTemplate` never consulted it, so a starter template could
+produce a quote of zero-priced lines — which under `group_totals` do not print
+at all. The worksheet now names them and `setQuoteStatus` refuses to send until
+they are priced or marked as allowances. Shipping unpriced templates is safe
+BECAUSE of that guard, not despite it.
+
+**§3 said posture is "changeable in Settings afterwards, always", and it was
+not.** Nor was the trade: the pack was loadable only by a wizard that closes
+itself permanently. Settings now carries both — the kind of work per company,
+and `addStarterPack`, which adds a trade's lists without retiring a job type or
+touching the flags on a row that already exists.
