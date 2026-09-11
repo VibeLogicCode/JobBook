@@ -21,7 +21,7 @@ import {
   type RegenerateSummary,
 } from '@/lib/quote/regenerate';
 import type { ScopeInputs } from '@/lib/quote/template';
-import { unpricedProblem } from '@/lib/quote/unpriced';
+import { unpricedProblem, unsendableProblem } from '@/lib/quote/unpriced';
 
 /**
  * Every action opens with two checks, in this order.
@@ -253,6 +253,45 @@ export async function setQuoteStatus(input: z.input<typeof statusSchema>): Promi
             'the status alone would leave a quote that says accepted with no job behind it.',
         };
       }
+    }
+
+    /**
+     * A quote with an unpriced line does not go out.
+     *
+     * ---------------------------------------------------------------------------
+     * WHY THE GUARD IS HERE AND NOT ONLY ON THE LINE EDITOR
+     * ---------------------------------------------------------------------------
+     *
+     * `unpricedProblem` refuses to ADD an unpriced line by hand, and that was
+     * the only enforcement anywhere. A trade pack's scope template does not go
+     * through it: `createQuoteFromTemplate` expands what the template names, so
+     * a starter template of deliberately unpriced items builds a draft of
+     * zero-priced lines.
+     *
+     * That draft is useful -- it is a worklist of the prices to fill in. What
+     * it must not be is sendable, because under the `group_totals` default a
+     * zero-priced line does not print at all: the customer would receive a
+     * document with real work silently missing from it, and the arithmetic on
+     * it would be perfectly consistent. Nobody running a business off this
+     * should have to know that a zero in a rate column means "not done yet".
+     *
+     * Read here rather than trusted from the worksheet, which renders its own
+     * warning from the same helper but is a screen somebody may have had open
+     * for an hour.
+     */
+    if (status === 'sent') {
+      const lines = await db
+        .select({
+          code: quoteLines.code,
+          calcMode: quoteLines.calcMode,
+          unitPriceTenThou: quoteLines.unitPriceTenThou,
+          isAllowance: quoteLines.isAllowance,
+        })
+        .from(quoteLines)
+        .where(and(eq(quoteLines.quoteId, quoteId), eq(quoteLines.recordStatus, 'active')));
+
+      const problem = unsendableProblem(lines);
+      if (problem) return { ok: false, error: problem };
     }
 
     const patch: Record<string, unknown> = { status };

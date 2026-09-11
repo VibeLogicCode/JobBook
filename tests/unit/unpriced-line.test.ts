@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { unpricedProblem } from '@/lib/quote/unpriced';
+import { unpricedLineCodes, unpricedProblem, unsendableProblem } from '@/lib/quote/unpriced';
 
 /**
  * A rate item with no sell price, added to a quote.
@@ -66,5 +66,67 @@ describe('unpricedProblem', () => {
     expect(
       unpricedProblem({ code: 'X', calcMode: 'percent', sellRateTenThou: 0n, isAllowance: false }),
     ).toBeNull();
+  });
+});
+
+/**
+ * The same rule, applied to a quote that already exists.
+ *
+ * This is the half that makes shipping an unpriced starter rate book safe. A
+ * pack's scope template expands through `createQuoteFromTemplate`, which does
+ * NOT consult `unpricedProblem` -- so the draft is full of zero-priced lines
+ * by design, and the thing that must not happen is that draft being sent.
+ */
+describe('a quote that cannot be sent yet', () => {
+  const line = (code: string, unitPriceTenThou: bigint, over = {}) => ({
+    code, calcMode: 'qty' as const, unitPriceTenThou, isAllowance: false, ...over,
+  });
+
+  it('is silent when every line carries a price', () => {
+    expect(unsendableProblem([line('LAB-EL', 950000n), line('DEV-REC', 45000n)])).toBeNull();
+  });
+
+  it('names the codes rather than counting them', () => {
+    // "3 lines need a price" cannot be acted on without going hunting.
+    const problem = unsendableProblem([line('LAB-EL', 0n), line('DEV-REC', 45000n), line('PANEL', 0n)]);
+    expect(problem).toContain('LAB-EL');
+    expect(problem).toContain('PANEL');
+    expect(problem).not.toContain('DEV-REC');
+    expect(problem).toContain('2 lines have');
+  });
+
+  it('says it in the singular for one line', () => {
+    expect(unsendableProblem([line('LAB-EL', 0n)])).toContain('One line has');
+  });
+
+  it('stops naming them after six', () => {
+    const many = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'].map((code) => line(code, 0n));
+    const problem = unsendableProblem(many)!;
+    expect(problem).toContain('and 2 more');
+    expect(problem).not.toContain('H,');
+  });
+
+  it('exempts a percentage line and an allowance, like the line editor does', () => {
+    /**
+     * One rule, read from two places -- the worksheet's warning and the send
+     * refusal both call this -- so they cannot come to disagree about what a
+     * legitimate zero is. An overhead percentage at zero states "no uplift";
+     * an allowance is a placeholder with no figure yet by definition.
+     */
+    const rows = [
+      line('OH-SUB', 0n, { calcMode: 'percent' as const }),
+      line('ALLOW-FIN', 0n, { isAllowance: true }),
+    ];
+    expect(unpricedLineCodes(rows)).toEqual([]);
+    expect(unsendableProblem(rows)).toBeNull();
+  });
+
+  it('tells the owner what to do instead of stating a rule', () => {
+    // The reader has no IT support and no reason to know that a zero in a rate
+    // column means "not done yet". The sentence has to say both what is wrong
+    // and what to do -- price it, or call it an allowance.
+    const problem = unsendableProblem([line('LAB-EL', 0n)])!;
+    expect(problem).toMatch(/does not print/i);
+    expect(problem).toMatch(/allowance/i);
   });
 });

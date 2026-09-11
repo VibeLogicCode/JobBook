@@ -36,6 +36,7 @@ import type {
 } from '@/components/worksheet/types';
 import { Button, buttonClass } from '@/components/ui/Button';
 import { Notice } from '@/components/ui/Notice';
+import { unpricedLineCodes } from '@/lib/quote/unpriced';
 import { Pill, statusTone } from '@/components/ui/Pill';
 import { formatCents, formatQty, formatRate } from '@/lib/money/format';
 
@@ -128,6 +129,31 @@ export function Worksheet({
     quote.washroomCount !== null ||
     quote.kitchenCount !== null ||
     quote.bedroomCount !== null;
+
+  /**
+   * The lines that still need a price, named.
+   *
+   * A starter template ships real trade vocabulary with no prices in it -- on
+   * purpose, because invented prices are worse -- so the first quote built from
+   * one arrives as a worklist. This is that worklist, said out loud at the top
+   * of the screen instead of left to be inferred from a column of zeros.
+   *
+   * `setQuoteStatus` refuses to SEND while this is non-empty. The warning and
+   * the refusal read the same helper, so they cannot disagree about what
+   * counts -- a percentage line and an allowance are both legitimately zero.
+   */
+  const unpriced = useMemo(
+    () =>
+      unpricedLineCodes(
+        lines.map((line) => ({
+          code: line.code,
+          calcMode: line.calcMode,
+          unitPriceTenThou: BigInt(line.unitPriceTenThou),
+          isAllowance: line.isAllowance,
+        })),
+      ),
+    [lines],
+  );
 
   const groups = useMemo(() => {
     const included = lines.filter((line) => line.isIncluded);
@@ -343,6 +369,34 @@ export function Worksheet({
       {error ? (
         <div className="px-4 py-2 sm:px-6">
           <Notice tone="negative">{error}</Notice>
+        </div>
+      ) : null}
+
+      {/* Before the notice band, because it is a condition of the document
+          rather than the outcome of the last press -- and it does not clear
+          when something else succeeds. `no-print`: the customer's copy comes
+          from /print, and this is a message to the person pricing the job. */}
+      {unpriced.length > 0 && editable ? (
+        <div className="no-print px-4 py-2 sm:px-6">
+          <Notice
+            tone="warning"
+            title={
+              unpriced.length === 1
+                ? 'One line still needs a price'
+                : `${unpriced.length} lines still need a price`
+            }
+          >
+            <p>
+              <span className="num">{unpriced.join(', ')}</span>. Your starter rate book ships
+              without prices on purpose — a price this software guessed would lose you the job or
+              lose you money. Tap a line to put yours in.
+            </p>
+            <p className="mt-2">
+              Until then this quote cannot be sent: a line priced at nothing does not print on the
+              customer&apos;s copy at all. If an amount is genuinely not known yet, mark the line
+              as an allowance instead.
+            </p>
+          </Notice>
         </div>
       ) : null}
 

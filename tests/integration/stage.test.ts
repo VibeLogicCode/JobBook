@@ -18,11 +18,14 @@ vi.mock('next/headers', () => ({
 }));
 
 import { db } from '@/db/client';
-import { customers, organization, projects, quotes, stageHistory, users } from '@/db/schema';
+import {
+  customers, organization, projects, quoteLines, quotes, stageHistory, users,
+} from '@/db/schema';
 // After the mocks above, deliberately: this pulls in the database client,
 // and the module under test must not be loaded before they are installed.
 import { seedDeployment } from '../support/organization';
 import { setProjectStage } from '@/app/projects/actions';
+import { setQuoteStatus } from '@/app/quotes/[id]/actions';
 import { FIRST_COMPANY_ID } from '@/lib/company/ids';
 
 /**
@@ -259,5 +262,139 @@ describe('the rule follows the accepted quote, not the stage column', () => {
     const result = await setProjectStage(null, form({ id: jobId, stage: 'quoting' }));
     expect(result.ok).toBe(true);
     expect(await stageOf(jobId)).toBe('quoting');
+  });
+});
+
+/**
+ * A quote with a line nobody has priced does not go out.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY THIS GUARD IS LOAD-BEARING NOW
+ * ---------------------------------------------------------------------------
+ *
+ * The trade packs ship a rate book with no prices in it, on purpose -- invented
+ * prices are worse -- and they now ship scope templates that reference those
+ * items. So the first quote an owner builds from a starter template is a
+ * worklist of zero-priced lines, which is the most useful screen a first hour
+ * can show him.
+ *
+ * What it must never be is sendable. `rate_items.sell_rate_ten_thou` is NOT
+ * NULL, so "not priced yet" and "priced at nothing" are the same row, and
+ * under `pricingDisplay`'s `group_totals` default a zero-priced line does not
+ * print AT ALL: the customer would receive a document with the price of real
+ * work silently missing, and its arithmetic would be perfectly consistent.
+ *
+ * The worksheet warns from `unpricedLineCodes` and this action refuses from
+ * `unsendableProblem` -- one rule, read twice, so a screen somebody has had
+ * open for an hour cannot be the thing that decides.
+ */
+describe('sending a quote', () => {
+  async function draft(): Promise<string> {
+    const [row] = await db
+      .insert(quotes)
+      .values({
+        projectId: opportunityId,
+        quoteNumber: 'QT-0002',
+        kind: 'estimate',
+        sequence: 2,
+        version: 1,
+        status: 'draft',
+        quoteDate: '2026-01-10',
+        validUntil: '2026-02-10',
+      })
+      .returning({ id: quotes.id });
+    return row!.id;
+  }
+
+  async function addLine(
+    quoteId: string,
+    code: string,
+    unitPriceTenThou: bigint,
+    over: Partial<{ calcMode: 'qty' | 'flat' | 'percent'; isAllowance: boolean }> = {},
+  ): Promise<void> {
+    await db.insert(quoteLines).values({
+      quoteId,
+      lineGroup: 'Labour',
+      code,
+      description: code,
+      calcMode: over.calcMode ?? 'qty',
+      unitLabel: 'hour',
+      qtyMilli: 1_000n,
+      unitCostTenThou: 0n,
+      unitPriceTenThou,
+      // NOT NULL with no default, and normally written by the engine. Quantity
+      // is 1 here, so ten-thousandths to cents is a divide by 100.
+      lineCostCents: 0,
+      lineTotalCents: Number(unitPriceTenThou / 100n),
+      isAllowance: over.isAllowance ?? false,
+      sortOrder: 10,
+    });
+  }
+
+  it('refuses while a line has no price, and names it', async () => {
+    const quoteId = await draft();
+    await addLine(quoteId, 'WH-40', 0n);
+    await addLine(quoteId, 'LAB-PL', 950_000n);
+
+    const result = await setQuoteStatus({ quoteId, status: 'sent' });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toContain('WH-40');
+    // Named, not counted: "one line needs a price" cannot be acted on.
+    expect(result.error).not.toContain('LAB-PL');
+    // And it says what to do about it.
+    expect(result.error).toMatch(/allowance/i);
+
+    // Still a draft. The refusal is before the write, not after it.
+    const [row] = await db.select().from(quotes).where(eq(quotes.id, quoteId));
+    expect(row!.status).toBe('draft');
+    expect(row!.sentAt).toBeNull();
+  });
+
+  it('sends once every line carries a price', async () => {
+    const quoteId = await draft();
+    await addLine(quoteId, 'WH-40', 1_850_000n);
+
+    const result = await setQuoteStatus({ quoteId, status: 'sent' });
+    expect(result.ok).toBe(true);
+    const [row] = await db.select().from(quotes).where(eq(quotes.id, quoteId));
+    expect(row!.status).toBe('sent');
+    expect(row!.sentAt).not.toBeNull();
+  });
+
+  it('sends an allowance and a percentage line at zero', async () => {
+    /**
+     * The two legitimate zeros, and the reason the guard reads the shared
+     * helper rather than testing the column: an allowance is a placeholder the
+     * customer spends against, and for a percentage line the rate IS the
+     * percentage, so zero states "no uplift".
+     */
+    const quoteId = await draft();
+    await addLine(quoteId, 'ALLOW-FIN', 0n, { isAllowance: true, calcMode: 'flat' });
+    await addLine(quoteId, 'OH-SUB', 0n, { calcMode: 'percent' });
+
+    expect((await setQuoteStatus({ quoteId, status: 'sent' })).ok).toBe(true);
+  });
+
+  it('ignores a voided line that was never priced', async () => {
+    // A line struck off the quote is not work the customer is being charged
+    // for, so it cannot be what blocks the document.
+    const quoteId = await draft();
+    await addLine(quoteId, 'GOOD', 500_000n);
+    await addLine(quoteId, 'SCRAPPED', 0n);
+    await db
+      .update(quoteLines)
+      .set({ recordStatus: 'void', voidReason: 'not doing this after all' })
+      .where(eq(quoteLines.code, 'SCRAPPED'));
+
+    expect((await setQuoteStatus({ quoteId, status: 'sent' })).ok).toBe(true);
+  });
+
+  it('lets an empty draft go out, which is the owner\'s business', async () => {
+    // Nothing here is a judgement about whether a quote is finished. The guard
+    // is about a line whose price is missing, not about a quote with no lines:
+    // an empty one is visibly empty to whoever is sending it.
+    const quoteId = await draft();
+    expect((await setQuoteStatus({ quoteId, status: 'sent' })).ok).toBe(true);
   });
 });
