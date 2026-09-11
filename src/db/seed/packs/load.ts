@@ -3,7 +3,9 @@ import { db } from '@/db/client';
 import { costCodes, lineGroups, projectTypes, rateItems, settings, trades } from '@/db/schema';
 import { PACK_LOADED_KEY } from '@/db/seed/packs/marker';
 import { DEFAULT_PROJECT_TYPES } from '@/db/seed/project-lists';
-import type { Trade, TradePack } from '@/db/seed/packs/types';
+import { seedVendorTypes } from '@/db/seed/vendor-lists';
+import { packRowFlags, type Trade, type TradePack } from '@/db/seed/packs/types';
+import { FLAG_KEYS, type WorkPosture } from '@/lib/posture/types';
 import { PACKS } from '@/db/seed/packs/registry';
 
 type Executor = typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -76,7 +78,29 @@ type Executor = typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0];
  * cost codes by the PACK's id, and if a code was skipped the item referencing
  * it is skipped too, by the same rule, on the same code collision.
  */
-export async function loadPack(executor: Executor, trade: Trade): Promise<void> {
+/**
+ * ---------------------------------------------------------------------------
+ * THE POSTURE IS A PARAMETER, AND EVERY ROW STILL GETS INSERTED
+ * ---------------------------------------------------------------------------
+ *
+ * It decides the FLAGS on the rows this pack creates -- see `packRowFlags` --
+ * and nothing else. In particular it does NOT filter which rows are written:
+ *
+ *   - A contract-tagged type under a service-only company stays in the table,
+ *     unoffered. Switching to Both later re-offers it, which a pack that never
+ *     inserted it could not do. `offeredWork` in `lib/posture/read.ts` is what
+ *     keeps it out of the pickers.
+ *   - Filtering here would also make the answer to "what did I get" depend on
+ *     an answer the owner is told he can change afterwards.
+ *
+ * Defaults to `both`, which is today's behaviour, so a caller that does not
+ * know the posture cannot accidentally strip a builder's paperwork.
+ */
+export async function loadPack(
+  executor: Executor,
+  trade: Trade,
+  posture: WorkPosture = 'both',
+): Promise<void> {
   const pack: TradePack = PACKS[trade];
 
   if (pack.projectTypes.length > 0) {
@@ -87,14 +111,46 @@ export async function loadPack(executor: Executor, trade: Trade): Promise<void> 
         name: type.name,
         posture: type.posture,
         sortOrder: type.sortOrder,
-        holdback: type.holdback ?? true,
-        progressInvoicing: type.progressInvoicing ?? true,
-        scheduleTemplate: type.scheduleTemplate ?? true,
-        constructionActDates: type.constructionActDates ?? true,
-        scopeInputs: type.scopeInputs ?? true,
+        ...packRowFlags(type, posture),
         isActive: true,
       })))
       .onConflictDoNothing();
+
+    /**
+     * And then the flags again, as an UPDATE. This is not belt-and-braces.
+     *
+     * The insert above skips on conflict -- it has to, for the reasons in the
+     * block comment -- and for the general and `none` packs EVERY row already
+     * exists: those packs reuse the nine ids migration 0018 created, which
+     * carry the column defaults. So the insert wrote nothing, and a
+     * service-only shop got a builder's paperwork on all nine types. That was
+     * the whole bug, and it survived the first version of the fix.
+     *
+     * Scoped to the ids THIS PACK NAMES, so a type the owner created is never
+     * touched, and grouped by identical flag sets so nine rows are two
+     * statements rather than nine.
+     *
+     * Safe because `loadPack` runs from the setup wizard, which
+     * `readSetupGate` allows only while no company exists that it did not
+     * itself create -- there is no owner-tuned flag here to overwrite. A later
+     * "load a pack" entry point in Settings would NOT be safe without
+     * answering that question first.
+     */
+    const groups = new Map<string, { posture: WorkPosture; flags: ReturnType<typeof packRowFlags>; ids: string[] }>();
+    for (const type of pack.projectTypes) {
+      const flags = packRowFlags(type, posture);
+      const key = `${type.posture}:${FLAG_KEYS.map((flag) => (flags[flag] ? '1' : '0')).join('')}`;
+      const group = groups.get(key);
+      if (group) group.ids.push(type.id);
+      else groups.set(key, { posture: type.posture, flags, ids: [type.id] });
+    }
+
+    for (const group of groups.values()) {
+      await executor
+        .update(projectTypes)
+        .set({ posture: group.posture, ...group.flags })
+        .where(inArray(projectTypes.id, group.ids));
+    }
   }
 
   /**
@@ -117,6 +173,17 @@ export async function loadPack(executor: Executor, trade: Trade): Promise<void> 
       .set({ isActive: false })
       .where(inArray(projectTypes.id, toRetire));
   }
+
+  /**
+   * The four vendor KINDS, which no pack ships and every vendor needs.
+   *
+   * Here rather than only in the lazy seed so the wizard leaves a COMPLETE
+   * database: `app/vendors/schema.ts` requires `vendorTypeId`, and a pack
+   * install used to reach the vendor form with an empty list because the
+   * marker stood the whole lazy seed down. Trade-specific rows are the pack's;
+   * these four are not trade-specific at all.
+   */
+  await seedVendorTypes(executor);
 
   if (pack.costCodes.length > 0) {
     await executor

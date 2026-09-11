@@ -1,9 +1,11 @@
 import { eq, inArray, sql } from 'drizzle-orm';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { db } from '@/db/client';
-import { costCodes, lineGroups, projectTypes, rateItems, trades } from '@/db/schema';
+import { costCodes, lineGroups, projectTypes, rateItems, trades, vendorTypes } from '@/db/schema';
 import { DEFAULT_PROJECT_TYPES, PROJECT_TYPE_IDS } from '@/db/seed/project-lists';
-import { DEFAULT_TRADES, ensureVendorLists, seedVendorLists } from '@/db/seed/vendor-lists';
+import {
+  DEFAULT_TRADES, DEFAULT_VENDOR_TYPES, ensureVendorLists, seedVendorLists, seedVendorTypes,
+} from '@/db/seed/vendor-lists';
 import { ensureLineGroups } from '@/db/seed/line-groups';
 import { loadPack, retiredByPack } from '@/db/seed/packs/load';
 import { loadedPack, packHasSeededLists } from '@/db/seed/packs/marker';
@@ -45,7 +47,7 @@ beforeEach(async () => {
   await db.execute(sql`
     truncate table audit_log, quote_taxes, quote_lines, quotes, scope_template_items,
       scope_templates, rate_items, cost_codes, projects, settings, line_groups, trades,
-      project_types
+      vendor_types, project_types
     restart identity cascade
   `);
   await db.insert(projectTypes).values(DEFAULT_PROJECT_TYPES.map((type) => ({
@@ -163,6 +165,35 @@ describe('the lazy seeds stand down once a pack is loaded', () => {
     expect(await packHasSeededLists()).toBe(true);
   });
 
+  it('still supplies the vendor KINDS, which no pack ships', async () => {
+    /**
+     * The bug this file's own stand-down created.
+     *
+     * `ensureVendorLists` seeded vendor types and trades together, and stood
+     * both down behind the pack marker -- so after any pack, `vendor_types`
+     * was empty forever. `app/vendors/schema.ts` requires `vendorTypeId` on
+     * every vendor, which made a pack install one where no vendor could be
+     * added at all: exactly the failure the seed's own docblock says it is
+     * there to prevent.
+     *
+     * The four kinds are not trade-specific. An electrician buys material,
+     * hires subs, rents a lift and pays an accountant like anybody else.
+     */
+    await db.transaction((tx) => loadPack(tx, 'electrical'));
+
+    // Loading the pack alone is enough: the wizard must leave a database that
+    // works without waiting for somebody to open the right screen.
+    const afterPack = await db.select().from(vendorTypes);
+    expect(afterPack.length).toBe(DEFAULT_VENDOR_TYPES.length);
+    expect(afterPack.map((row) => row.name)).toContain('Subcontractor');
+
+    // And the lazy seed keeps supplying them even with a marker in place,
+    // while still refusing to append the twelve general-contracting trades.
+    await seedVendorTypes();
+    expect((await db.select().from(vendorTypes)).length).toBe(DEFAULT_VENDOR_TYPES.length);
+    expect((await db.select().from(trades)).map((row) => row.name)).not.toContain('Excavation');
+  });
+
   it('counts the plain start as a choice, not as nothing', async () => {
     await db.transaction((tx) => loadPack(tx, 'none'));
     // Somebody who chose to start empty said so. Appending twelve trades to
@@ -170,6 +201,98 @@ describe('the lazy seeds stand down once a pack is loaded', () => {
     expect(await packHasSeededLists()).toBe(true);
     await ensureVendorLists();
     expect(await db.select().from(trades)).toHaveLength(0);
+  });
+});
+
+/**
+ * What the posture answer actually does to a pack's rows.
+ *
+ * It did nothing at all for two of the five packs, and they are the two a
+ * small shop is most likely to pick. The general and `none` packs tag every
+ * row `both` -- a bathroom renovation really is either kind of job depending
+ * on how it was sold -- and a `both` row with no stated flags fell through to
+ * the column defaults, which are a builder's full paperwork. So a one-van
+ * renovator answered "Service work" and got holdback, draws, a schedule,
+ * Construction Act dates and four measurement boxes on all nine types.
+ */
+describe('the posture decides what paperwork a pack row arrives with', () => {
+  it('strips the builder paperwork from the general pack for a service-only shop', async () => {
+    await db.transaction((tx) => loadPack(tx, 'general', 'service'));
+
+    const rows = await db
+      .select({
+        name: projectTypes.name, holdback: projectTypes.holdback,
+        progressInvoicing: projectTypes.progressInvoicing,
+        scheduleTemplate: projectTypes.scheduleTemplate,
+        constructionActDates: projectTypes.constructionActDates,
+        scopeInputs: projectTypes.scopeInputs,
+      })
+      .from(projectTypes)
+      .where(inArray(projectTypes.id, DEFAULT_PROJECT_TYPES.map((type) => type.id)));
+
+    expect(rows.length).toBe(DEFAULT_PROJECT_TYPES.length);
+    for (const row of rows) {
+      expect(row.holdback, row.name).toBe(false);
+      expect(row.progressInvoicing, row.name).toBe(false);
+      expect(row.scheduleTemplate, row.name).toBe(false);
+      expect(row.constructionActDates, row.name).toBe(false);
+      expect(row.scopeInputs, row.name).toBe(false);
+    }
+  });
+
+  it('leaves the same pack with everything on for a builder', async () => {
+    // `both` and `contract` are identical here, and deliberately: they differ
+    // in which types are OFFERED, never in what a contract job's forms carry.
+    await db.transaction((tx) => loadPack(tx, 'general', 'contract'));
+    const [row] = await db.select().from(projectTypes)
+      .where(eq(projectTypes.id, PROJECT_TYPE_IDS.customHome));
+    expect(row!.holdback).toBe(true);
+    expect(row!.scopeInputs).toBe(true);
+  });
+
+  it('defaults to today behaviour when no posture is given', async () => {
+    // The parameter is optional so a caller that does not know the posture
+    // cannot accidentally strip a builder's paperwork.
+    await db.transaction((tx) => loadPack(tx, 'general'));
+    const [row] = await db.select().from(projectTypes)
+      .where(eq(projectTypes.id, PROJECT_TYPE_IDS.customHome));
+    expect(row!.holdback).toBe(true);
+  });
+
+  it('keeps a contract-tagged row a contract row even under a service company', async () => {
+    /**
+     * `Rewire` is tagged `contract`, so its flags come from its own tag and
+     * not from the company's answer. It is not OFFERED to a service-only
+     * company -- `offeredWork` keeps it out of the pickers -- but it is here,
+     * with full paperwork, for the day the owner switches to Both or takes one
+     * rewire a year and turns it on himself.
+     */
+    await db.transaction((tx) => loadPack(tx, 'electrical', 'service'));
+
+    const rows = await db
+      .select({ name: projectTypes.name, posture: projectTypes.posture,
+        holdback: projectTypes.holdback })
+      .from(projectTypes)
+      .where(eq(projectTypes.isActive, true));
+
+    const contract = rows.filter((row) => row.posture === 'contract');
+    expect(contract.length).toBeGreaterThan(0);
+    for (const row of contract) expect(row.holdback, row.name).toBe(true);
+
+    // And its service rows stay off, which they said themselves.
+    const service = rows.filter((row) => row.posture === 'service');
+    expect(service.length).toBeGreaterThan(0);
+    for (const row of service) expect(row.holdback, row.name).toBe(false);
+  });
+
+  it('gives a service-only shop a plain start with the none pack too', async () => {
+    await db.transaction((tx) => loadPack(tx, 'none', 'service'));
+    const [row] = await db.select().from(projectTypes)
+      .where(eq(projectTypes.id, PROJECT_TYPE_IDS.other));
+    // The catch-all every pack keeps. A service shop filing an odd job is not
+    // filing a job that withholds a holdback.
+    expect(row!.holdback).toBe(false);
+    expect(row!.isActive).toBe(true);
   });
 });
 

@@ -1,4 +1,8 @@
-import type { WorkPosture } from '@/lib/posture/types';
+import {
+  POSTURE_DEFAULTS,
+  type ProjectTypeFlags,
+  type WorkPosture,
+} from '@/lib/posture/types';
 
 /**
  * A trade starter pack: what a fresh installation begins with instead of five
@@ -133,6 +137,58 @@ export interface PackRateItem {
   /** Which cost code, by the pack's own id. */
   costCodeId: string;
   sortOrder: number;
+}
+
+/**
+ * The five flags a pack row arrives with, given what the company answered.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY THE COMPANY'S ANSWER REACHES IN HERE AT ALL
+ * ---------------------------------------------------------------------------
+ *
+ * Because without it, "Service work" meant nothing for two of the five packs.
+ * The general and `none` packs tag every row `both` -- correctly, a bathroom
+ * renovation is a signed contract with draws or a one-invoice job depending
+ * only on how it was sold -- and a `both` row with no explicit flags fell
+ * through to the column defaults, which are today's behaviour: holdback on,
+ * draws on, schedule on, Construction Act dates on, measurements on.
+ *
+ * So a one-van renovator answered "Service work", loaded the general pack, and
+ * got nine job types with a builder's full paperwork on every one of them. The
+ * owner spotted it from the outside: *"type of work should be depended upon
+ * trade i am choosing while setting up no?"* The list does depend on the
+ * trade. The PAPERWORK depends on the posture, and that half was not wired.
+ *
+ * ---------------------------------------------------------------------------
+ * THE RULE
+ * ---------------------------------------------------------------------------
+ *
+ * 1. A flag the pack states wins. An HVAC `Seasonal maintenance` row says
+ *    what it is regardless of who loads it.
+ * 2. Otherwise the defaults for the row's EFFECTIVE posture: its own tag, or
+ *    the company's answer when the tag is `both`.
+ *
+ * That is the design's own sentence -- *"Posture sets their default for a new
+ * type"* -- applied to the rows a pack creates, which are new types.
+ *
+ * These are DEFAULTS, not rules, and nothing re-derives them later: the
+ * settings screen that changes posture deliberately leaves every existing
+ * type's flags alone, because a type is where the terms of a signed contract
+ * are recorded.
+ */
+export function packRowFlags(
+  type: PackProjectType,
+  companyPosture: WorkPosture,
+): ProjectTypeFlags {
+  const effective = type.posture === 'both' ? companyPosture : type.posture;
+  const defaults = POSTURE_DEFAULTS[effective];
+  return {
+    holdback: type.holdback ?? defaults.holdback,
+    progressInvoicing: type.progressInvoicing ?? defaults.progressInvoicing,
+    scheduleTemplate: type.scheduleTemplate ?? defaults.scheduleTemplate,
+    constructionActDates: type.constructionActDates ?? defaults.constructionActDates,
+    scopeInputs: type.scopeInputs ?? defaults.scopeInputs,
+  };
 }
 
 export interface PackNamedRow {

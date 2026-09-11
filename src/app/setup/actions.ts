@@ -349,7 +349,11 @@ export async function saveTradeStep(
       .set({ workPosture })
       .where(eq(companies.id, FIRST_COMPANY_ID));
 
-    await loadPack(tx, trade);
+    // The posture just saved above, so a `both`-tagged row arrives with the
+    // paperwork this kind of outfit actually needs. Without it, "Service
+    // work" changed nothing at all for the general and `none` packs, whose
+    // rows are all tagged `both`.
+    await loadPack(tx, trade, workPosture);
 
     return saved(
       trade === 'none'

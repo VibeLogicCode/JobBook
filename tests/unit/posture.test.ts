@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { packRowFlags } from '@/db/seed/packs/types';
 import {
   ALL_FLAGS_ON,
   FLAG_KEYS,
@@ -213,5 +214,56 @@ describe('what work is offered here', () => {
         );
       }
     }
+  });
+});
+
+/**
+ * What a pack row's paperwork comes out as, which is where "Service work"
+ * stopped meaning anything for two of the five packs.
+ */
+describe('the flags a pack row arrives with', () => {
+  const row = (posture: 'both' | 'service' | 'contract', overrides = {}) => ({
+    id: 'x', name: 'Something', sortOrder: 10, posture, ...overrides,
+  });
+
+  it('takes a both-tagged row from the company answer', () => {
+    /**
+     * The bug, in one assertion. A bathroom renovation is genuinely either
+     * kind of job depending on how it was sold, so the general pack tags it
+     * `both` -- and a `both` row used to fall through to the column defaults,
+     * which are a builder's full paperwork. A one-van renovator who answered
+     * "Service work" got holdback, draws, a schedule, Construction Act dates
+     * and four measurement boxes on every type he had.
+     */
+    expect(packRowFlags(row('both'), 'service')).toEqual(POSTURE_DEFAULTS.service);
+    expect(packRowFlags(row('both'), 'contract')).toEqual(ALL_FLAGS_ON);
+    expect(packRowFlags(row('both'), 'both')).toEqual(ALL_FLAGS_ON);
+  });
+
+  it('keeps a tagged row on its own tag whoever loads it', () => {
+    // A `Seasonal maintenance` row is service work in a builder's hands too,
+    // and a `Rewire` is contract work in a service shop's.
+    for (const companyPosture of POSTURES) {
+      expect(packRowFlags(row('service'), companyPosture)).toEqual(POSTURE_DEFAULTS.service);
+      expect(packRowFlags(row('contract'), companyPosture)).toEqual(ALL_FLAGS_ON);
+    }
+  });
+
+  it('lets the pack override one flag without stating the other four', () => {
+    // How a $15,000 bathroom is described: contract work with no schedule
+    // template. The design refused a third posture for exactly this, on the
+    // grounds that the per-type flags already say it.
+    const flags = packRowFlags(row('contract', { scheduleTemplate: false }), 'both');
+    expect(flags.scheduleTemplate).toBe(false);
+    expect(flags.holdback).toBe(true);
+    expect(flags.progressInvoicing).toBe(true);
+  });
+
+  it('lets a pack turn a flag ON against its own posture default', () => {
+    // `?? defaults` and not `&& defaults`: a service row that genuinely needs
+    // measurements -- a duct cleaning priced by floor area -- can say so.
+    const flags = packRowFlags(row('service', { scopeInputs: true }), 'service');
+    expect(flags.scopeInputs).toBe(true);
+    expect(flags.holdback).toBe(false);
   });
 });
