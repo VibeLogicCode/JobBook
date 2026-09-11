@@ -112,6 +112,28 @@ type Executor = typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0];
  * -- or whose name -- is already present is left exactly as it is.
  */
 export async function seedVendorLists(executor: Executor = db): Promise<void> {
+  await seedVendorTypes(executor);
+  await seedTrades(executor);
+}
+
+/**
+ * The four vendor KINDS, which are not trade-specific and never stand down.
+ *
+ * Material supplier, subcontractor, equipment rental, professional services.
+ * Nothing about those four is general contracting -- an electrician buys
+ * material, hires subs, rents a lift and pays an accountant exactly like a
+ * builder does -- and they are load-bearing: `app/vendors/schema.ts` requires
+ * `vendorTypeId` on every vendor, so an empty list is an installation where no
+ * vendor can be added at all.
+ *
+ * Which is what a pack install WAS. `ensureVendorLists` stood both lists down
+ * together behind the pack marker, so after any pack -- `none` included --
+ * `vendor_types` stayed empty forever and the vendor form could not be
+ * completed. The seed's own docblock says it exists to prevent exactly that.
+ * Splitting the two is the fix: the TRADES are trade-specific and a pack
+ * supplies its own, the KINDS are universal.
+ */
+export async function seedVendorTypes(executor: Executor = db): Promise<void> {
   await executor
     .insert(vendorTypes)
     .values(
@@ -124,7 +146,16 @@ export async function seedVendorLists(executor: Executor = db): Promise<void> {
       })),
     )
     .onConflictDoNothing();
+}
 
+/**
+ * The twelve general-contracting trades, which DO stand down for a pack.
+ *
+ * An electrician who picked the electrical pack must not have his short list
+ * of subcontractor kinds quietly joined by Excavation, Masonry and Roofing the
+ * first time he opens a screen that reads them.
+ */
+export async function seedTrades(executor: Executor = db): Promise<void> {
   await executor
     .insert(trades)
     .values(
@@ -178,8 +209,15 @@ let pending: Promise<void> | null = null;
  */
 export function ensureVendorLists(): Promise<void> {
   pending ??= (async () => {
+    /**
+     * The KINDS always. Four universal rows, required on every vendor, and no
+     * pack ships them -- so standing them down with the trades left a pack
+     * install unable to add a single vendor.
+     */
+    await seedVendorTypes();
+    // The TRADES only while no pack has supplied its own. See above.
     if (await packHasSeededLists()) return;
-    await seedVendorLists();
+    await seedTrades();
   })().catch((error: unknown) => {
     pending = null;
     throw error;
