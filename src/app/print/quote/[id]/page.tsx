@@ -374,6 +374,34 @@ export default async function PrintQuote({ params }: { params: Promise<{ id: str
         * `lib/quote/holdback-notice.ts` for why the rule is a tested function
         * rather than a condition here.
         */}
+      {/*
+        * What the price does not include, and what it assumes.
+        *
+        * Before Payment and after the lines, which is the order the reader
+        * needs: here is the work, here is what is not in it, here is what it
+        * assumed, then here is how to pay. Both columns existed from the first
+        * migration and nothing wrote them, so no quote this product printed
+        * had ever said what it excluded -- the commonest argument on a job,
+        * left to memory.
+        *
+        * `white-space: pre-line` so the owner's own line breaks survive: an
+        * exclusion list is written as lines, and reflowing it into a paragraph
+        * would make eight exclusions look like one sentence.
+        */}
+      {quote.exclusionsText ? (
+        <section className="terms">
+          <h3>Not included</h3>
+          <p className="lines">{quote.exclusionsText}</p>
+        </section>
+      ) : null}
+
+      {quote.assumptionsText ? (
+        <section className="terms">
+          <h3>This price assumes</h3>
+          <p className="lines">{quote.assumptionsText}</p>
+        </section>
+      ) : null}
+
       {holdbackNotice || company.paymentTermsText ? (
         <section className="terms">
           <h3>Payment</h3>
@@ -451,6 +479,8 @@ table.totals th { text-align: left; font-weight: 400; color: #5a5a72; padding: 1
 table.totals .grand th, table.totals .grand td { border-top: 1pt solid #16162b; font-weight: 600; font-size: 12pt; padding-top: 2mm; }
 .upgrades, .terms { margin-top: 6mm; break-inside: avoid; }
 .upgrades h3, .terms h3 { font-size: 11pt; margin-bottom: 1mm; }
+/* The owner's own line breaks, kept. An exclusion list is written as lines. */
+.terms .lines { white-space: pre-line; }
 .note { color: #5a5a72; font-size: 9pt; }
 .signature { display: flex; gap: 12mm; margin-top: 14mm; break-inside: avoid; }
 .signature > div { flex: 1; }

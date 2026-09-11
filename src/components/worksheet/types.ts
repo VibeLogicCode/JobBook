@@ -27,6 +27,19 @@ export interface WireLine {
   isIncluded: boolean;
 }
 
+/**
+ * One saved exclusion or assumption, offered as a suggestion.
+ *
+ * Text and not an id on the quote: tapping one APPENDS its sentence, so the
+ * quote keeps the words that were printed even if the library is reworded
+ * later. See `ClauseSheet.tsx`.
+ */
+export interface WireClause {
+  id: string;
+  kind: 'exclusion' | 'assumption';
+  clauseText: string;
+}
+
 export interface WireTax {
   label: string;
   registrationNumber: string | null;
@@ -49,6 +62,17 @@ export interface WireQuote {
   projectName: string;
   customerName: string;
   siteAddress: string | null;
+  /**
+    * What the price does NOT include, and what it assumes, as the owner typed
+    * them.
+    *
+    * On the quote rather than on the company, because they are facts about
+    * this job: "price assumes the existing panel has spare capacity" is true
+    * of one quote and not the next. The company-wide boilerplate is
+    * `quoteTermsText`, which prints separately and says something different.
+    */
+  exclusionsText: string | null;
+  assumptionsText: string | null;
   areaSqftMilli: string | null;
   washroomCount: number | null;
   kitchenCount: number | null;

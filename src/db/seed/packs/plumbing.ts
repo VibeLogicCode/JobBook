@@ -21,6 +21,7 @@ const R = 'f3000000-0000-4a00-9000-0000000000';
 const G = 'f4000000-0000-4a00-9000-0000000000';
 const S = 'f5000000-0000-4a00-9000-0000000000';
 const M = 'f6000000-0000-4a00-9000-0000000000';
+const X = 'f7000000-0000-4a00-9000-0000000000';
 
 const SERVICE_FLAGS = {
   holdback: false,
@@ -139,6 +140,24 @@ export const PLUMBING_PACK: TradePack = {
    *
    * NO PRICES.
    */
+  /**
+   * What a plumbing quote routinely leaves out, and what it assumes.
+   *
+   * "Pipe found corroded beyond the work area" is the one that pays for
+   * itself: a fifteen-minute job on a sixty-year-old line becomes a wall
+   * opened up and a decision nobody priced.
+   */
+  clauses: [
+    { id: `${X}01`, kind: 'exclusion', clauseText: 'Drywall patching or tile repair where access was needed', sortOrder: 10 },
+    { id: `${X}02`, kind: 'exclusion', clauseText: 'Replacing pipe found corroded beyond the work area', sortOrder: 20 },
+    { id: `${X}03`, kind: 'exclusion', clauseText: 'Fixtures unless listed above', sortOrder: 30 },
+    { id: `${X}04`, kind: 'exclusion', clauseText: 'Excavation, concrete cutting and reinstatement', sortOrder: 40 },
+    { id: `${X}05`, kind: 'exclusion', clauseText: 'Anything required to bring existing work up to current code', sortOrder: 50 },
+    { id: `${X}06`, kind: 'assumption', clauseText: 'Existing shut-off valves hold and are serviceable', sortOrder: 60 },
+    { id: `${X}07`, kind: 'assumption', clauseText: 'The existing drain and vent can be connected to as they are', sortOrder: 70 },
+    { id: `${X}08`, kind: 'assumption', clauseText: 'The work area is clear and reachable on the day', sortOrder: 80 },
+  ],
+
   scopeTemplates: [
     {
       id: `${M}01`,

@@ -21,6 +21,7 @@ const R = 'a3000000-0000-4a00-9000-0000000000';
 const G = 'a4000000-0000-4a00-9000-0000000000';
 const S = 'a5000000-0000-4a00-9000-0000000000';
 const M = 'a6000000-0000-4a00-9000-0000000000';
+const X = 'a7000000-0000-4a00-9000-0000000000';
 
 const SERVICE_FLAGS = {
   holdback: false,
@@ -144,6 +145,25 @@ export const HVAC_PACK: TradePack = {
    *
    * NO PRICES.
    */
+  /**
+   * What an HVAC quote routinely leaves out, and what it assumes.
+   *
+   * The ductwork assumption is the expensive one. A furnace swap priced
+   * against undersized returns is a comfort complaint that arrives after the
+   * invoice is paid, and stating it up front is how that conversation starts
+   * from the right place.
+   */
+  clauses: [
+    { id: `${X}01`, kind: 'exclusion', clauseText: 'Electrical work beyond connecting to the existing supply', sortOrder: 10 },
+    { id: `${X}02`, kind: 'exclusion', clauseText: 'Altering or upsizing the gas line', sortOrder: 20 },
+    { id: `${X}03`, kind: 'exclusion', clauseText: 'Duct cleaning', sortOrder: 30 },
+    { id: `${X}04`, kind: 'exclusion', clauseText: 'Drywall patching where access was needed', sortOrder: 40 },
+    { id: `${X}05`, kind: 'exclusion', clauseText: 'Chimney or liner work unless listed above', sortOrder: 50 },
+    { id: `${X}06`, kind: 'assumption', clauseText: 'Existing ductwork is serviceable and sized for the equipment quoted', sortOrder: 60 },
+    { id: `${X}07`, kind: 'assumption', clauseText: 'The gas supply and venting suit the equipment quoted', sortOrder: 70 },
+    { id: `${X}08`, kind: 'assumption', clauseText: 'Existing thermostat wiring can be reused', sortOrder: 80 },
+  ],
+
   scopeTemplates: [
     {
       id: `${M}01`,

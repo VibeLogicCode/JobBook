@@ -1,8 +1,8 @@
 import type { Metadata } from 'next';
-import { eq } from 'drizzle-orm';
+import { and, asc, eq } from 'drizzle-orm';
 import { notFound } from 'next/navigation';
 import { db } from '@/db/client';
-import { projects, quotes } from '@/db/schema';
+import { projects, quoteClauses, quotes } from '@/db/schema';
 import { AddReminderForm } from '@/components/reminders/AddReminderForm';
 import { Acceptance } from '@/app/quotes/[id]/Acceptance';
 import { loadRelations } from '@/app/quotes/[id]/related';
@@ -40,12 +40,28 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
   // stacking round trips in front of the first paint. `flagsForQuote` joins
   // through to the project type rather than waiting on `loadQuote` for the
   // project id, which is the only reason it exists as its own reader.
-  const [data, relations, siblings, owner, flags] = await Promise.all([
+  const [data, relations, siblings, owner, flags, clauses] = await Promise.all([
     loadQuote(id),
     loadRelations(id),
     loadAcceptanceSiblings(id),
     loadOwningProject(id),
     flagsForQuote(db, id),
+    /**
+     * The saved exclusions and assumptions, as suggestions for the sheet.
+     *
+     * Active and non-void only: a retired one is a sentence this company has
+     * stopped putting on quotes, and the quotes that already carry its words
+     * go on carrying them -- the text was copied onto the quote, never linked.
+     */
+    db
+      .select({
+        id: quoteClauses.id,
+        kind: quoteClauses.kind,
+        clauseText: quoteClauses.clauseText,
+      })
+      .from(quoteClauses)
+      .where(and(eq(quoteClauses.isActive, true), eq(quoteClauses.recordStatus, 'active')))
+      .orderBy(asc(quoteClauses.sortOrder), asc(quoteClauses.clauseText)),
   ]);
   if (!data) notFound();
 
@@ -77,6 +93,7 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
         taxes={data.taxes}
         rateItems={data.rateItems}
         relations={relations}
+        clauses={clauses}
         scopeInputs={flags.scopeInputs}
       />
       {/* Its own band rather than a slot in `Acceptance`, which renders

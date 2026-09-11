@@ -261,6 +261,34 @@ export interface PackScopeTemplate {
   items: readonly PackScopeTemplateItem[];
 }
 
+/**
+ * One saved exclusion or assumption.
+ *
+ * ---------------------------------------------------------------------------
+ * THE MOST TRADE-SPECIFIC TEXT A CONTRACTOR OWNS
+ * ---------------------------------------------------------------------------
+ *
+ * "Patching and painting where walls were opened" is an electrician's
+ * sentence. "Replacement of pipe found corroded beyond the work area" is a
+ * plumber's. Every trade has six or seven of these and every one of them was
+ * learned by losing the argument once.
+ *
+ * They are worth shipping for the same reason the cost codes are: not because
+ * this software knows the trade, but because a blank list is a list nobody
+ * fills in, and an unstated exclusion is the commonest way a job loses money
+ * after the price was agreed.
+ *
+ * Written as SUGGESTIONS. The quote copies the words when one is tapped, so
+ * every one of these can be reworded, retired or voided without touching a
+ * document already printed.
+ */
+export interface PackClause {
+  id: string;
+  kind: 'exclusion' | 'assumption';
+  clauseText: string;
+  sortOrder: number;
+}
+
 export interface TradePack {
   trade: Trade;
   projectTypes: readonly PackProjectType[];
@@ -271,4 +299,6 @@ export interface TradePack {
   trades: readonly PackNamedRow[];
   /** The jobs this trade quotes often, as line lists. May be empty. */
   scopeTemplates: readonly PackScopeTemplate[];
+  /** What this trade's quotes routinely exclude and assume. */
+  clauses: readonly PackClause[];
 }

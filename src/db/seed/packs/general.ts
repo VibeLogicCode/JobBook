@@ -40,6 +40,8 @@ import type { TradePack } from '@/db/seed/packs/types';
 const C = 'c9000000-0000-4a00-9000-0000000000';
 const R = 'ca000000-0000-4a00-9000-0000000000';
 const M = 'cb000000-0000-4a00-9000-0000000000';
+const X = 'cc000000-0000-4a00-9000-0000000000';
+const XN = 'cd000000-0000-4a00-9000-0000000000';
 
 /**
  * Plain-language divisions with our own numbering.
@@ -177,6 +179,26 @@ export const GENERAL_PACK: TradePack = {
    *
    * NO PRICES.
    */
+  /**
+   * What a renovation quote routinely leaves out, and what it assumes.
+   *
+   * Concealed conditions and the allowance sentence are the two that matter
+   * most here: a renovation is the trade where opening a wall changes the
+   * price, and an allowance the customer thought was a fixed price is the
+   * other half of the same argument.
+   */
+  clauses: [
+    { id: `${X}01`, kind: 'exclusion', clauseText: 'Permit, development and inspection fees unless listed above', sortOrder: 10 },
+    { id: `${X}02`, kind: 'exclusion', clauseText: 'Remedying anything concealed and found once opening up', sortOrder: 20 },
+    { id: `${X}03`, kind: 'exclusion', clauseText: 'Asbestos, mould or other hazardous material abatement', sortOrder: 30 },
+    { id: `${X}04`, kind: 'exclusion', clauseText: 'Landscaping and restoration outside the work area', sortOrder: 40 },
+    { id: `${X}05`, kind: 'exclusion', clauseText: 'Appliances, furniture and window coverings', sortOrder: 50 },
+    { id: `${X}06`, kind: 'assumption', clauseText: 'Work is done in normal hours, Monday to Friday', sortOrder: 60 },
+    { id: `${X}07`, kind: 'assumption', clauseText: 'Water, power and a washroom are available on site', sortOrder: 70 },
+    { id: `${X}08`, kind: 'assumption', clauseText: 'The structure is sound and needs no remedial work', sortOrder: 80 },
+    { id: `${X}09`, kind: 'assumption', clauseText: 'Allowances are estimates, reconciled against actual cost', sortOrder: 90 },
+  ],
+
   scopeTemplates: [
     {
       id: `${M}01`,
@@ -263,6 +285,21 @@ export const NONE_PACK: TradePack = {
     sortOrder: group.sortOrder,
   })),
   trades: [],
+
+  /**
+   * The trade-neutral half, and this pack gets it too.
+   *
+   * Somebody who picked "something else" is exactly the person with nothing
+   * to start from, and every one of these is true of any trade. It costs five
+   * rows and it is the difference between a blank screen and a starting point.
+   */
+  clauses: [
+    { id: `${XN}01`, kind: 'exclusion', clauseText: 'Permit and inspection fees unless listed above', sortOrder: 10 },
+    { id: `${XN}02`, kind: 'exclusion', clauseText: 'Remedying anything concealed and found once opening up', sortOrder: 20 },
+    { id: `${XN}03`, kind: 'exclusion', clauseText: 'Making good finishes where access was needed', sortOrder: 30 },
+    { id: `${XN}04`, kind: 'assumption', clauseText: 'Work is done in normal hours, Monday to Friday', sortOrder: 40 },
+    { id: `${XN}05`, kind: 'assumption', clauseText: 'The work area is clear and reachable on the day', sortOrder: 50 },
+  ],
   /**
    * None, necessarily: a template names rate items and this pack ships none.
    * A template whose lines pointed at nothing would be an empty quote offered

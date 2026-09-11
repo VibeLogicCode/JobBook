@@ -28,6 +28,7 @@ const R = 'e3000000-0000-4a00-9000-0000000000';
 const G = 'e4000000-0000-4a00-9000-0000000000';
 const S = 'e5000000-0000-4a00-9000-0000000000';
 const M = 'e6000000-0000-4a00-9000-0000000000';
+const X = 'e7000000-0000-4a00-9000-0000000000';
 
 export const ELECTRICAL_PACK: TradePack = {
   trade: 'electrical',
@@ -175,6 +176,25 @@ export const ELECTRICAL_PACK: TradePack = {
    * NO PRICES, like everything else in this file. The quote arrives as a
    * worklist of prices to fill in, and cannot be sent until they are filled.
    */
+  /**
+   * What an electrical quote routinely leaves out, and what it assumes.
+   *
+   * The patching one is first because it is the argument: cable goes in walls,
+   * walls get opened, and whether the electrician closes them again is the
+   * single most common misunderstanding on this trade's small jobs.
+   */
+  clauses: [
+    { id: `${X}01`, kind: 'exclusion', clauseText: 'Patching, sanding or painting where walls or ceilings were opened', sortOrder: 10 },
+    { id: `${X}02`, kind: 'exclusion', clauseText: 'Charges from the local distributor for a service connection or upgrade', sortOrder: 20 },
+    { id: `${X}03`, kind: 'exclusion', clauseText: 'Replacing aluminium wiring or knob-and-tube found behind finishes', sortOrder: 30 },
+    { id: `${X}04`, kind: 'exclusion', clauseText: 'Fire alarm, data and other low-voltage work', sortOrder: 40 },
+    { id: `${X}05`, kind: 'exclusion', clauseText: 'Removing or disposing of existing fixtures unless listed above', sortOrder: 50 },
+    { id: `${X}06`, kind: 'assumption', clauseText: 'The existing panel has spare capacity for the circuits quoted', sortOrder: 60 },
+    { id: `${X}07`, kind: 'assumption', clauseText: 'Walls and ceilings are open, or reachable without removing finishes', sortOrder: 70 },
+    { id: `${X}08`, kind: 'assumption', clauseText: 'Existing wiring is copper and in serviceable condition', sortOrder: 80 },
+    { id: `${X}09`, kind: 'assumption', clauseText: 'Work is done in normal hours, with the power off as needed', sortOrder: 90 },
+  ],
+
   scopeTemplates: [
     {
       id: `${M}01`,

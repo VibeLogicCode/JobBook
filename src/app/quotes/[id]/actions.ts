@@ -209,6 +209,85 @@ export async function addLine(input: z.input<typeof addSchema>): Promise<EditRes
   }
 }
 
+/**
+ * What the price excludes, and what it assumes.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY THESE ARE WORTH A FORM OF THEIR OWN
+ * ---------------------------------------------------------------------------
+ *
+ * The columns have existed since the first migration and nothing ever wrote
+ * them, so no quote this product has printed has ever said what it did not
+ * include. That is the single commonest argument on a job -- "I assumed that
+ * was in the price" -- and it is settled by one paragraph written before the
+ * work starts rather than by anybody's memory afterwards.
+ *
+ * FOUR THOUSAND characters, matching `quoteTermsText`: long enough for a real
+ * exclusion list, bounded so a paste of an entire contract cannot become a
+ * document nobody can print.
+ *
+ * Blank stores NULL rather than an empty string, so "nothing excluded" and
+ * "never asked" read the same to the print document, which prints no heading
+ * for either.
+ */
+const clauseSchema = z.object({
+  quoteId: z.uuid(),
+  exclusionsText: z.string().max(4000, 'is too long').transform((value) => value.trim() || null),
+  assumptionsText: z.string().max(4000, 'is too long').transform((value) => value.trim() || null),
+});
+
+export async function saveQuoteClauses(
+  input: z.input<typeof clauseSchema>,
+): Promise<EditResult> {
+  const parsed = clauseSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: 'That text was too long to save. Nothing was written.' };
+  }
+  const { quoteId, exclusionsText, assumptionsText } = parsed.data;
+
+  try {
+    const allowed = await guard('quote:write');
+    if (!allowed.ok) return { ok: false, error: allowed.error };
+
+    /**
+     * A DRAFT only, and the refusal is server-side.
+     *
+     * These print on the customer's copy. Editing them on a quote already sent
+     * would change the terms of a document somebody is reading, with nothing
+     * on either copy to say it had changed -- the same reason the line editor
+     * refuses a sent quote. A quote out with a customer is revised instead,
+     * and `reviseQuote` carries both fields onto the revision.
+     */
+    const [subject] = await db
+      .select({ status: quotes.status, recordStatus: quotes.recordStatus })
+      .from(quotes)
+      .where(eq(quotes.id, quoteId));
+    if (!subject) return { ok: false, error: 'that quote no longer exists' };
+    if (subject.recordStatus === 'void') {
+      return { ok: false, error: 'that quote is void, so nothing on it can be changed' };
+    }
+    if (subject.status !== 'draft') {
+      return {
+        ok: false,
+        error:
+          'This quote has already gone out, and these paragraphs print on the copy the customer ' +
+          'is holding. Revise it instead: the revision starts as a draft with both of them ' +
+          'carried over, and the customer gets a document whose version says it changed.',
+      };
+    }
+
+    await db
+      .update(quotes)
+      .set({ exclusionsText, assumptionsText })
+      .where(eq(quotes.id, quoteId));
+
+    revalidatePath(`/quotes/${quoteId}`);
+    return { ok: true };
+  } catch {
+    return { ok: false, error: 'That change could not be saved. Nothing was written.' };
+  }
+}
+
 const statusSchema = z.object({
   quoteId: z.string().uuid(),
   status: z.enum(['sent', 'accepted', 'declined']),

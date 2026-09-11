@@ -1,8 +1,8 @@
 import { inArray, sql } from 'drizzle-orm';
 import { db } from '@/db/client';
 import {
-  costCodes, lineGroups, projectTypes, rateItems, scopeTemplateItems, scopeTemplates, settings,
-  trades,
+  costCodes, lineGroups, projectTypes, quoteClauses, rateItems, scopeTemplateItems, scopeTemplates,
+  settings, trades,
 } from '@/db/schema';
 import { PACK_LOADED_KEY } from '@/db/seed/packs/marker';
 import { DEFAULT_PROJECT_TYPES } from '@/db/seed/project-lists';
@@ -355,6 +355,26 @@ export async function loadPack(
         id: group.id,
         name: group.name,
         sortOrder: group.sortOrder,
+        isActive: true,
+      })))
+      .onConflictDoNothing();
+  }
+
+  /**
+   * The saved exclusions and assumptions.
+   *
+   * Not posture-filtered and not tied to a project type: "permit fees are not
+   * included" is as true of a service call as of a contract, and the quote
+   * copies the words rather than pointing at the row.
+   */
+  if (pack.clauses.length > 0) {
+    await executor
+      .insert(quoteClauses)
+      .values(pack.clauses.map((clause) => ({
+        id: clause.id,
+        kind: clause.kind,
+        clauseText: clause.clauseText,
+        sortOrder: clause.sortOrder,
         isActive: true,
       })))
       .onConflictDoNothing();

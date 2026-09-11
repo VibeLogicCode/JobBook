@@ -112,6 +112,18 @@ export const SETTINGS_GROUPS: NavGroup[] = [
         summary: 'What kind of subcontractor somebody is. Retiring one never blanks the sub who has it.',
       },
       {
+        /**
+         * With the lists rather than under The company, because it is content
+         * the owner maintains and taps from, exactly like line groups -- and
+         * because it is per DEPLOYMENT, not per company: `quote_clauses` has
+         * no company column, and an exclusion about permit fees is not a fact
+         * about which corporation issued the paper.
+         */
+        href: '/settings/clauses',
+        label: 'Not included, and assumed',
+        summary: 'The sentences you put on nearly every quote about what the price does not cover.',
+      },
+      {
         href: '/settings/line-groups',
         label: 'Line groups',
         summary: 'The section heading a quote prints. Retiring one never touches what already printed.',

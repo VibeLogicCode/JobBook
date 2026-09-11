@@ -123,6 +123,8 @@ export const loadQuote = cache(async (quoteId: string): Promise<{
     holdbackPctTenThou: row.quote.holdbackPctTenThou?.toString() ?? null,
       customerName: row.customerName,
       siteAddress: site,
+      exclusionsText: row.quote.exclusionsText,
+      assumptionsText: row.quote.assumptionsText,
       areaSqftMilli: row.quote.areaSqftMilli?.toString() ?? null,
       washroomCount: row.quote.washroomCount,
       kitchenCount: row.quote.kitchenCount,

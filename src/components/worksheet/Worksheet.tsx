@@ -23,10 +23,12 @@ import {
   type WorksheetColumn,
 } from '@/components/worksheet/keyboard';
 import { MarginGauge } from '@/components/worksheet/MarginGauge';
+import { ClauseSheet } from '@/components/worksheet/ClauseSheet';
 import { RegenerateDialog, ScopeSheet } from '@/components/worksheet/ScopeSheet';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Sheet } from '@/components/ui/Sheet';
 import type {
+  WireClause,
   WireLine,
   WireQuote,
   WireQuoteRef,
@@ -57,6 +59,7 @@ export function Worksheet({
   taxes,
   rateItems,
   relations,
+  clauses = [],
   scopeInputs = true,
 }: {
   quote: WireQuote;
@@ -64,6 +67,8 @@ export function Worksheet({
   taxes: WireTax[];
   rateItems: WireRateItem[];
   relations: WireRelations;
+  /** Saved exclusions and assumptions, offered in the sheet as suggestions. */
+  clauses?: WireClause[];
   /**
    * Whether this job's TYPE asks for measurements at all.
    *
@@ -80,6 +85,7 @@ export function Worksheet({
   const [editing, setEditing] = useState<WireLine | null>(null);
   const [picking, setPicking] = useState(false);
   const [measuring, setMeasuring] = useState(false);
+  const [clausing, setClausing] = useState(false);
   const [confirmingRegenerate, setConfirmingRegenerate] = useState(false);
   const [raising, setRaising] = useState(false);
   /** The line a trash press wants to void, held here rather than in the row
@@ -359,6 +365,29 @@ export function Worksheet({
           </Button>
         ) : null}
 
+        {/*
+          * What the price does not include.
+          *
+          * In this band rather than behind a menu, and labelled with the count
+          * when there is one, because an empty exclusion list is the most
+          * expensive blank field on the document and nothing was previously
+          * pointing at it -- the columns existed for months and no screen
+          * wrote them. A control that says "none yet" is what makes somebody
+          * press it once.
+          */}
+        {editable ? (
+          <Button
+            variant="secondary"
+            className="hover:bg-surface-3"
+            disabled={pending}
+            onClick={() => setClausing(true)}
+          >
+            {quote.exclusionsText || quote.assumptionsText
+              ? 'Not included, and assumed'
+              : 'Not included — none yet'}
+          </Button>
+        ) : null}
+
         <span className="t-small text-muted">
           valid to <span className="num">{quote.validUntil}</span>
         </span>
@@ -497,6 +526,16 @@ export function Worksheet({
             run(() => addLine({ quoteId: quote.id, rateItemId, qty: '1' }));
             setPicking(false);
           }}
+        />
+      ) : null}
+
+      {clausing ? (
+        <ClauseSheet
+          quote={quote}
+          clauses={clauses}
+          pending={pending}
+          onClose={() => setClausing(false)}
+          onCommit={run}
         />
       ) : null}
 
