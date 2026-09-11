@@ -5,7 +5,7 @@ import {
   companies, costCodes, customers, projectTypes, projects, quotes, rateItems,
   scopeTemplateItems, scopeTemplates, taxRates,
 } from '@/db/schema';
-import { PROJECT_TYPE_IDS } from '@/db/seed/project-lists';
+import { DEFAULT_PROJECT_TYPES, PROJECT_TYPE_IDS } from '@/db/seed/project-lists';
 import { FIRST_COMPANY_ID } from '@/lib/company/ids';
 import { createBlankQuote, createQuoteFromTemplate } from '@/lib/quote/repository';
 import {
@@ -37,12 +37,37 @@ let serviceProjectId: string;
 let contractProjectId: string;
 
 beforeEach(async () => {
+  /**
+   * `project_types` IS truncated and the nine restored, which it did not used
+   * to be.
+   *
+   * It was left out so the last test in this file could assert the nine
+   * migration-0018 rows still carry today's behaviour -- but leaving them
+   * meant leaving whatever the PREVIOUS test file left, and
+   * `pack-seeding.test.ts` runs before this one and ends with a trade pack
+   * loaded. Every pack ships a type called `Service call`, and
+   * `project_types` has a unique index on `lower(name)`, so this file's own
+   * fixture collided with it: 24 failures whose message named a constraint,
+   * in a file that had not changed.
+   *
+   * Truncating and re-inserting the nine is what `pack-seeding.test.ts`
+   * already does for the same reason, and it gives the last test here exactly
+   * what it was reading before -- nine rows at their column defaults.
+   */
   await db.execute(sql`
     truncate table audit_log, stage_history, quote_taxes, quote_lines, quotes,
       scope_template_items, scope_templates, rate_items, cost_codes, tax_rates,
-      projects, customers, organization, companies, document_sequences
+      projects, customers, organization, companies, document_sequences,
+      project_types
     restart identity cascade
   `);
+
+  await db.insert(projectTypes).values(DEFAULT_PROJECT_TYPES.map((type) => ({
+    id: type.id,
+    name: type.name,
+    sortOrder: type.sortOrder,
+    isActive: true,
+  })));
 
   await seedDeployment({
     legalName: 'Northgate Electric Ltd.',

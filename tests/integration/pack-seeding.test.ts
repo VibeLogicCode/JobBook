@@ -10,7 +10,7 @@ import {
   DEFAULT_TRADES, DEFAULT_VENDOR_TYPES, ensureVendorLists, seedVendorLists, seedVendorTypes,
 } from '@/db/seed/vendor-lists';
 import { ensureLineGroups } from '@/db/seed/line-groups';
-import { loadPack, retiredByPack } from '@/db/seed/packs/load';
+import { addStarterPack, loadPack, retiredByPack } from '@/db/seed/packs/load';
 import { loadedPack, packHasSeededLists } from '@/db/seed/packs/marker';
 import { PACKS } from '@/db/seed/packs/registry';
 import { TRADES } from '@/db/seed/packs/types';
@@ -312,6 +312,163 @@ describe('the posture decides what paperwork a pack row arrives with', () => {
  * what a job CONSISTS of -- that a water heater swap is the tank, the labour
  * and the permit, and that forgetting the permit is how the job loses money.
  */
+/**
+ * Adding a SECOND trade's lists to a deployment that is already running.
+ *
+ * ---------------------------------------------------------------------------
+ * WHAT THESE ARE ACTUALLY ABOUT
+ * ---------------------------------------------------------------------------
+ *
+ * One thing: what `addStarterPack` refuses to touch. The trade question was
+ * asked once, by a wizard that closes itself for good, so a plumber who picked
+ * "start empty" had no route to the plumbing lists ever again -- and the
+ * reason it was left out is still true of half of what a pack load does.
+ * Loading a pack over a rate book somebody has priced from for a year must
+ * never retire his job types or rewrite their paperwork rules.
+ *
+ * So every assertion below is either "the rows arrived" or "the thing that was
+ * already here is exactly as it was".
+ */
+describe('adding a trade after setup', () => {
+  it('brings the lists without retiring anything', async () => {
+    /**
+     * The nine migration-0018 types stay ACTIVE, unlike at first run.
+     *
+     * By now jobs may be filed under them, and retiring one stops new work
+     * being booked to a type the owner is using. At setup the same call does
+     * retire them, because there nothing is filed under anything yet.
+     */
+    await addStarterPack(db, 'electrical', 'both');
+
+    const builder = await db
+      .select({ id: projectTypes.id, isActive: projectTypes.isActive })
+      .from(projectTypes)
+      .where(inArray(projectTypes.id, DEFAULT_PROJECT_TYPES.map((type) => type.id)));
+    expect(builder).toHaveLength(DEFAULT_PROJECT_TYPES.length);
+    for (const row of builder) expect(row.isActive, row.id).toBe(true);
+
+    // And the pack's own rows did arrive.
+    const codes = (await db.select().from(costCodes)).map((row) => row.code);
+    expect(codes).toContain('E-10');
+    const items = (await db.select().from(rateItems)).map((row) => row.code);
+    expect(items).toContain('LAB-EL');
+    const names = (await db.select().from(projectTypes)).map((row) => row.name);
+    expect(names).toContain('Panel upgrade');
+  });
+
+  it('leaves the paperwork rules of an existing job type alone', async () => {
+    /**
+     * The destructive half, and the reason this is a separate function.
+     *
+     * The general and `none` packs name the nine shared ids, so the flag
+     * UPDATE at first run writes onto rows that already exist -- correct
+     * there, because they are migration seed rows. Here they are the owner's,
+     * possibly tuned by hand on the job-types screen, and a pack added later
+     * must not reach them. A renovator who turned holdback off on `Bathroom`
+     * would otherwise find it back on because he added a trade.
+     */
+    await db
+      .update(projectTypes)
+      .set({ holdback: false, progressInvoicing: false })
+      .where(eq(projectTypes.id, PROJECT_TYPE_IDS.bathroom));
+
+    await addStarterPack(db, 'general', 'both');
+
+    const [row] = await db
+      .select()
+      .from(projectTypes)
+      .where(eq(projectTypes.id, PROJECT_TYPE_IDS.bathroom));
+    expect(row!.holdback).toBe(false);
+    expect(row!.progressInvoicing).toBe(false);
+  });
+
+  it('still sets the posture flags on a type it creates', async () => {
+    // A row this call inserts is new, so it takes its defaults from what kind
+    // of work the company does -- exactly as at first run.
+    await addStarterPack(db, 'electrical', 'service');
+
+    const [row] = await db
+      .select()
+      .from(projectTypes)
+      .where(eq(projectTypes.name, 'Panel upgrade'));
+    // `Panel upgrade` is tagged `both`, so under a service-only company it
+    // arrives with a service company's paperwork: none of it.
+    expect(row!.holdback).toBe(false);
+    expect(row!.scopeInputs).toBe(false);
+  });
+
+  it('does not take over a rate item the owner already had under that code', async () => {
+    await db.insert(rateItems).values({
+      code: 'LAB-EL',
+      description: 'My own electrician rate',
+      unitLabel: 'hour',
+      calcMode: 'qty',
+      sellRateTenThou: 1_250_000n,
+      costRateTenThou: 800_000n,
+      isActive: true,
+    });
+
+    await addStarterPack(db, 'electrical', 'both');
+
+    const rows = await db.select().from(rateItems).where(eq(rateItems.code, 'LAB-EL'));
+    // One row, still the owner's, still priced. A pack must never take a row
+    // over -- and never overwrite a price.
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.description).toBe('My own electrician rate');
+    expect(rows[0]!.sellRateTenThou).toBe(1_250_000n);
+  });
+
+  it('adds nothing back that the owner has since retired', async () => {
+    await addStarterPack(db, 'plumbing', 'both');
+    const [code] = await db.select().from(costCodes).where(eq(costCodes.code, 'P-10'));
+    await db.update(costCodes).set({ isActive: false }).where(eq(costCodes.id, code!.id));
+
+    await addStarterPack(db, 'plumbing', 'both');
+
+    const [again] = await db.select().from(costCodes).where(eq(costCodes.id, code!.id));
+    expect(again!.isActive).toBe(false);
+  });
+
+  it('is safe to press twice', async () => {
+    await addStarterPack(db, 'hvac', 'both');
+    const first = {
+      types: (await db.select().from(projectTypes)).length,
+      codes: (await db.select().from(costCodes)).length,
+      items: (await db.select().from(rateItems)).length,
+      templates: (await db.select().from(scopeTemplateItems)).length,
+    };
+
+    await addStarterPack(db, 'hvac', 'both');
+
+    expect((await db.select().from(projectTypes)).length).toBe(first.types);
+    expect((await db.select().from(costCodes)).length).toBe(first.codes);
+    expect((await db.select().from(rateItems)).length).toBe(first.items);
+    expect((await db.select().from(scopeTemplateItems)).length).toBe(first.templates);
+  });
+
+  it('records the pack, so the lazy seeds stand down for it too', async () => {
+    await addStarterPack(db, 'hvac', 'both');
+    expect(await loadedPack()).toBe('hvac');
+  });
+
+  it('adds a second trade alongside the first', async () => {
+    // The real case: an electrician who has taken on HVAC work. Both lists,
+    // both sets of cost codes, nothing lost from either.
+    await db.transaction((tx) => loadPack(tx, 'electrical', 'both'));
+    await addStarterPack(db, 'hvac', 'both');
+
+    const codes = (await db.select().from(costCodes)).map((row) => row.code);
+    expect(codes).toContain('E-10');
+    expect(codes).toContain('H-10');
+
+    const names = (await db.select().from(projectTypes))
+      .filter((row) => row.isActive)
+      .map((row) => row.name);
+    expect(names).toContain('Panel upgrade');
+    expect(names).toContain('Furnace replacement');
+  });
+});
+
 describe('the starter scope templates', () => {
   it('ships three for each of the four trades and none for the plain start', async () => {
     for (const trade of TRADES) {

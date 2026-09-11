@@ -104,9 +104,73 @@ export async function loadPack(
   trade: Trade,
   posture: WorkPosture = 'both',
 ): Promise<void> {
+  return writePack(executor, trade, posture, { firstRun: true });
+}
+
+/**
+ * A SECOND trade's lists, on a deployment that is already running.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY THIS IS A DIFFERENT FUNCTION AND NOT A FLAG AT THE CALL SITE
+ * ---------------------------------------------------------------------------
+ *
+ * The owner asked the question that found the gap: *"can i not change trade
+ * after initialization?"* He could not, because the wizard was the only
+ * caller and it closes itself for good -- so a plumber who picked "start
+ * empty" in his first five minutes had no route to the plumbing lists ever
+ * again.
+ *
+ * The reason it was left out is still true of ONE HALF of what a pack load
+ * does. Loading a pack over a rate book somebody has priced from for a year
+ * must never retire his job types or rewrite their paperwork rules. But every
+ * other row a pack brings is an `onConflictDoNothing` insert: it cannot
+ * overwrite a thing, and a contractor who has since added a second trade is
+ * exactly the person who wants those rows.
+ *
+ * So the destructive half is named, and only the wizard asks for it:
+ *
+ *   - `loadPack` -- first run. Retires the nine builder job types the pack
+ *     does not name, and writes posture flags onto the shared ones, because on
+ *     a fresh install those are migration seed rows rather than anybody's
+ *     data.
+ *   - `addStarterPack` -- afterwards. Adds; never retires, never touches the
+ *     flags on a row that already existed.
+ *
+ * Two named entry points rather than a boolean at the call site, so a reader
+ * of either one cannot mistake which behaviour they are getting.
+ */
+export async function addStarterPack(
+  executor: Executor,
+  trade: Trade,
+  posture: WorkPosture = 'both',
+): Promise<void> {
+  return writePack(executor, trade, posture, { firstRun: false });
+}
+
+async function writePack(
+  executor: Executor,
+  trade: Trade,
+  posture: WorkPosture,
+  options: { firstRun: boolean },
+): Promise<void> {
   const pack: TradePack = PACKS[trade];
 
   if (pack.projectTypes.length > 0) {
+    /**
+     * Which of this pack's job types are already here, read BEFORE the insert.
+     *
+     * It decides whose flags may be written below. On a first run the nine
+     * migration-0018 rows are seed data and their flags are ours to set; on a
+     * deployment that has been running they are the owner's, possibly tuned by
+     * hand on the job-types screen, and a pack added later must not touch
+     * them. Read first because after the insert there is no way to tell a row
+     * this call created from one that was already there.
+     */
+    const before = await executor
+      .select({ id: projectTypes.id })
+      .from(projectTypes)
+      .where(inArray(projectTypes.id, pack.projectTypes.map((type) => type.id)));
+    const existed = new Set(before.map((row) => row.id));
     await executor
       .insert(projectTypes)
       .values(pack.projectTypes.map((type) => ({
@@ -141,6 +205,9 @@ export async function loadPack(
      */
     const groups = new Map<string, { posture: WorkPosture; flags: ReturnType<typeof packRowFlags>; ids: string[] }>();
     for (const type of pack.projectTypes) {
+      // A row that already existed keeps its flags unless this is the first
+      // run. See the read-back above.
+      if (existed.has(type.id) && !options.firstRun) continue;
       const flags = packRowFlags(type, posture);
       const key = `${type.posture}:${FLAG_KEYS.map((flag) => (flags[flag] ? '1' : '0')).join('')}`;
       const group = groups.get(key);
@@ -163,7 +230,13 @@ export async function loadPack(
    * never touched by loading a pack, even one whose name a pack also uses.
    * Retiring somebody's own list because they picked a trade would be the
    * worst kind of surprise.
+   *
+   * FIRST RUN ONLY. Afterwards those nine rows are the owner's list -- jobs
+   * may be filed under them, and `addStarterPack` retiring them would stop new
+   * work being booked to types he is using. He can retire any of them himself
+   * under Lists, Job types, one at a time, seeing what he is doing.
    */
+  if (options.firstRun) {
   const keep = new Set<string>(pack.projectTypes.map((type) => type.id));
   const seededIds = DEFAULT_PROJECT_TYPES.map((type) => type.id);
   const other = DEFAULT_PROJECT_TYPES.find((type) => type.name === 'Other');
@@ -175,6 +248,7 @@ export async function loadPack(
       .update(projectTypes)
       .set({ isActive: false })
       .where(inArray(projectTypes.id, toRetire));
+  }
   }
 
   /**
@@ -398,6 +472,12 @@ export async function loadPack(
    * If anything above failed, the transaction rolls back and this was never
    * written -- so the lazy seeds go on behaving as they always did rather than
    * standing down for a pack that is not there.
+   *
+   * Overwritten by a later add, which means it names the pack MOST RECENTLY
+   * loaded rather than every pack ever loaded. That is what its one consumer
+   * needs -- `packHasSeededLists` only asks whether ANY pack has supplied the
+   * lists -- and a screen that showed a list of loaded packs would be telling
+   * the owner something he cannot act on.
    */
   await executor
     .insert(settings)

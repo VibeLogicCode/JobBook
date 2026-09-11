@@ -113,6 +113,16 @@ export const SETTINGS_GROUPS: NavGroup[] = [
       },
       {
         /**
+         * First in Lists, because it is how the other lists get populated --
+         * and because it answers a question the wizard leaves an owner with:
+         * the trade is asked once, by a screen that then closes for good.
+         */
+        href: '/settings/starter-lists',
+        label: 'Starter lists',
+        summary: 'Add another trade’s job types, cost codes, rate book and templates. Adds only.',
+      },
+      {
+        /**
          * With the lists rather than under The company, because it is content
          * the owner maintains and taps from, exactly like line groups -- and
          * because it is per DEPLOYMENT, not per company: `quote_clauses` has
