@@ -173,7 +173,13 @@ function ClauseField({
                 key={row.id}
                 type="button"
                 onClick={() => onPick(row.clauseText)}
-                className="rounded border border-line bg-surface-2 px-2 py-1 text-left t-small hover:bg-surface-3"
+                /**
+                 * `min-h-11`: the label above these says "Tap to add", so they
+                 * are explicitly a touch affordance, and at `py-1` they were
+                 * about 28px in a wrapped row with 6px between them -- small
+                 * enough that the neighbouring sentence is the likely hit.
+                 */
+                className="min-h-11 rounded-control border border-line bg-surface-2 px-3 py-2 text-left t-small transition-colors duration-[120ms] hover:bg-surface-3"
               >
                 {row.clauseText}
               </button>

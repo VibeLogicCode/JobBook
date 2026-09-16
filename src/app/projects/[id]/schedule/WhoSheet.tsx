@@ -581,7 +581,10 @@ function EditView({
           type="button"
           onClick={onRemove}
           disabled={disabled}
-          className="underline text-negative disabled:opacity-60"
+          // 44px, because it takes a person off a scheduled task and it sat
+          // inside a `t-small` paragraph at about 18px -- the smallest target
+          // in the product attached to the most destructive verb on the sheet.
+          className="inline-flex min-h-11 items-center underline text-negative disabled:opacity-60"
         >
           Take them off this task…
         </button>

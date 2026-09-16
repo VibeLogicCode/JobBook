@@ -215,12 +215,18 @@ export default async function QuotesPage({
           </thead>
           <tbody role="rowgroup">
             {rows.map((row) => (
-              <tr role="row" key={row.id}>
+              /* `row-target` + `row-link`: the whole row opens the quote. See
+                 the rules in globals.css for why it is a stretched link and
+                 not a click handler. */
+              <tr role="row" key={row.id} className="row-target">
                 <td role="cell" data-label="Project">
                   {/* Wrapped so the change-order marker sits beside the name
                       in the table and inside the card, at both widths. */}
                   <span className="flex flex-wrap items-center gap-x-2">
-                    <Link href={`/quotes/${row.id}`} className="text-accent-text hover:underline">
+                    <Link
+                      href={`/quotes/${row.id}`}
+                      className="row-link text-accent-text hover:underline"
+                    >
                       {row.projectName}
                     </Link>
                     {row.kind === 'change_order' ? (

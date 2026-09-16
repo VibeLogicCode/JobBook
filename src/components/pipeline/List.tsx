@@ -105,7 +105,7 @@ export function PipelineList({
               const starts = spellStarts(card, today);
 
               return (
-                <tr role="row" key={card.id}>
+                <tr role="row" key={card.id} className="row-target">
                   {/* The headline cell on a phone, which is why the town rides
                       with it: a contractor names a job by where it is, and the
                       board learned that before this table did. The noun beside
@@ -114,7 +114,7 @@ export function PipelineList({
                   <td role="cell" data-label="Work">
                     <Link
                       href={`/projects/${card.id}`}
-                      className="break-words text-accent-text hover:underline"
+                      className="row-link break-words text-accent-text hover:underline"
                     >
                       {card.name}
                     </Link>

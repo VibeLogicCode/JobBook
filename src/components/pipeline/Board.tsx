@@ -155,7 +155,11 @@ export function Board({ cards, reminderOf, today, basePath, filters, showClosed 
                       aria-label={`${PROJECT_STAGES[column.stage]} — ${
                         stageFiltered ? 'show every stage' : 'show only this stage'
                       }`}
-                      className="rounded-control hover:underline"
+                      // `inline-flex min-h-11`: a Pill is about 20px tall and
+                      // this is the board's primary narrowing control, pressed
+                      // with a thumb. The pill keeps its size; the target grows
+                      // around it.
+                      className="inline-flex min-h-11 items-center rounded-control px-1 hover:underline"
                     >
                       <Pill tone={stageTone(column.stage)}>{PROJECT_STAGES[column.stage]}</Pill>
                     </Link>
@@ -216,10 +220,15 @@ function ProjectCard({
   const starts = spellStarts(card, today);
 
   return (
-    <li className="rounded-panel card-surface p-3">
+    /* `row-target`: the whole card opens the job. It LOOKED tappable and only
+       the name was -- about 20px of a card the width of the column. */
+    <li className="row-target rounded-panel card-surface p-3">
       {/* h4 because the column heading is the h3 and the band heading the h2. */}
       <h4 className="t-small font-semibold">
-        <Link href={`/projects/${card.id}`} className="break-words text-accent-text hover:underline">
+        <Link
+          href={`/projects/${card.id}`}
+          className="row-link break-words text-accent-text hover:underline"
+        >
           {card.name}
         </Link>
       </h4>

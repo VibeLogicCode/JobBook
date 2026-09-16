@@ -61,7 +61,15 @@ export function DetailRow({
   return (
     <>
       <dt className={`t-small text-muted ${className}`.trim()}>{label}</dt>
-      <dd className={`${numeric ? 'num' : ''} ${empty ? 'text-subtle' : ''} ${className} mb-1 sm:mb-0`.trim()}>
+      {/*
+        * `min-w-0` and `break-words` together, and both are needed. A grid item
+        * defaults to `min-width: auto`, which refuses to shrink below its
+        * longest unbreakable run -- so a 45-character email in a 296px card on
+        * a 360px phone pushed the whole DOCUMENT sideways, scrollbar and all,
+        * because nothing up the chain clips. The backup screen already used
+        * `break-all` for exactly this; it never reached the detail panels.
+        */}
+      <dd className={`${numeric ? 'num' : ''} ${empty ? 'text-subtle' : ''} ${className} mb-1 min-w-0 break-words sm:mb-0`.trim()}>
         {children ?? (empty ? '—' : value)}
       </dd>
     </>

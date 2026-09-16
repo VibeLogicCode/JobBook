@@ -96,7 +96,11 @@ export function ReminderActions({
             Other
           </summary>
           <div className="mt-2 flex flex-wrap items-center gap-3">
-            <form action={move} className="flex items-center gap-2">
+            {/* `flex-wrap`: a date input at the mobile 16px font plus a
+                `whitespace-nowrap` button exceeds the ~296px interior of this
+                card on a 360px phone, and this inner form was the one row that
+                could not wrap. */}
+            <form action={move} className="flex flex-wrap items-center gap-2">
               <input type="hidden" name="id" value={id} />
               <label className="flex items-center gap-2 t-small text-muted">
                 <span>Due</span>

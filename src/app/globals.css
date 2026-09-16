@@ -357,6 +357,37 @@
     border: 1px solid var(--line);
   }
 
+  /* ---- A row that opens its record ----
+     On a phone every table becomes cards, and the card LOOKED tappable while
+     the only target was a one-line text link about 20px tall inside the first
+     cell. On a list of jobs, held one-handed, that is a miss every few taps.
+
+     A stretched pseudo-element rather than an onClick on the row: the anchor
+     stays a real link, so it keeps its href, its keyboard focus, its middle
+     click and its context menu, and the page stays a server component. An
+     onClick would have bought the same target and given up all four.
+
+     Anything else interactive in the row has to sit above the stretched layer,
+     which is what the second rule does -- otherwise the row's own link would
+     swallow the "Change..." button and the link to a parent quote. */
+  .row-target {
+    position: relative;
+  }
+
+  .row-target .row-link::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+  }
+
+  .row-target a:not(.row-link),
+  .row-target button,
+  .row-target summary,
+  .row-target [role='button'] {
+    position: relative;
+    z-index: 1;
+  }
+
   /* ---- Data table ----
      One DOM tree, reflowed by CSS. Budget Tracker's ruling R5: branching to a
      bespoke card list on phones puts every input in the document twice, which

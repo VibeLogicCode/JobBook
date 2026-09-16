@@ -439,7 +439,10 @@ export function Worksheet({
         </div>
       ) : null}
 
-      <div className="flex-1 overflow-x-auto px-0 sm:px-6 sm:py-4">
+      {/* `px-4` below `sm`: this was the one list in the product whose cards
+          ran flush to both screen edges, because the container that gives every
+          other screen its gutter was set to `px-0` here. */}
+      <div className="flex-1 overflow-x-auto px-4 sm:px-6 sm:py-4">
         <table
           role="table"
           // Busy rather than disabled: the fields stay focusable so Enter can

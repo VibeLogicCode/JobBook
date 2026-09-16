@@ -124,10 +124,14 @@ export default async function CustomersPage({
             </tr>
           </thead>
           <tbody role="rowgroup">
+            {/* `row-target`: the whole row opens the customer. See globals.css. */}
             {rows.map((row) => (
-              <tr role="row" key={row.id}>
+              <tr role="row" key={row.id} className="row-target">
                 <td role="cell" data-label="Name">
-                  <Link href={`/customers/${row.id}`} className="text-accent-text hover:underline">
+                  <Link
+                    href={`/customers/${row.id}`}
+                    className="row-link text-accent-text hover:underline"
+                  >
                     {row.name}
                   </Link>
                 </td>
