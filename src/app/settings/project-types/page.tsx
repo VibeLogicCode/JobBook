@@ -3,7 +3,7 @@ import { db } from '@/db/client';
 import { projectTypes, projects, scheduleTemplates, scopeTemplates } from '@/db/schema';
 import { resolveActor } from '@/app/settings/actor';
 import { can } from '@/lib/auth/permissions';
-import { primaryOf, readCompanies } from '@/lib/company/load';
+import { loadCompanies, primaryOf } from '@/lib/company/load';
 import { postureOf } from '@/lib/posture/read';
 import { POSTURE_DEFAULTS } from '@/lib/posture/types';
 import {
@@ -55,7 +55,7 @@ export default async function ProjectTypesPage() {
    * holdback nobody was told about.
    */
   const newTypeDefaults = POSTURE_DEFAULTS[
-    postureOf(primaryOf(await readCompanies()))
+    postureOf(primaryOf(await loadCompanies()))
   ];
   const mayVoid = state.actor ? can(state.actor.role, 'record:void') : false;
 

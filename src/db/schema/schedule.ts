@@ -168,6 +168,12 @@ export const scheduleTasks = pgTable('schedule_tasks', {
   /** The screen's only query: this job's tasks, in the order they happen. */
   index('schedule_tasks_project_idx').on(t.projectId, t.plannedStart, t.sortOrder),
   /**
+   * The calendar asks for every task overlapping a period ACROSS projects, so
+   * the project-leading index above cannot serve it and the month view scanned
+   * the table.
+   */
+  index('schedule_tasks_period_idx').on(t.plannedStart, t.plannedEnd),
+  /**
    * The push's query: everything that names this task as what it waits on.
    * Walked once per level of the chain on every date change, so it is an index
    * the feature reads rather than one a report might.

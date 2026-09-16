@@ -38,7 +38,12 @@ export const customers = pgTable('customers', {
   taxExemptReason: text('tax_exempt_reason'),
   notes: text('notes'),
   ...auditColumns,
-}, (t) => [index('customers_lead_source_idx').on(t.leadSourceId)]);
+}, (t) => [
+  index('customers_lead_source_idx').on(t.leadSourceId),
+  // `/customers` filters on record status and sorts by name; neither was
+  // covered.
+  index('customers_list_idx').on(t.recordStatus, t.name),
+]);
 
 export const projects = pgTable('projects', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -99,6 +104,11 @@ export const projects = pgTable('projects', {
 }, (t) => [
   uniqueIndex('projects_number_unique').on(t.projectNumber),
   index('projects_project_type_idx').on(t.projectTypeId),
+  /**
+   * The pipeline filters by stage and by record status. `projects_number_unique`
+   * already covers the ordering, so this is the missing half.
+   */
+  index('projects_stage_idx').on(t.recordStatus, t.stage),
 ]);
 
 /**

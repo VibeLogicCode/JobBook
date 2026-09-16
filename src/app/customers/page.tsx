@@ -10,6 +10,8 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { Pill } from '@/components/ui/Pill';
 import { TableWrap } from '@/components/ui/Table';
 import { CUSTOMER_TYPES } from '@/components/detail/labels';
+import { ListMore } from '@/components/ui/ListMore';
+import { listLimit, listSlice } from '@/lib/list/paging';
 import { normalizeSearch, searchCondition } from '@/lib/list/search';
 
 export const dynamic = 'force-dynamic';
@@ -33,7 +35,7 @@ function readType(raw: string | undefined): CustomerType | '' {
 export default async function CustomersPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; type?: string }>;
+  searchParams: Promise<{ q?: string; type?: string; limit?: string }>;
 }) {
   const params = await searchParams;
   const q = normalizeSearch(params.q);
@@ -49,7 +51,12 @@ export default async function CustomersPage({
     customers.notes,
   ]);
 
-  const rows = await db
+  // Capped, over-fetched by one. `.select()` here reads every column of every
+  // customer, notes included, so an unbounded list was also an unbounded
+  // payload.
+  const limit = listLimit(params.limit);
+
+  const fetched = await db
     .select()
     .from(customers)
     .where(
@@ -61,7 +68,10 @@ export default async function CustomersPage({
         type === '' ? undefined : eq(customers.customerType, type),
       ),
     )
-    .orderBy(asc(customers.name));
+    .orderBy(asc(customers.name))
+    .limit(limit + 1);
+
+  const { visible: rows, more } = listSlice(fetched, limit);
 
   const filtered = q !== '' || type !== '';
 
@@ -150,6 +160,10 @@ export default async function CustomersPage({
           </tbody>
         </TableWrap>
       )}
+
+      {rows.length > 0 ? (
+        <ListMore more={more} shown={rows.length} limit={limit} noun="customers" params={params} />
+      ) : null}
     </div>
   );
 }

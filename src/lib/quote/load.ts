@@ -57,26 +57,51 @@ export const loadQuote = cache(async (quoteId: string): Promise<{
    * pair, and naming both here is cheaper than pretending one of them belongs
    * to the other.
    */
-  const [org] = await db.select().from(organization).where(eq(organization.id, 1));
-  const company = await companyOf(db, row.quote.projectId);
+  /**
+   * FIVE READS, ONE ROUND TRIP EACH WAY.
+   *
+   * These used to be five sequential `await`s, and only one of them depends on
+   * anything above: `companyOf` needs the project id that the first query
+   * returned. The other four were waiting their turn for no reason at all, so
+   * opening a quote -- the most-used screen in the product -- cost six serial
+   * round trips to a database that may be a container on a NAS across a LAN.
+   * The page that calls this loader already batches its own reads correctly;
+   * the loader it calls did not.
+   *
+   * THE RATE BOOK IS THE INTERESTING ONE. It is the whole catalogue, and the
+   * worksheet's own comment puts it at "hundreds of items" -- every one of
+   * them serialized into the RSC payload and shipped to the browser. It exists
+   * for the line picker, and the line picker can only open on a DRAFT: an
+   * estimate that has been sent, accepted, declined or superseded cannot gain
+   * a line. So a sent quote no longer pays for a catalogue it cannot use, and
+   * the customer-facing print route -- which renders through this same loader
+   * -- stops carrying it altogether.
+   */
+  const editable = row.quote.status === 'draft' && row.quote.recordStatus === 'active';
 
-  const lineRows = await db
-    .select()
-    .from(quoteLines)
-    .where(and(eq(quoteLines.quoteId, quoteId), eq(quoteLines.recordStatus, 'active')))
-    .orderBy(asc(quoteLines.sortOrder));
+  const [orgRows, company, lineRows, taxRows, itemRows] = await Promise.all([
+    db.select().from(organization).where(eq(organization.id, 1)),
+    companyOf(db, row.quote.projectId),
+    db
+      .select()
+      .from(quoteLines)
+      .where(and(eq(quoteLines.quoteId, quoteId), eq(quoteLines.recordStatus, 'active')))
+      .orderBy(asc(quoteLines.sortOrder)),
+    db
+      .select()
+      .from(quoteTaxes)
+      .where(and(eq(quoteTaxes.quoteId, quoteId), eq(quoteTaxes.recordStatus, 'active')))
+      .orderBy(asc(quoteTaxes.sortOrder)),
+    editable
+      ? db
+          .select()
+          .from(rateItems)
+          .where(and(eq(rateItems.isActive, true), eq(rateItems.recordStatus, 'active')))
+          .orderBy(asc(rateItems.sortOrder))
+      : Promise.resolve([]),
+  ]);
 
-  const taxRows = await db
-    .select()
-    .from(quoteTaxes)
-    .where(and(eq(quoteTaxes.quoteId, quoteId), eq(quoteTaxes.recordStatus, 'active')))
-    .orderBy(asc(quoteTaxes.sortOrder));
-
-  const itemRows = await db
-    .select()
-    .from(rateItems)
-    .where(and(eq(rateItems.isActive, true), eq(rateItems.recordStatus, 'active')))
-    .orderBy(asc(rateItems.sortOrder));
+  const [org] = orgRows;
 
   const inputs: LineInput[] = lineRows.map((line) => ({
     code: line.code,

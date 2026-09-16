@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { organization } from '@/db/schema';
 import { type Capability, type Actor, can, resolveActor } from '@/app/settings/actor';
-import { type Company, companyFields, primaryOf, readCompanies } from '@/lib/company/load';
+import { type Company, companyFields, loadCompanies, primaryOf } from '@/lib/company/load';
 
 /**
  * The configuration a settings screen reads, as ONE object.
@@ -84,7 +84,8 @@ export async function loadSettings(
   companyId?: string | null,
 ): Promise<SettingsContext> {
   const [row] = await db.select().from(organization).where(eq(organization.id, 1));
-  const all = await readCompanies();
+  // Cached: every settings screen reads this during its render.
+  const all = await loadCompanies();
   const active = all.filter((entry) => entry.isActive);
 
   /**

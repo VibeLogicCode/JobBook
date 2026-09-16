@@ -5,7 +5,9 @@ import { Card } from '@/components/ui/Card';
 import { FilterBar, NoMatches } from '@/components/ui/FilterBar';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { ReminderList } from '@/components/reminders/ReminderList';
+import { listLimit, listSlice } from '@/lib/list/paging';
 import { normalizeSearch } from '@/lib/list/search';
+import { ListMore } from '@/components/ui/ListMore';
 import { tenantToday } from '@/lib/quote/dates';
 import { listReminders } from '@/lib/reminders/repository';
 
@@ -30,7 +32,7 @@ export const metadata: Metadata = { title: 'Reminders' };
 export default async function RemindersPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; dealt?: string }>;
+  searchParams: Promise<{ q?: string; dealt?: string; limit?: string }>;
 }) {
   const params = await searchParams;
   const q = normalizeSearch(params.q);
@@ -44,7 +46,15 @@ export default async function RemindersPage({
   // One query for every status. The partition below is a handful of rows in a
   // contractor's book, and asking twice would let the count and the list
   // disagree about the same instant.
-  const all = await listReminders({ search: q });
+  /**
+   * Capped, and over-fetched by one so the footer can say there are more
+   * without a second counting query. This screen used to read every reminder
+   * ever written, of every status, and partition them in JavaScript -- on the
+   * one table the hourly evaluator writes to unprompted.
+   */
+  const limit = listLimit(params.limit);
+  const fetched = await listReminders({ search: q, limit: limit + 1 });
+  const { visible: all, more } = listSlice(fetched, limit);
   const open = all.filter((row) => row.status === 'open');
   const dealt = all.length - open.length;
   const rows = showDealt ? all : open;
@@ -112,6 +122,7 @@ export default async function RemindersPage({
               </>
             }
           />
+          <ListMore more={more} shown={rows.length} limit={limit} noun="reminders" params={params} />
         </Card>
       )}
     </div>

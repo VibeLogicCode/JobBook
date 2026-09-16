@@ -78,6 +78,16 @@ export const quotes = pgTable('quotes', {
     .on(t.projectId, t.kind, t.sequence)
     .where(sql`status = 'accepted' and record_status = 'active'`),
   index('quotes_number_idx').on(t.quoteNumber),
+  /**
+   * What `/quotes` actually asks for: the active quotes, newest first. It had
+   * no covering index, so every load of the list sorted the whole table.
+   */
+  index('quotes_list_idx').on(t.recordStatus, t.createdAt.desc()),
+  /**
+   * The expiry sweep on the same screen -- sent quotes whose validity has
+   * passed. Leading with `status` because it is the selective half.
+   */
+  index('quotes_expiry_idx').on(t.status, t.validUntil),
 ]);
 
 /**
@@ -119,6 +129,12 @@ export const quoteLines = pgTable('quote_lines', {
   ...auditColumns,
 }, (t) => [
   index('quote_lines_quote_idx').on(t.quoteId, t.sortOrder),
+  /**
+   * The cost-code usage tally on `/settings/cost-codes` groups by this column
+   * over every quote line ever written; without an index that is a sequential
+   * scan and a hash aggregate each time the screen opens.
+   */
+  index('quote_lines_cost_code_idx').on(t.costCodeId),
   // A non-optional excluded line would print as an available upgrade the
   // customer cannot actually buy.
   check('quote_lines_excluded_only_if_optional', sql`${t.isOptional} or ${t.isIncluded}`),

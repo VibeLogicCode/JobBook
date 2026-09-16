@@ -3,7 +3,7 @@ import { db } from '@/db/client';
 import {
   customers, leadSources, projects, projectTypes, quotes, scopeTemplates,
 } from '@/db/schema';
-import { defaultProvince, readCompanies } from '@/lib/company/load';
+import { defaultProvince, loadCompanies } from '@/lib/company/load';
 import { offeredWorkFrom, postureIsOffered } from '@/lib/posture/read';
 import { startQuote } from '@/app/quotes/new/actions';
 import { StartQuoteForm } from '@/app/quotes/new/StartQuoteForm';
@@ -37,7 +37,14 @@ export default async function NewQuotePage({
    * one, because nobody re-reads a field they did not have to fill in.
    */
   const province = await defaultProvince();
-  const companyRows = await readCompanies();
+  /**
+   * `loadCompanies`, the CACHED reader. `readCompanies` is the uncached one --
+   * it exists so the database suites cannot be handed another test file's rows
+   * by a process-wide `cache()` -- and a page render is exactly what the cache
+   * was wrapped for. The layout already reads it through `primaryCompany()`,
+   * so this is the same request's rows rather than a second identical query.
+   */
+  const companyRows = await loadCompanies();
   // Active companies only; the form renders nothing when there is one.
   const offeredCompanies = companyRows
     .filter((company) => company.isActive)

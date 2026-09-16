@@ -17,6 +17,8 @@ import { readView, viewParam } from '@/components/pipeline/view';
 import {
   CLOSED_STAGES, nextReminderByProject, SHARED_STAGES, showsClosed, type PipelineCard,
 } from '@/components/pipeline/columns';
+import { ListMore } from '@/components/ui/ListMore';
+import { listLimit, listSlice } from '@/lib/list/paging';
 import { normalizeSearch, searchCondition } from '@/lib/list/search';
 import { tenantToday } from '@/lib/quote/dates';
 import { listReminders } from '@/lib/reminders/repository';
@@ -117,6 +119,7 @@ export default async function ProjectsPage({
     kind?: string;
     closed?: string;
     view?: string;
+    limit?: string;
   }>;
 }) {
   const params = await searchParams;
@@ -166,7 +169,14 @@ export default async function ProjectsPage({
     stage === '' ? undefined : eq(projects.stage, stage),
   );
 
-  const rows = await db
+  /**
+   * Capped, over-fetched by one. Each row carries three correlated subqueries
+   * -- contract value, accepted-quote count, days in stage -- so an unbounded
+   * list multiplied an unbounded scan by three.
+   */
+  const limit = listLimit(params.limit);
+
+  const fetched = await db
     .select({
       id: projects.id,
       projectNumber: projects.projectNumber,
@@ -217,7 +227,10 @@ export default async function ProjectsPage({
     .from(projects)
     .innerJoin(customers, eq(projects.customerId, customers.id))
     .where(showClosed ? base : and(base, not(closed)))
-    .orderBy(asc(projects.projectNumber));
+    .orderBy(asc(projects.projectNumber))
+    .limit(limit + 1);
+
+  const { visible: rows, more } = listSlice(fetched, limit);
 
   // Counted in SQL rather than by fetching rows and discarding them, so the
   // figure stays right once this list outgrows one screen.
@@ -384,6 +397,8 @@ export default async function ProjectsPage({
           showClosed={showClosed}
         />
       )}
+
+      <ListMore more={more} shown={rows.length} limit={limit} noun="jobs" params={params} />
     </div>
   );
 }

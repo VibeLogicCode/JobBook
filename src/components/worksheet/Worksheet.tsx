@@ -1127,14 +1127,28 @@ function RatePicker({
     searchRef.current?.focus();
   }, []);
 
+  /**
+   * Memoised, and the haystack is lower-cased ONCE rather than per keystroke.
+   *
+   * This runs over the whole rate catalogue -- "hundreds of items", as the
+   * comment above says -- and it allocated two lower-cased strings per item on
+   * every character typed, inside a sheet whose entire purpose is to be typed
+   * into. The rest of this file memoises correctly; this call site was missed.
+   */
+  const haystack = useMemo(
+    () =>
+      items.map((item) => ({
+        item,
+        text: `${item.code} ${item.description}`.toLowerCase(),
+      })),
+    [items],
+  );
+
   const needle = query.trim().toLowerCase();
-  const matches = needle
-    ? items.filter(
-        (item) =>
-          item.description.toLowerCase().includes(needle) ||
-          item.code.toLowerCase().includes(needle),
-      )
-    : items;
+  const matches = useMemo(
+    () => (needle ? haystack.filter((row) => row.text.includes(needle)).map((row) => row.item) : items),
+    [haystack, items, needle],
+  );
 
   return (
     <Sheet

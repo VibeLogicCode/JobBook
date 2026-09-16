@@ -64,7 +64,13 @@ export const viewport: Viewport = {
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const org = await loadOrganization();
+  /**
+   * Together, not one after the other. Neither depends on the other, both are
+   * `cache()`-wrapped, and this runs on EVERY page in the application before
+   * the page's own queries start -- so a serial pair here is a round trip
+   * added to every navigation in the product.
+   */
+  const [org, company] = await Promise.all([loadOrganization(), primaryCompany()]);
   /**
    * Null when there are two companies, which paints the app in the default
    * token family and shows no owner name.
@@ -75,8 +81,6 @@ export default async function RootLayout({ children }: { children: React.ReactNo
    * would be a claim about which business they are in. `loadCompanies` is
    * `cache()`-wrapped and the layout is the reader it was wrapped for.
    */
-  const company = await primaryCompany();
-
   return (
     <html lang={org?.locale ?? 'en-CA'} suppressHydrationWarning>
       <head>

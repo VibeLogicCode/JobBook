@@ -186,6 +186,12 @@ export const expenses = pgTable('expenses', {
   ...auditColumns,
 }, (t) => [
   // The one query job costing makes, and the one the project screen makes.
+  /**
+   * The unfiltered default order of `/expenses`. Every declared index below
+   * leads with a foreign key, so the plain "show me everything, newest first"
+   * path -- which is what the screen opens on -- had nothing to use.
+   */
+  index('expenses_recent_idx').on(t.expenseDate.desc(), t.createdAt.desc()),
   index('expenses_project_idx').on(t.projectId, t.expenseDate),
   // Everything a vendor was ever paid, which is what a T5018 run and a
   // supplier dispute both start from.

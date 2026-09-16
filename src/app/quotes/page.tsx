@@ -10,6 +10,8 @@ import { FilterBar, NoMatches } from '@/components/ui/FilterBar';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Pill, statusTone } from '@/components/ui/Pill';
 import { AmountCell, TableWrap } from '@/components/ui/Table';
+import { ListMore } from '@/components/ui/ListMore';
+import { listLimit, listSlice } from '@/lib/list/paging';
 import { normalizeSearch, searchCondition } from '@/lib/list/search';
 
 export const dynamic = 'force-dynamic';
@@ -49,7 +51,7 @@ function readStatus(raw: string | undefined): StatusFilter | '' {
 export default async function QuotesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; status?: string; closed?: string }>;
+  searchParams: Promise<{ q?: string; status?: string; closed?: string; limit?: string }>;
 }) {
   const params = await searchParams;
   const q = normalizeSearch(params.q);
@@ -94,7 +96,15 @@ export default async function QuotesPage({
   // this screen can bring one back.
   const base = and(eq(quotes.recordStatus, 'active'), search, statusCondition);
 
-  const rows = await db
+  /**
+   * Capped and over-fetched by one, so the footer can say there is more
+   * without a second counting query. This list had no limit at all and no
+   * index for its sort, so every load sorted every active quote in the
+   * business.
+   */
+  const limit = listLimit(params.limit);
+
+  const fetched = await db
     .select({
       id: quotes.id,
       quoteNumber: quotes.quoteNumber,
@@ -116,7 +126,10 @@ export default async function QuotesPage({
     .innerJoin(customers, eq(projects.customerId, customers.id))
     .leftJoin(parentQuotes, eq(quotes.parentQuoteId, parentQuotes.id))
     .where(showClosed ? base : and(base, not(closed)))
-    .orderBy(desc(quotes.createdAt));
+    .orderBy(desc(quotes.createdAt))
+    .limit(limit + 1);
+
+  const { visible: rows, more } = listSlice(fetched, limit);
 
   // What the default is holding back, counted in SQL rather than by fetching
   // the rows and throwing them away -- so the figure stays right when this
@@ -260,6 +273,10 @@ export default async function QuotesPage({
           </tbody>
         </TableWrap>
       )}
+
+      {rows.length > 0 ? (
+        <ListMore more={more} shown={rows.length} limit={limit} noun="quotes" params={params} />
+      ) : null}
     </div>
   );
 }

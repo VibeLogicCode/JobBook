@@ -494,6 +494,13 @@ export interface ListRemindersOptions {
    * list is in it, which stops being true the first time this needs a page.
    */
   search?: string;
+  /**
+   * How many rows at most. Absent means every one, which is correct for the
+   * evaluator and wrong for a screen -- see `/reminders`, which is why this
+   * exists: `reminders` is machine-written by the hourly job and grows faster
+   * than any table an owner types into.
+   */
+  limit?: number;
 }
 
 /**
@@ -535,7 +542,8 @@ export async function listReminders(
       })
       .from(reminders)
       .where(and(...conditions))
-      .orderBy(reminders.dueAt, reminders.id);
+      .orderBy(reminders.dueAt, reminders.id)
+      .limit(options.limit ?? Number.MAX_SAFE_INTEGER);
   };
 
   return executor ? run(executor) : db.transaction(run);

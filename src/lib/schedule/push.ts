@@ -153,6 +153,21 @@ export interface MoveRequest {
  * that ran when the form was rendered would have been true at the time and
  * wrong by the time it mattered.
  */
+type TaskIndex = ReadonlyMap<string, Pick<ScheduleTask, 'id' | 'name' | 'predecessorTaskId'>>;
+
+const INDEXES = new WeakMap<object, TaskIndex>();
+
+/** The id index for a task list, built once per array. See the call below. */
+function indexOf(
+  tasks: readonly Pick<ScheduleTask, 'id' | 'name' | 'predecessorTaskId'>[],
+): TaskIndex {
+  const cached = INDEXES.get(tasks);
+  if (cached) return cached;
+  const built = new Map(tasks.map((task) => [task.id, task]));
+  INDEXES.set(tasks, built);
+  return built;
+}
+
 export function findPredecessorCycle(
   tasks: readonly Pick<ScheduleTask, 'id' | 'name' | 'predecessorTaskId'>[],
   taskId: string,
@@ -160,7 +175,18 @@ export function findPredecessorCycle(
 ): string[] | null {
   if (predecessorId === null) return null;
 
-  const byId = new Map(tasks.map((task) => [task.id, task]));
+  /**
+   * MEMOISED ON THE ARRAY IDENTITY, because the schedule screen calls this
+   * once per task inside a filter over every task -- `predecessorOptions(row)`
+   * for each of T rows, each filtering T candidates. Rebuilding the index
+   * inside made that O(T^3) map insertions: 60 tasks is ~216,000, and 150 is
+   * ~3.4 million, on every render of the page.
+   *
+   * A `WeakMap` keyed by the array the caller passed, so the entry dies with
+   * the array and a mutated list cannot be served a stale index -- every
+   * caller here builds a fresh array per request.
+   */
+  const byId = indexOf(tasks);
   const chain: string[] = [];
   const seen = new Set<string>();
   let cursor: string | null = predecessorId;

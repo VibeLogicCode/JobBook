@@ -178,6 +178,14 @@ export const reminders = pgTable('reminders', {
   // The two screens that read this table: the reminder list, ordered by when
   // it is due, and the panel on a customer or project.
   index('reminders_due_idx').on(t.status, t.dueAt),
+  /**
+   * `/reminders` reads every open and dealt-with reminder in one pass and
+   * partitions them in JavaScript, so it passes NO status -- which makes the
+   * index above unusable and leaves the fastest-growing table in the product
+   * to a sequential scan and an external sort. This is the shape that screen
+   * actually asks for.
+   */
+  index('reminders_list_idx').on(t.recordStatus, t.dueAt),
   index('reminders_entity_idx').on(t.entityType, t.entityId, t.status),
   // Completion is a fact with a time on it. A `done` row with no
   // `completed_at` cannot answer "when did we deal with this", and a

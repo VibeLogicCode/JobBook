@@ -1,4 +1,4 @@
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, eq, inArray } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { quoteLines, quotes, rateItems, scopeTemplateItems } from '@/db/schema';
 import { recalculateQuote } from '@/lib/quote/recalculate';
@@ -148,7 +148,13 @@ export async function regenerateFromTemplate(args: {
       (line) => line.rateItemId !== null && templateItemIds.has(line.rateItemId),
     );
 
-    for (const line of fromTemplate) {
+    /**
+     * ONE statement, not one per line. Every row takes the same three values,
+     * so the loop was N serialized round trips inside the transaction to say
+     * the same thing N times -- a 40-line template regeneration held the write
+     * lock for 40 of them.
+     */
+    if (fromTemplate.length > 0) {
       await tx
         .update(quoteLines)
         .set({
@@ -156,7 +162,7 @@ export async function regenerateFromTemplate(args: {
           voidedAt: new Date(),
           voidReason: 'Replaced by regeneration from the scope template',
         })
-        .where(eq(quoteLines.id, line.id));
+        .where(inArray(quoteLines.id, fromTemplate.map((line) => line.id)));
     }
 
     // Hand-added lines keep their sort order, and the regenerated set is

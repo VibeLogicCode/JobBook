@@ -40,6 +40,8 @@ import { Reveal } from '@/components/ui/Reveal';
 import { SheetButton } from '@/components/ui/Sheet';
 import { AmountCell, TableWrap } from '@/components/ui/Table';
 import { isInlineType } from '@/lib/files/sniff';
+import { ListMore } from '@/components/ui/ListMore';
+import { listLimit, listSlice } from '@/lib/list/paging';
 import { normalizeSearch, searchCondition } from '@/lib/list/search';
 import { formatCents } from '@/lib/money/format';
 import { tenantToday } from '@/lib/quote/dates';
@@ -221,7 +223,15 @@ export default async function ExpensesPage({
     expenses.vendorTaxNumberCaptured,
   ]);
 
-  const rows = await db
+  /**
+   * Capped, over-fetched by one. Every declared index on this table leads with
+   * a foreign key, so the unfiltered "everything, newest first" path the screen
+   * opens on had nothing to use -- a full scan and a sort of every expense ever
+   * entered. `expenses_recent_idx` and this limit are the two halves of that.
+   */
+  const limit = listLimit(params.limit);
+
+  const fetched = await db
     .select({
       id: expenses.id,
       kind: expenses.kind,
@@ -270,7 +280,10 @@ export default async function ExpensesPage({
         showVoided ? undefined : eq(expenses.recordStatus, 'active'),
       ),
     )
-    .orderBy(desc(expenses.expenseDate), desc(expenses.createdAt));
+    .orderBy(desc(expenses.expenseDate), desc(expenses.createdAt))
+    .limit(limit + 1);
+
+  const { visible: rows, more } = listSlice(fetched, limit);
 
   // Counted separately rather than filtered out of `rows`, so the reveal
   // control can say how many are behind it. A list that quietly drops records
@@ -1071,6 +1084,8 @@ export default async function ExpensesPage({
           </tbody>
         </TableWrap>
       )}
+
+      <ListMore more={more} shown={rows.length} limit={limit} noun="expenses" params={params} />
 
       <p className="mt-3 max-w-prose t-small text-subtle">
         The per-kilometre rate mileage is costed at lives under{' '}

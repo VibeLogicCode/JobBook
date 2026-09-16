@@ -33,7 +33,16 @@ export const rateItems = pgTable('rate_items', {
   sortOrder: integer('sort_order').notNull().default(0),
   isActive: boolean('is_active').notNull().default(true),
   ...auditColumns,
-}, (t) => [uniqueIndex('rate_items_code_unique').on(t.code)]);
+}, (t) => [
+  uniqueIndex('rate_items_code_unique').on(t.code),
+  /**
+   * The rate book, as every picker and the rates screen ask for it: the live
+   * items in their sort order. The unique index on `code` is for correctness
+   * and does nothing for this query, so the catalogue was scanned and sorted
+   * on every read.
+   */
+  index('rate_items_list_idx').on(t.isActive, t.recordStatus, t.sortOrder),
+]);
 
 export const scopeTemplates = pgTable('scope_templates', {
   id: uuid('id').primaryKey().defaultRandom(),
