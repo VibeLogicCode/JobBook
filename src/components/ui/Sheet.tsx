@@ -184,6 +184,35 @@ export function Sheet({
     return () => document.removeEventListener('keydown', onEscape);
   }, [onClose]);
 
+  /**
+   * Tab, on the DOCUMENT too, and for exactly the reason Escape moved there.
+   *
+   * `trapTab` below runs from the panel's own `onKeyDown`, so it only fires
+   * while focus is already inside the panel -- and the docblock above records
+   * precisely when it is not: submitting a form inside a sheet re-renders the
+   * button that was pressed and focus lands back on `<body>`. From there Tab
+   * was never intercepted, so the next press walked into the page behind the
+   * scrim, which is neither `inert` nor `aria-hidden`. The person is then
+   * tabbing through a form they cannot see, underneath the one they are
+   * looking at.
+   *
+   * This catches that case only: if focus is already inside the panel the
+   * panel's own handler has it, and this does nothing.
+   */
+  useEffect(() => {
+    function onTab(event: KeyboardEvent) {
+      if (event.key !== 'Tab' || event.defaultPrevented) return;
+      const panel = panelRef.current;
+      if (!panel || panel.contains(document.activeElement)) return;
+      // Focus escaped. Put it back on the panel and let the panel's own trap
+      // take over from the next press.
+      event.preventDefault();
+      panel.focus();
+    }
+    document.addEventListener('keydown', onTab);
+    return () => document.removeEventListener('keydown', onTab);
+  }, []);
+
   function onKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
     if (panelRef.current) trapTab(panelRef.current, event);
   }

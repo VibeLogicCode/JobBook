@@ -3,14 +3,21 @@
 /* IBM Plex, self-hosted from node_modules. The app runs on the tenant's own
    box, sometimes with no outbound internet at all, so a webfont fetched from a
    CDN would leave a quote rendering in Times New Roman at a kitchen table. */
-@import '@fontsource/ibm-plex-sans/400.css';
-@import '@fontsource/ibm-plex-sans/500.css';
-@import '@fontsource/ibm-plex-sans/600.css';
-@import '@fontsource/ibm-plex-mono/400.css';
-@import '@fontsource/ibm-plex-mono/500.css';
-@import '@fontsource/ibm-plex-mono/600.css';
-@import '@fontsource/ibm-plex-serif/400.css';
-@import '@fontsource/ibm-plex-serif/600.css';
+/* LATIN ONLY. The bare `400.css` entry points declare six @font-face blocks
+   each -- cyrillic, cyrillic-ext, greek, latin, latin-ext, vietnamese -- so
+   eight faces meant 48 declarations and every subset file shipped inside the
+   image. A browser only downloads the subsets it needs, so this is bytes on
+   the disk and in the stylesheet rather than on the wire; it is still 40
+   declarations of nothing for a product whose interface is English and French.
+   A tenant needing another script changes this line. */
+@import '@fontsource/ibm-plex-sans/latin-400.css';
+@import '@fontsource/ibm-plex-sans/latin-500.css';
+@import '@fontsource/ibm-plex-sans/latin-600.css';
+@import '@fontsource/ibm-plex-mono/latin-400.css';
+@import '@fontsource/ibm-plex-mono/latin-500.css';
+@import '@fontsource/ibm-plex-mono/latin-600.css';
+@import '@fontsource/ibm-plex-serif/latin-400.css';
+@import '@fontsource/ibm-plex-serif/latin-600.css';
 
 /* ---------------------------------------------------------------------------
    Design system
@@ -355,6 +362,39 @@
   .dark .card-surface {
     box-shadow: none;
     border: 1px solid var(--line);
+  }
+
+  /* ---- Scroll shadows ----
+     A wide table scrolls sideways inside its own frame and nothing said so:
+     no edge, no cue, and on a 640px tablet the reminder-rules table runs 870px
+     past the viewport. This is the classic two-layer background trick -- a
+     cover in the surface colour pinned with `local`, a shadow pinned with
+     `scroll` -- so the shadow appears only when there is more in that
+     direction and vanishes at each end. No JavaScript, no scroll listener, and
+     it costs one declaration.
+
+     `--surface` covers rather than a transparent gradient, because the frame
+     under it is painted and a fading-to-transparent edge would show the canvas
+     through the table. */
+  .scroll-shadows {
+    background-image:
+      linear-gradient(to right, var(--surface) 30%, transparent),
+      linear-gradient(to left, var(--surface) 30%, transparent),
+      linear-gradient(to right, rgb(22 22 43 / 0.10), transparent 14px),
+      linear-gradient(to left, rgb(22 22 43 / 0.10), transparent 14px);
+    background-position: left center, right center, left center, right center;
+    background-repeat: no-repeat;
+    background-size: 32px 100%, 32px 100%, 14px 100%, 14px 100%;
+    background-attachment: local, local, scroll, scroll;
+  }
+
+  /* On a dark canvas the same shadow has to be darker to read at all. */
+  .dark .scroll-shadows {
+    background-image:
+      linear-gradient(to right, var(--surface) 30%, transparent),
+      linear-gradient(to left, var(--surface) 30%, transparent),
+      linear-gradient(to right, rgb(0 0 0 / 0.38), transparent 14px),
+      linear-gradient(to left, rgb(0 0 0 / 0.38), transparent 14px);
   }
 
   /* ---- A row that opens its record ----

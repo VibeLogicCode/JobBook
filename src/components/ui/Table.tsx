@@ -80,7 +80,10 @@ export function TableWrap({
   const frame = bare ? '' : 'rounded-panel card-surface';
 
   return (
-    <div className={`w-full overflow-x-auto ${frame} ${className}`.trim()}>
+    // `scroll-shadows`: a wide table scrolls inside this box and nothing said
+    // so. See globals.css -- the shadow appears only while there is more in
+    // that direction, with no scroll listener.
+    <div className={`scroll-shadows w-full overflow-x-auto ${frame} ${className}`.trim()}>
       {/*
         * `role="table"` written out, and the row groups, rows and cells carry
         * theirs at every call site for the same reason: below 640px

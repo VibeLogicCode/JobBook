@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { customers, projects, quotes } from '@/db/schema';
 import { buttonClass } from '@/components/ui/Button';
@@ -87,6 +87,27 @@ export default async function TodayPage() {
       totalCents: quotes.totalCents,
       projectName: projects.name,
       customerName: customers.name,
+      /**
+       * Whether any line on it is still waiting for a price.
+       *
+       * Without this the drafts list reads `$0.00` against a quote that is not
+       * worth nothing -- it is a quote nobody has priced yet. The starter packs
+       * ship a rate book with no prices in it on purpose, and the templates
+       * expand from it, so this is the NORMAL state of a first quote rather
+       * than an edge case.
+       *
+       * The same three exemptions the send guard and the worksheet warning
+       * use: a percentage line states its rate, an allowance has no figure by
+       * definition, and a voided line is not on the quote.
+       */
+      unpriced: sql<boolean>`exists (
+        select 1 from quote_lines ql
+        where ql.quote_id = ${quotes.id}
+          and ql.record_status = 'active'
+          and ql.unit_price_ten_thou = 0
+          and ql.calc_mode <> 'percent'
+          and ql.is_allowance = false
+      )`,
     })
     .from(quotes)
     .innerJoin(projects, eq(quotes.projectId, projects.id))
@@ -237,6 +258,8 @@ function QuoteList({
     totalCents: number;
     projectName: string;
     customerName: string;
+    /** Any line still waiting for a price. See the query. */
+    unpriced?: boolean;
   }[];
   today: string;
 }) {
@@ -265,8 +288,20 @@ function QuoteList({
                     </span>
                   </span>
                   <span className="flex shrink-0 items-center gap-3">
-                    <Pill tone={statusTone(row.status, row.validUntil < today)}>{row.status}</Pill>
-                    <span className="num">{formatCents(row.totalCents)}</span>
+                    {/*
+                      * A quote whose lines have no prices yet is not a quote
+                      * worth nothing, and `$0.00` says the second thing. The
+                      * figure stays -- it is the honest total of what has been
+                      * priced -- and the pill says why it is low.
+                      */}
+                    {row.unpriced ? (
+                      <Pill tone="warning">Needs pricing</Pill>
+                    ) : (
+                      <Pill tone={statusTone(row.status, row.validUntil < today)}>{row.status}</Pill>
+                    )}
+                    <span className={`num ${row.unpriced ? 'text-subtle' : ''}`.trim()}>
+                      {formatCents(row.totalCents)}
+                    </span>
                   </span>
                 </Link>
               </li>
