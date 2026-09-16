@@ -11,6 +11,7 @@ import { Notice } from '@/components/ui/Notice';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Pill, statusTone } from '@/components/ui/Pill';
 import { AmountCell, TableWrap } from '@/components/ui/Table';
+import { LIST_PAGE } from '@/lib/list/paging';
 import { defaultProvince } from '@/lib/company/load';
 import { flagsForProject } from '@/lib/posture/read';
 import { formatBasisPoints, formatCents } from '@/lib/money/format';
@@ -107,12 +108,12 @@ export default async function ProjectPage({
   if (!job) notFound();
   const { project } = job;
 
-  const [org] = await db
+  const orgQuery = db
     .select({ locale: organization.locale, timezone: organization.timezone })
     .from(organization)
     .where(eq(organization.id, 1));
   // A pre-fill, blank when two companies disagree about the answer.
-  const province = await defaultProvince();
+  const provinceQuery = defaultProvince();
   /**
    * What paperwork this KIND of work needs, read from the job's own type.
    *
@@ -121,9 +122,9 @@ export default async function ProjectPage({
    * -- that date is what makes the billing screen able to say when the
    * holdback becomes invoiceable.
    */
-  const flags = await flagsForProject(db, id);
+  const flagsQuery = flagsForProject(db, id);
 
-  const versions = await db
+  const versionsQuery = db
     .select({
       id: quotes.id,
       quoteNumber: quotes.quoteNumber,
@@ -140,7 +141,7 @@ export default async function ProjectPage({
     .orderBy(desc(quotes.sequence), desc(quotes.version));
 
   // Oldest first: the timeline measures each entry against the one after it.
-  const history = await db
+  const historyQuery = db
     .select({
       id: stageHistory.id,
       fromStage: stageHistory.fromStage,
@@ -152,16 +153,21 @@ export default async function ProjectPage({
     .where(and(eq(stageHistory.projectId, id), eq(stageHistory.recordStatus, 'active')))
     .orderBy(asc(stageHistory.changedAt));
 
-  const customerList = await db
+  /**
+   * Capped like every other list: this is the edit sheet's customer picker,
+   * and it used to read every customer in the database to fill a dropdown.
+   */
+  const customerQuery = db
     .select({ id: customers.id, name: customers.name, companyName: customers.companyName })
     .from(customers)
     .where(eq(customers.recordStatus, 'active'))
-    .orderBy(asc(customers.name));
+    .orderBy(asc(customers.name))
+    .limit(LIST_PAGE);
 
   // Every project type, retired and voided included -- this job's own may no
   // longer be offered to new work, and it still has to render and resolve in
   // the edit sheet's picker.
-  const projectTypeList = await db
+  const projectTypeQuery = db
     .select()
     .from(projectTypes)
     .orderBy(asc(projectTypes.sortOrder), asc(projectTypes.name));
@@ -170,7 +176,24 @@ export default async function ProjectPage({
   // it was typed. Separate from the stage history below, and deliberately: one
   // is what the system did to the record, the other is what people did about
   // the work.
-  const timeline = await listTimeline('project', id);
+  /**
+   * EIGHT READS, ONE ROUND TRIP. The job is loaded above and everything here
+   * is keyed on its id, so none of them depended on another -- they were
+   * simply waiting their turn.
+   */
+  const [orgRows, province, flags, versions, history, customerList, projectTypeList, timeline] =
+    await Promise.all([
+      orgQuery,
+      provinceQuery,
+      flagsQuery,
+      versionsQuery,
+      historyQuery,
+      customerQuery,
+      projectTypeQuery,
+      listTimeline('project', id),
+    ]);
+
+  const [org] = orgRows;
 
   const today = tenantIsoToday(org?.timezone ?? 'UTC');
   // The record is a job from the moment a quote on it is accepted, which is

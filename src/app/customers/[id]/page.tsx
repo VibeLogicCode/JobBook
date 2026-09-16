@@ -73,24 +73,20 @@ export default async function CustomerPage({
    * between companies by the owner's own choice, so no company owns its
    * address.
    */
-  const [org] = await db
+  const orgQuery = db
     .select({ locale: organization.locale, timezone: organization.timezone })
     .from(organization)
     .where(eq(organization.id, 1));
-  const province = await defaultProvince();
+  const provinceQuery = defaultProvince();
 
   // Every lead source, retired and voided included -- this customer's own may
   // no longer be offered to new work, and it still has to render and resolve
   // in the edit sheet's picker.
-  const leadSourceList = await db
+  const leadSourceQuery = db
     .select()
     .from(leadSources)
     .orderBy(asc(leadSources.sortOrder), asc(leadSources.name));
-  const leadSourceName = customer.leadSourceId
-    ? (leadSourceList.find((row) => row.id === customer.leadSourceId)?.name ?? null)
-    : null;
-
-  const jobs = await db
+  const jobsQuery = db
     .select({
       id: projects.id,
       projectNumber: projects.projectNumber,
@@ -111,7 +107,7 @@ export default async function CustomerPage({
     .where(and(eq(projects.customerId, id), eq(projects.recordStatus, 'active')))
     .orderBy(asc(projects.projectNumber));
 
-  const history = await db
+  const historyQuery = db
     .select({
       id: quotes.id,
       quoteNumber: quotes.quoteNumber,
@@ -131,7 +127,28 @@ export default async function CustomerPage({
   // Ordered by when things HAPPENED, not by when they were typed: the
   // repository sorts on `occurred_at`, so Tuesday's call logged on Thursday
   // reads under Tuesday.
-  const timeline = await listTimeline('customer', id);
+  /**
+   * SIX READS, ONE ROUND TRIP.
+   *
+   * None of these depends on another: the customer is loaded above and every
+   * query here is keyed on its id. They were six serial waits on a database
+   * that may be a container on a NAS across a LAN, and the builders above are
+   * defined rather than awaited precisely so they can go together.
+   */
+  const [orgRows, province, leadSourceList, jobs, history, timeline] = await Promise.all([
+    orgQuery,
+    provinceQuery,
+    leadSourceQuery,
+    jobsQuery,
+    historyQuery,
+    listTimeline('customer', id),
+  ]);
+
+  const [org] = orgRows;
+
+  const leadSourceName = customer.leadSourceId
+    ? (leadSourceList.find((row) => row.id === customer.leadSourceId)?.name ?? null)
+    : null;
 
   const today = tenantIsoToday(org?.timezone ?? 'UTC');
   // Rendered in the tenant's zone for the same reason `today` is computed in
