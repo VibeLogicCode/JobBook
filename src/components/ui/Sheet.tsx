@@ -1,6 +1,12 @@
 'use client';
 
-import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
+import {
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from 'react';
 import { X } from 'lucide-react';
 import { REFUSED_EVENT, SAVED_EVENT } from '@/components/ui/saved-event';
 import { isDirty, openBaseline, refused, submitted, type DirtyBaseline } from '@/components/ui/dirty-baseline';
@@ -109,6 +115,8 @@ export function Sheet({
   footer?: React.ReactNode;
 }) {
   const panelRef = useRef<HTMLDivElement | null>(null);
+  // Stable across server and client render, which a hand-rolled id is not.
+  const titleId = useId();
 
   /**
    * Who had focus immediately before this opened, so closing it puts focus
@@ -230,7 +238,20 @@ export function Sheet({
         ref={panelRef}
         role="dialog"
         aria-modal="true"
-        aria-label={label}
+        /**
+         * NAMED BY ITS OWN VISIBLE TITLE, not by a parallel string.
+         *
+         * `aria-label` duplicated the title into a second place that could
+         * drift from the one on screen, and left the heading itself a <p> --
+         * so the dialog contributed no heading at all and its content jumped
+         * from the page's <h1> straight to <h3>. `aria-labelledby` pointing at
+         * a real <h2> fixes both: the name is the words the user can see, and
+         * the sheet's own <h3>s now sit under a level that exists.
+         *
+         * `label` stays the fallback for the rare sheet whose visible title is
+         * shorter than the name a screen reader needs.
+         */
+        aria-labelledby={titleId}
         tabIndex={-1}
         // Stops a click anywhere inside the panel bubbling to the scrim above,
         // so pressing a control -- or empty space beside one -- never closes
@@ -259,7 +280,9 @@ export function Sheet({
 
         <div className="flex shrink-0 items-start justify-between gap-3 p-4 pb-2">
           <div className="min-w-0">
-            <p className="t-heading">{title}</p>
+            <h2 id={titleId} className="t-heading">
+              {title}
+            </h2>
             {subtitle ? <p className="t-small text-muted">{subtitle}</p> : null}
           </div>
           <button
