@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { AuthError, identify } from '@/lib/auth/access';
+import { outagePage } from '@/lib/auth/outage';
 import { AuthModeError, authMode } from '@/lib/auth/mode';
 import { SESSION_COOKIE, readSession } from '@/lib/auth/session';
 
@@ -174,10 +175,26 @@ export async function proxy(request: NextRequest) {
     // guarded action still refuses, for want of the header.
     return identity ? withIdentity(request, identity.email) : withoutIdentity(request);
   } catch (error) {
+    /**
+     * An `AuthError` is a real answer about WHO: local mode with two active
+     * accounts and nothing selecting between them, a mode that cannot be
+     * combined, an identity that matches no active row. Those are 401s and
+     * they carry their own sentence.
+     *
+     * Anything else reaching here is the infrastructure, and almost always one
+     * thing: the database did not answer, because resolving an identity reads
+     * the `users` table. That used to fall through to a bare `Not authorised`,
+     * which told the owner of a rebooted NAS that he lacked permission to open
+     * his own quoting system -- so he went looking for a permissions problem
+     * that did not exist.
+     *
+     * 503, with a page that names the actual problem and what to check. See
+     * `lib/auth/outage.ts` for why that page carries its own HTML.
+     */
     if (error instanceof AuthError) {
       return new NextResponse(`Not authorised: ${error.message}`, { status: 401 });
     }
-    return new NextResponse('Not authorised', { status: 401 });
+    return outagePage(error instanceof Error ? error.message : 'the database did not answer');
   }
 }
 

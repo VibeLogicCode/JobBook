@@ -699,6 +699,16 @@
   display: none !important;
 }
 
+/* The one keyframe in the product. `loading.tsx` holds itself invisible for
+   400ms so a fast navigation never flickers, and this is what ends that wait.
+   Reduced motion skips straight to visible -- the delay is the point, not the
+   fade. */
+@keyframes jb-appear {
+  to {
+    opacity: 1;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   ::before,
