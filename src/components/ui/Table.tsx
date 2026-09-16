@@ -81,7 +81,17 @@ export function TableWrap({
 
   return (
     <div className={`w-full overflow-x-auto ${frame} ${className}`.trim()}>
-      <table className="data-table data-table--stack" style={{ minWidth }}>
+      {/*
+        * `role="table"` written out, and the row groups, rows and cells carry
+        * theirs at every call site for the same reason: below 640px
+        * `.data-table--stack` sets `display: block` on all of them to make the
+        * card layout, and a display change strips the implicit table roles in
+        * every browser. Without these, every list in the app is announced on a
+        * phone -- and at 400% desktop zoom -- as unstructured blocks with no
+        * row or column relationships. `tests/ops/stacked-table.test.ts` keeps
+        * the call sites honest.
+        */}
+      <table role="table" className="data-table data-table--stack" style={{ minWidth }}>
         {children}
       </table>
     </div>
@@ -130,7 +140,7 @@ export function AmountCell({
   'data-label': dataLabel,
 }: AmountCellProps) {
   return (
-    <td className={`cell-num ${className}`.trim()} data-label={dataLabel}>
+    <td role="cell" className={`cell-num ${className}`.trim()} data-label={dataLabel}>
       {cents === undefined ? children : formatCents(cents)}
     </td>
   );

@@ -367,20 +367,20 @@ export default async function AccessStepPage() {
               What the configuration file already holds, and whether this running process is
               using it
             </caption>
-            <thead>
-              <tr>
-                <th scope="col">Key</th>
-                <th scope="col">On disk</th>
-                <th scope="col">In this process</th>
+            <thead role="rowgroup">
+              <tr role="row">
+                <th role="columnheader" scope="col">Key</th>
+                <th role="columnheader" scope="col">On disk</th>
+                <th role="columnheader" scope="col">In this process</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody role="rowgroup">
               {summary.map((entry) => (
-                <tr key={entry.key}>
-                  <td data-label="Key" className="num t-small">
+                <tr role="row" key={entry.key}>
+                  <td role="cell" data-label="Key" className="num t-small">
                     {entry.key}
                   </td>
-                  <td data-label="On disk" className="t-small">
+                  <td role="cell" data-label="On disk" className="t-small">
                     {!entry.present ? (
                       <span className="text-subtle">Not set</span>
                     ) : entry.secret ? (
@@ -395,7 +395,7 @@ export default async function AccessStepPage() {
                       <span className="num">{entry.value}</span>
                     )}
                   </td>
-                  <td data-label="In this process" className="t-small text-muted">
+                  <td role="cell" data-label="In this process" className="t-small text-muted">
                     {/*
                       A key present on disk but absent from `effects` means
                       this process has no value for it, which is exactly what

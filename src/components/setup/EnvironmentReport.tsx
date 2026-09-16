@@ -55,30 +55,30 @@ export function EnvironmentReport({ checks }: { checks: readonly EnvironmentChec
         <caption className="sr-only">
           Environment checks, each with what was found and what to do about it
         </caption>
-        <thead>
-          <tr>
-            <th scope="col">Check</th>
-            <th scope="col">Result</th>
-            <th scope="col">What was found</th>
-            <th scope="col">What to do</th>
+        <thead role="rowgroup">
+          <tr role="row">
+            <th role="columnheader" scope="col">Check</th>
+            <th role="columnheader" scope="col">Result</th>
+            <th role="columnheader" scope="col">What was found</th>
+            <th role="columnheader" scope="col">What to do</th>
           </tr>
         </thead>
-        <tbody>
+        <tbody role="rowgroup">
           {checks.map((check) => (
-            <tr key={check.id}>
-              <td data-label="Check">
+            <tr role="row" key={check.id}>
+              <td role="cell" data-label="Check">
                 {check.title}
                 <span className="block num t-micro text-subtle">
                   {check.variables.join(' · ')}
                 </span>
               </td>
-              <td data-label="Result">
+              <td role="cell" data-label="Result">
                 <StatusPill status={check.status} />
               </td>
-              <td data-label="What was found" className="t-small">
+              <td role="cell" data-label="What was found" className="t-small">
                 {check.detail}
               </td>
-              <td data-label="What to do" className="t-small text-muted">
+              <td role="cell" data-label="What to do" className="t-small text-muted">
                 {check.remedy ?? <span className="text-subtle">Nothing.</span>}
               </td>
             </tr>

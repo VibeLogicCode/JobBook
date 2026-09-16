@@ -1089,18 +1089,18 @@ export default async function SchedulePage({
         </Card>
       ) : (
         <TableWrap minWidth="72rem">
-          <thead>
-            <tr>
-              <th scope="col">Task</th>
-              <th scope="col">Who</th>
-              <th scope="col">Waits on</th>
-              <th scope="col">Planned</th>
-              <th scope="col">Actual</th>
-              <th scope="col">Status</th>
-              <th scope="col">Manage</th>
+          <thead role="rowgroup">
+            <tr role="row">
+              <th role="columnheader" scope="col">Task</th>
+              <th role="columnheader" scope="col">Who</th>
+              <th role="columnheader" scope="col">Waits on</th>
+              <th role="columnheader" scope="col">Planned</th>
+              <th role="columnheader" scope="col">Actual</th>
+              <th role="columnheader" scope="col">Status</th>
+              <th role="columnheader" scope="col">Manage</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody role="rowgroup">
             {rows.map((row) => {
               const isVoid = row.recordStatus === 'void';
               const code = row.costCodeId ? codeById.get(row.costCodeId) : undefined;
@@ -1113,8 +1113,8 @@ export default async function SchedulePage({
               const onIt = liveFor(row.id);
 
               return (
-                <tr key={row.id}>
-                  <td data-label="Task">
+                <tr role="row" key={row.id}>
+                  <td role="cell" data-label="Task">
                     {row.name}
                     <span className="block t-small text-subtle">
                       {[trade?.name, code ? `${code.code} — ${code.name}` : null]
@@ -1122,7 +1122,7 @@ export default async function SchedulePage({
                         .join(' · ') || 'No trade recorded'}
                     </span>
                   </td>
-                  <td data-label="Who" className="t-small">
+                  <td role="cell" data-label="Who" className="t-small">
                     {onIt.length === 0 ? (
                       // Said in words rather than left blank, for the reason
                       // "Stands alone" is: a blank reads as missing data, and
@@ -1149,7 +1149,7 @@ export default async function SchedulePage({
                       })
                     )}
                   </td>
-                  <td data-label="Waits on" className="t-small text-muted">
+                  <td role="cell" data-label="Waits on" className="t-small text-muted">
                     {predecessorName === null ? (
                       // Said in words rather than left blank. A blank here
                       // reads as missing data; "stands alone" is the promise
@@ -1164,7 +1164,7 @@ export default async function SchedulePage({
                       </>
                     )}
                   </td>
-                  <td data-label="Planned" className="t-small">
+                  <td role="cell" data-label="Planned" className="t-small">
                     <span className="num block">
                       {row.isMilestone
                         ? day(row.plannedStart)
@@ -1174,7 +1174,7 @@ export default async function SchedulePage({
                       {row.isMilestone ? 'Milestone' : durationLabel(row.plannedStart, row.plannedEnd)}
                     </span>
                   </td>
-                  <td data-label="Actual" className="t-small text-muted">
+                  <td role="cell" data-label="Actual" className="t-small text-muted">
                     {row.actualStart === null ? (
                       'Not started'
                     ) : (
@@ -1184,7 +1184,7 @@ export default async function SchedulePage({
                       </span>
                     )}
                   </td>
-                  <td data-label="Status">
+                  <td role="cell" data-label="Status">
                     <span className="flex flex-wrap items-center gap-1">
                       {isVoid ? <Pill tone="negative">Void</Pill> : null}
                       {isVoid ? null : (
@@ -1195,7 +1195,7 @@ export default async function SchedulePage({
                       {late ? <Pill tone="warning">Late</Pill> : null}
                     </span>
                   </td>
-                  <td data-label="Manage">
+                  <td role="cell" data-label="Manage">
                     <span className="flex flex-wrap items-center gap-2">
                     <WhoSheet
                       taskId={row.id}

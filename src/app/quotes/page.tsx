@@ -204,19 +204,19 @@ export default async function QuotesPage({
         )
       ) : (
         <TableWrap minWidth="44rem">
-          <thead>
-            <tr>
-              <th scope="col">Project</th>
-              <th scope="col">Number</th>
-              <th scope="col">Customer</th>
-              <th scope="col">Status</th>
-              <th scope="col" className="cell-num">Total</th>
+          <thead role="rowgroup">
+            <tr role="row">
+              <th role="columnheader" scope="col">Project</th>
+              <th role="columnheader" scope="col">Number</th>
+              <th role="columnheader" scope="col">Customer</th>
+              <th role="columnheader" scope="col">Status</th>
+              <th role="columnheader" scope="col" className="cell-num">Total</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody role="rowgroup">
             {rows.map((row) => (
-              <tr key={row.id}>
-                <td data-label="Project">
+              <tr role="row" key={row.id}>
+                <td role="cell" data-label="Project">
                   {/* Wrapped so the change-order marker sits beside the name
                       in the table and inside the card, at both widths. */}
                   <span className="flex flex-wrap items-center gap-x-2">
@@ -239,11 +239,11 @@ export default async function QuotesPage({
                     ) : null}
                   </span>
                 </td>
-                <td data-label="Number" className="num t-small text-muted">
+                <td role="cell" data-label="Number" className="num t-small text-muted">
                   {row.quoteNumber} v{row.version}
                 </td>
-                <td data-label="Customer">{row.customerName}</td>
-                <td data-label="Status">
+                <td role="cell" data-label="Customer">{row.customerName}</td>
+                <td role="cell" data-label="Status">
                   <Pill tone={statusTone(row.status, row.validUntil < today)}>
                     {row.validUntil < today && row.status === 'sent' ? 'Expired' : row.status}
                   </Pill>

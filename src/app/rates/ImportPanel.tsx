@@ -262,39 +262,39 @@ export function ImportPanel({
               </div>
 
               <TableWrap minWidth="62rem">
-                <thead>
-                  <tr>
-                    <th scope="col" className="cell-num">
+                <thead role="rowgroup">
+                  <tr role="row">
+                    <th role="columnheader" scope="col" className="cell-num">
                       Row
                     </th>
-                    <th scope="col">Code</th>
-                    <th scope="col">Description</th>
-                    <th scope="col">How</th>
-                    <th scope="col">Unit</th>
-                    <th scope="col" className="cell-num">
+                    <th role="columnheader" scope="col">Code</th>
+                    <th role="columnheader" scope="col">Description</th>
+                    <th role="columnheader" scope="col">How</th>
+                    <th role="columnheader" scope="col">Unit</th>
+                    <th role="columnheader" scope="col" className="cell-num">
                       Cost
                     </th>
-                    <th scope="col" className="cell-num">
+                    <th role="columnheader" scope="col" className="cell-num">
                       Sell
                     </th>
-                    <th scope="col">What will happen</th>
+                    <th role="columnheader" scope="col">What will happen</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody role="rowgroup">
                   {plan.rows.map((row) =>
                     row.outcome === 'create' ? (
-                      <tr key={row.rowNumber}>
-                        <td data-label="Row" className="cell-num">
+                      <tr role="row" key={row.rowNumber}>
+                        <td role="cell" data-label="Row" className="cell-num">
                           {row.rowNumber}
                         </td>
-                        <td data-label="Code" className="num t-small">
+                        <td role="cell" data-label="Code" className="num t-small">
                           {row.item.code}
                         </td>
-                        <td data-label="Description">{row.item.description}</td>
-                        <td data-label="How" className="t-small text-muted">
+                        <td role="cell" data-label="Description">{row.item.description}</td>
+                        <td role="cell" data-label="How" className="t-small text-muted">
                           {CALC_MODE_LABELS[row.item.calcMode]}
                         </td>
-                        <td data-label="Unit" className="t-small text-muted">
+                        <td role="cell" data-label="Unit" className="t-small text-muted">
                           {row.item.unitLabel === ''
                             ? row.item.calcMode === 'percent'
                               ? '%'
@@ -307,7 +307,7 @@ export function ImportPanel({
                         <AmountCell data-label="Sell">
                           {formatRate(row.item.sellRateTenThou)}
                         </AmountCell>
-                        <td data-label="What will happen">
+                        <td role="cell" data-label="What will happen">
                           <span className="flex flex-col gap-1">
                             <Pill tone="positive">Create</Pill>
                             {row.notes.map((note) => (
@@ -319,14 +319,14 @@ export function ImportPanel({
                         </td>
                       </tr>
                     ) : (
-                      <tr key={row.rowNumber}>
-                        <td data-label="Row" className="cell-num">
+                      <tr role="row" key={row.rowNumber}>
+                        <td role="cell" data-label="Row" className="cell-num">
                           {row.rowNumber}
                         </td>
-                        <td data-label="Row contents" className="num t-small text-muted" colSpan={6}>
+                        <td role="cell" data-label="Row contents" className="num t-small text-muted" colSpan={6}>
                           {row.cells.join(' · ').slice(0, 160) || '—'}
                         </td>
-                        <td data-label="What will happen">
+                        <td role="cell" data-label="What will happen">
                           <span className="flex flex-col gap-1">
                             <Pill tone="warning">Skipped</Pill>
                             <span className="t-small text-muted">{row.reason}</span>

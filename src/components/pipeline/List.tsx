@@ -60,18 +60,18 @@ export function PipelineList({
     // TABLE scrolls inside its own container -- never the width at which the
     // PAGE does.
     <TableWrap minWidth="54rem">
-      <thead>
-        <tr>
-          <th scope="col">Work</th>
-          <th scope="col">Number</th>
-          <th scope="col">Customer</th>
-          <th scope="col">Stage</th>
-          <th scope="col">Timing</th>
-          <th scope="col">Next</th>
-          <th scope="col" className="cell-num">Contract</th>
+      <thead role="rowgroup">
+        <tr role="row">
+          <th role="columnheader" scope="col">Work</th>
+          <th role="columnheader" scope="col">Number</th>
+          <th role="columnheader" scope="col">Customer</th>
+          <th role="columnheader" scope="col">Stage</th>
+          <th role="columnheader" scope="col">Timing</th>
+          <th role="columnheader" scope="col">Next</th>
+          <th role="columnheader" scope="col" className="cell-num">Contract</th>
         </tr>
       </thead>
-      <tbody>
+      <tbody role="rowgroup">
         {bands.map((band) => (
           <Fragment key={band.band}>
             {/* The two halves, said in the table the way the board says them in
@@ -79,8 +79,8 @@ export function PipelineList({
                 opportunity on one view and a job on the other. `group-band` is
                 the house band row: it sticks under the header on a monitor and
                 becomes a full-bleed strip on a phone. */}
-            <tr className="group-band">
-              <td colSpan={7} data-label="Pipeline">
+            <tr role="row" className="group-band">
+              <td role="cell" colSpan={7} data-label="Pipeline">
                 <span className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
                   <span>{band.heading}</span>
                   <span className="num t-small text-muted">{band.count}</span>
@@ -105,13 +105,13 @@ export function PipelineList({
               const starts = spellStarts(card, today);
 
               return (
-                <tr key={card.id}>
+                <tr role="row" key={card.id}>
                   {/* The headline cell on a phone, which is why the town rides
                       with it: a contractor names a job by where it is, and the
                       board learned that before this table did. The noun beside
                       it is `workNoun`, derived from the accepted quote and never
                       from the stage. */}
-                  <td data-label="Work">
+                  <td role="cell" data-label="Work">
                     <Link
                       href={`/projects/${card.id}`}
                       className="break-words text-accent-text hover:underline"
@@ -124,13 +124,13 @@ export function PipelineList({
                     </span>
                   </td>
 
-                  <td data-label="Number" className="num t-small text-muted">
+                  <td role="cell" data-label="Number" className="num t-small text-muted">
                     {card.projectNumber}
                   </td>
 
-                  <td data-label="Customer">{card.customerName}</td>
+                  <td role="cell" data-label="Customer">{card.customerName}</td>
 
-                  <td data-label="Stage">
+                  <td role="cell" data-label="Stage">
                     <Pill tone={stageTone(card.stage)}>{PROJECT_STAGES[card.stage]}</Pill>
                   </td>
 
@@ -141,7 +141,7 @@ export function PipelineList({
                       for exactly that reason, so a date is never printed twice.
                       Both strings name themselves, which is why the column
                       heading can be one word. */}
-                  <td data-label="Timing" className="t-small text-muted">
+                  <td role="cell" data-label="Timing" className="t-small text-muted">
                     {/* ONE child, not two. Below `sm` the cell is a flex row
                         holding its label and its value, so two sibling spans
                         become two flex items and the stacked card spreads the
@@ -167,7 +167,7 @@ export function PipelineList({
                       em-dash: `td:empty` shortens the cell away on a phone, and
                       a labelled dash on six of eight cards is six lines of
                       nothing between him and the work. */}
-                  <td data-label="Next">
+                  <td role="cell" data-label="Next">
                     {reminder && urgency ? (
                       <span className="flex flex-wrap items-center gap-1.5 t-small">
                         <Pill tone={URGENCY_TONES[urgency]}>

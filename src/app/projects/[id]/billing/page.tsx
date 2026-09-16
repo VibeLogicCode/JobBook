@@ -405,29 +405,29 @@ export default async function BillingPage({
               <caption className="sr-only">
                 Invoices issued against {project.projectNumber}, newest first
               </caption>
-              <thead>
-                <tr>
-                  <th scope="col">Invoice</th>
-                  <th scope="col">Billed</th>
-                  <th scope="col">Issued</th>
-                  <th scope="col" className="cell-num">
+              <thead role="rowgroup">
+                <tr role="row">
+                  <th role="columnheader" scope="col">Invoice</th>
+                  <th role="columnheader" scope="col">Billed</th>
+                  <th role="columnheader" scope="col">Issued</th>
+                  <th role="columnheader" scope="col" className="cell-num">
                     Complete
                   </th>
-                  <th scope="col" className="cell-num">
+                  <th role="columnheader" scope="col" className="cell-num">
                     Draw
                   </th>
-                  <th scope="col" className="cell-num">
+                  <th role="columnheader" scope="col" className="cell-num">
                     Holdback
                   </th>
-                  <th scope="col" className="cell-num">
+                  <th role="columnheader" scope="col" className="cell-num">
                     Tax
                   </th>
-                  <th scope="col" className="cell-num">
+                  <th role="columnheader" scope="col" className="cell-num">
                     Total
                   </th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody role="rowgroup">
                 {invoices.map((invoice) => (
                   <InvoiceRow key={invoice.id} invoice={invoice} />
                 ))}
@@ -520,60 +520,60 @@ function PreviewTable({
       <caption className="sr-only">
         How this invoice is priced, from the contract value to the amount due
       </caption>
-      <thead>
-        <tr>
-          <th scope="col">What</th>
-          <th scope="col">Worked out from</th>
-          <th scope="col" className="cell-num">
+      <thead role="rowgroup">
+        <tr role="row">
+          <th role="columnheader" scope="col">What</th>
+          <th role="columnheader" scope="col">Worked out from</th>
+          <th role="columnheader" scope="col" className="cell-num">
             Amount
           </th>
         </tr>
       </thead>
-      <tbody>
-        <tr>
-          <td data-label="What">Contract value, before tax</td>
-          <td data-label="Worked out from" className="t-small text-muted">
+      <tbody role="rowgroup">
+        <tr role="row">
+          <td role="cell" data-label="What">Contract value, before tax</td>
+          <td role="cell" data-label="Worked out from" className="t-small text-muted">
             accepted quotes
           </td>
           <AmountCell data-label="Amount" cents={contractCents} />
         </tr>
-        <tr>
-          <td data-label="What">Work earned to date</td>
-          <td data-label="Worked out from" className="t-small text-muted">
+        <tr role="row">
+          <td role="cell" data-label="What">Work earned to date</td>
+          <td role="cell" data-label="Worked out from" className="t-small text-muted">
             {computed.percentCompleteTenThou === null
               ? null
               : `${formatPercent(computed.percentCompleteTenThou)} of the contract`}
           </td>
           <AmountCell data-label="Amount" cents={earnedToDateCents} />
         </tr>
-        <tr>
-          <td data-label="What">Less billed by earlier invoices</td>
-          <td data-label="Worked out from" className="t-small text-muted">
+        <tr role="row">
+          <td role="cell" data-label="What">Less billed by earlier invoices</td>
+          <td role="cell" data-label="Worked out from" className="t-small text-muted">
             gross of holdback, deposits excluded
           </td>
           <AmountCell data-label="Amount" cents={negated(state.previouslyBilledCents)} />
         </tr>
-        <tr>
-          <td data-label="What" className="font-semibold">
+        <tr role="row">
+          <td role="cell" data-label="What" className="font-semibold">
             This draw
           </td>
-          <td data-label="Worked out from" className="t-small text-muted">
+          <td role="cell" data-label="Worked out from" className="t-small text-muted">
             before tax
           </td>
           <AmountCell data-label="Amount" className="font-semibold" cents={computed.subtotalCents} />
         </tr>
-        <tr>
-          <td data-label="What">Holdback withheld</td>
-          <td data-label="Worked out from" className="t-small text-muted">
+        <tr role="row">
+          <td role="cell" data-label="What">Holdback withheld</td>
+          <td role="cell" data-label="Worked out from" className="t-small text-muted">
             {formatPercent(preview.holdbackPctTenThou)} of work billed to date
           </td>
           <AmountCell data-label="Amount" cents={negated(computed.holdbackCents)} />
         </tr>
-        <tr>
-          <td data-label="What" className="font-semibold">
+        <tr role="row">
+          <td role="cell" data-label="What" className="font-semibold">
             Taxable base
           </td>
-          <td data-label="Worked out from" className="t-small text-muted">
+          <td role="cell" data-label="Worked out from" className="t-small text-muted">
             {taxDeferredOnHoldback
               ? 'the draw less the holdback, because tax on a holdback is not payable until the holdback is paid out'
               : 'the whole draw, because this tenant defers no tax on holdback'}
@@ -586,18 +586,18 @@ function PreviewTable({
         </tr>
 
         {computed.taxes.length === 0 ? (
-          <tr>
-            <td data-label="What">No tax</td>
-            <td data-label="Worked out from" className="t-small text-muted">
+          <tr role="row">
+            <td role="cell" data-label="What">No tax</td>
+            <td role="cell" data-label="Worked out from" className="t-small text-muted">
               no rate in force on {computed.issueDate}, or the customer is exempt
             </td>
             <AmountCell data-label="Amount" cents={0} />
           </tr>
         ) : (
           computed.taxes.map((tax) => (
-            <tr key={`${tax.label}-${tax.rateTenThou}`}>
-              <td data-label="What">{tax.label}</td>
-              <td data-label="Worked out from" className="t-small text-muted">
+            <tr role="row" key={`${tax.label}-${tax.rateTenThou}`}>
+              <td role="cell" data-label="What">{tax.label}</td>
+              <td role="cell" data-label="Worked out from" className="t-small text-muted">
                 {formatPercent(tax.rateTenThou)} of {formatCents(tax.taxableBaseCents)}
               </td>
               <AmountCell data-label="Amount" cents={tax.taxAmountCents} />
@@ -605,20 +605,20 @@ function PreviewTable({
           ))
         )}
 
-        <tr>
-          <td data-label="What" className="font-semibold">
+        <tr role="row">
+          <td role="cell" data-label="What" className="font-semibold">
             Invoice total
           </td>
-          <td data-label="Worked out from" className="t-small text-muted">
+          <td role="cell" data-label="Worked out from" className="t-small text-muted">
             the draw less the holdback, plus tax
           </td>
           <AmountCell data-label="Amount" className="font-semibold" cents={computed.totalCents} />
         </tr>
-        <tr>
-          <td data-label="What" className="font-semibold">
+        <tr role="row">
+          <td role="cell" data-label="What" className="font-semibold">
             Amount due
           </td>
-          <td data-label="Worked out from" className="t-small text-muted">
+          <td role="cell" data-label="Worked out from" className="t-small text-muted">
             {computed.depositAppliedCents === 0
               ? 'no deposit applied'
               : `less ${formatCents(computed.depositAppliedCents)} of deposit already invoiced`}
@@ -639,8 +639,8 @@ function InvoiceRow({ invoice }: { invoice: InvoiceSummary }) {
   const status = INVOICE_STATUS[invoice.status];
 
   return (
-    <tr>
-      <td data-label="Invoice">
+    <tr role="row">
+      <td role="cell" data-label="Invoice">
         <span className="flex flex-wrap items-center gap-2">
           <span className={`num ${voided ? 'text-muted line-through' : ''}`.trim()}>
             {invoice.invoiceNumber}
@@ -655,8 +655,8 @@ function InvoiceRow({ invoice }: { invoice: InvoiceSummary }) {
           <span className="block t-small text-muted">{invoice.voidReason}</span>
         ) : null}
       </td>
-      <td data-label="Billed">{INVOICE_KINDS[invoice.kind]}</td>
-      <td data-label="Issued" className="num t-small">
+      <td role="cell" data-label="Billed">{INVOICE_KINDS[invoice.kind]}</td>
+      <td role="cell" data-label="Issued" className="num t-small">
         {invoice.issueDate}
       </td>
       <AmountCell data-label="Complete">

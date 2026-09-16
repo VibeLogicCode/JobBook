@@ -114,27 +114,27 @@ export default async function CustomersPage({
         )
       ) : (
         <TableWrap minWidth="40rem">
-          <thead>
-            <tr>
-              <th scope="col">Name</th>
-              <th scope="col">Type</th>
-              <th scope="col">Phone</th>
-              <th scope="col">City</th>
-              <th scope="col">Tax</th>
+          <thead role="rowgroup">
+            <tr role="row">
+              <th role="columnheader" scope="col">Name</th>
+              <th role="columnheader" scope="col">Type</th>
+              <th role="columnheader" scope="col">Phone</th>
+              <th role="columnheader" scope="col">City</th>
+              <th role="columnheader" scope="col">Tax</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody role="rowgroup">
             {rows.map((row) => (
-              <tr key={row.id}>
-                <td data-label="Name">
+              <tr role="row" key={row.id}>
+                <td role="cell" data-label="Name">
                   <Link href={`/customers/${row.id}`} className="text-accent-text hover:underline">
                     {row.name}
                   </Link>
                 </td>
-                <td data-label="Type" className="t-small text-muted">{row.customerType}</td>
-                <td data-label="Phone" className="num t-small">{row.phone ?? '—'}</td>
-                <td data-label="City" className="t-small text-muted">{row.city ?? '—'}</td>
-                <td data-label="Tax">
+                <td role="cell" data-label="Type" className="t-small text-muted">{row.customerType}</td>
+                <td role="cell" data-label="Phone" className="num t-small">{row.phone ?? '—'}</td>
+                <td role="cell" data-label="City" className="t-small text-muted">{row.city ?? '—'}</td>
+                <td role="cell" data-label="Tax">
                   {row.isTaxExempt ? (
                     <Pill tone="warning">Exempt</Pill>
                   ) : (

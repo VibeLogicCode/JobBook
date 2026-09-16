@@ -114,27 +114,27 @@ export function ScheduleTemplateTasks({
       </p>
 
       <TableWrap minWidth="76rem">
-        <thead>
-          <tr>
-            <th scope="col">Task</th>
-            <th scope="col">Trade</th>
-            <th scope="col">Duration</th>
-            <th scope="col" className="cell-num">
+        <thead role="rowgroup">
+          <tr role="row">
+            <th role="columnheader" scope="col">Task</th>
+            <th role="columnheader" scope="col">Trade</th>
+            <th role="columnheader" scope="col">Duration</th>
+            <th role="columnheader" scope="col" className="cell-num">
               At sample scope
             </th>
-            <th scope="col">Waits on</th>
-            <th scope="col">Condition</th>
-            <th scope="col">Flags</th>
-            <th scope="col" className="cell-num">
+            <th role="columnheader" scope="col">Waits on</th>
+            <th role="columnheader" scope="col">Condition</th>
+            <th role="columnheader" scope="col">Flags</th>
+            <th role="columnheader" scope="col" className="cell-num">
               Order
             </th>
-            <th scope="col">Change</th>
+            <th role="columnheader" scope="col">Change</th>
           </tr>
         </thead>
-        <tbody>
+        <tbody role="rowgroup">
           {tasks.length === 0 ? (
-            <tr>
-              <td data-label="Task" colSpan={9}>
+            <tr role="row">
+              <td role="cell" data-label="Task" colSpan={9}>
                 No tasks yet. Add one from the button above — until then, importing this template
                 adds nothing to a job.
               </td>
@@ -180,22 +180,22 @@ export function ScheduleTemplateTasks({
             const sampleDays = durationDaysOf(toTemplateTask(task), SAMPLE_SCOPE);
 
             return (
-              <tr key={task.id}>
-                <td data-label="Task">{task.name}</td>
-                <td data-label="Trade" className="t-small text-muted">
+              <tr role="row" key={task.id}>
+                <td role="cell" data-label="Task">{task.name}</td>
+                <td role="cell" data-label="Trade" className="t-small text-muted">
                   {task.tradeId ? (tradeNameById.get(task.tradeId) ?? '—') : '—'}
                 </td>
-                <td data-label="Duration" className="t-small">
+                <td role="cell" data-label="Duration" className="t-small">
                   {durationPhrase(task, areaUnit, formatQty)}
                 </td>
                 <AmountCell data-label="At sample scope">{dayCount(sampleDays)}</AmountCell>
-                <td data-label="Waits on" className="t-small text-muted">
+                <td role="cell" data-label="Waits on" className="t-small text-muted">
                   {waitsOnPhrase(predecessorName, task.lagDays)}
                 </td>
-                <td data-label="Condition" className="t-small">
+                <td role="cell" data-label="Condition" className="t-small">
                   {conditionPhrase(task, rateItemCodeById)}
                 </td>
-                <td data-label="Flags">
+                <td role="cell" data-label="Flags">
                   {task.isMilestone ? (
                     <Pill tone="info">Milestone</Pill>
                   ) : (
@@ -203,7 +203,7 @@ export function ScheduleTemplateTasks({
                   )}
                 </td>
                 <AmountCell data-label="Order">{task.sortOrder}</AmountCell>
-                <td data-label="Change">
+                <td role="cell" data-label="Change">
                   <SheetButton
                     trigger="Change…"
                     label={`Change ${task.name}`}

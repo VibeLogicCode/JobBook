@@ -166,22 +166,22 @@ export default async function ReminderRulesPage() {
         </Notice>
 
         <TableWrap minWidth="76rem" className="mt-4">
-          <thead>
-            <tr>
-              <th scope="col">Rule</th>
-              <th scope="col">Watches for</th>
-              <th scope="col">Due</th>
-              <th scope="col">Kind</th>
-              <th scope="col">What it says</th>
-              <th scope="col">Has produced</th>
-              <th scope="col">Status</th>
-              <th scope="col">Manage</th>
+          <thead role="rowgroup">
+            <tr role="row">
+              <th role="columnheader" scope="col">Rule</th>
+              <th role="columnheader" scope="col">Watches for</th>
+              <th role="columnheader" scope="col">Due</th>
+              <th role="columnheader" scope="col">Kind</th>
+              <th role="columnheader" scope="col">What it says</th>
+              <th role="columnheader" scope="col">Has produced</th>
+              <th role="columnheader" scope="col">Status</th>
+              <th role="columnheader" scope="col">Manage</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody role="rowgroup">
             {rows.length === 0 ? (
-              <tr>
-                <td data-label="Rule" colSpan={8}>
+              <tr role="row">
+                <td role="cell" data-label="Rule" colSpan={8}>
                   No rules yet. The five shipped defaults are loaded by the hourly evaluation
                   itself, so they appear here after the first run — or add one of your own above.
                 </td>
@@ -196,9 +196,9 @@ export default async function ReminderRulesPage() {
               const stageMissing = watchesStage && row.triggerStage === null;
 
               return (
-                <tr key={row.id}>
-                  <td data-label="Rule">{row.name}</td>
-                  <td data-label="Watches for" className="t-small text-muted">
+                <tr role="row" key={row.id}>
+                  <td role="cell" data-label="Rule">{row.name}</td>
+                  <td role="cell" data-label="Watches for" className="t-small text-muted">
                     {TRIGGER_LABELS[row.trigger]}
                     {watchesStage
                       ? row.triggerStage
@@ -206,13 +206,13 @@ export default async function ReminderRulesPage() {
                         : ' — no stage set, so it watches nothing'
                       : ''}
                   </td>
-                  <td data-label="Due" className="t-small text-muted">
+                  <td role="cell" data-label="Due" className="t-small text-muted">
                     {offsetPhrase(row.offsetDays, row.trigger)}
                   </td>
-                  <td data-label="Kind" className="t-small text-muted">
+                  <td role="cell" data-label="Kind" className="t-small text-muted">
                     {REMINDER_KINDS[row.reminderKind]}
                   </td>
-                  <td data-label="What it says" className="t-small text-muted">
+                  <td role="cell" data-label="What it says" className="t-small text-muted">
                     {row.titleTemplate}
                   </td>
                   <AmountCell data-label="Has produced">
@@ -220,7 +220,7 @@ export default async function ReminderRulesPage() {
                       ? 'Nothing yet'
                       : `${producedCount} · ${openCount} open`}
                   </AmountCell>
-                  <td data-label="Status">
+                  <td role="cell" data-label="Status">
                     <span className="flex flex-wrap items-center gap-1">
                       {isVoid ? <Pill tone="negative">Void</Pill> : null}
                       {!isVoid && row.isActive ? <Pill tone="positive">On</Pill> : null}
@@ -230,7 +230,7 @@ export default async function ReminderRulesPage() {
                       ) : null}
                     </span>
                   </td>
-                  <td data-label="Manage">
+                  <td role="cell" data-label="Manage">
                     {/* The same press-then-panel the cost code and rate lists
                         take: a disclosure here pushed every rule below this one
                         off the screen, and the list is what somebody is reading

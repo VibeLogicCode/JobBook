@@ -58,11 +58,34 @@ type InputProps = Omit<React.ComponentProps<'input'>, 'className'> & {
 };
 
 export function Field({ label, hint, numeric = false, more, moreLabel, ...input }: InputProps) {
+  /**
+   * The hint is a DESCRIPTION, not part of the name.
+   *
+   * It used to sit inside the <label>, which meant a screen reader read the
+   * whole sentence as the field's accessible name: "Site street, where the
+   * work happens, which is not always where the customer lives, edit text".
+   * The settings twin already did this correctly with `aria-describedby`;
+   * this is that same treatment.
+   *
+   * Derived from the control's own id so no call site has to invent one, and
+   * absent entirely when there is no hint -- a dangling `aria-describedby`
+   * pointing at nothing is worse than none.
+   */
+  const hintId = hint && input.id ? `${input.id}-hint` : undefined;
+
   const control = (
     <label className="grid gap-1">
       <Legend label={label} required={input.required} />
-      <input {...input} className={`field min-h-11 ${numeric ? 'field-num' : ''}`.trim()} />
-      {hint ? <span className="t-small text-subtle">{hint}</span> : null}
+      <input
+        {...input}
+        aria-describedby={hintId ?? input['aria-describedby']}
+        className={`field min-h-11 ${numeric ? 'field-num' : ''}`.trim()}
+      />
+      {hint ? (
+        <span id={hintId} className="t-small text-subtle">
+          {hint}
+        </span>
+      ) : null}
     </label>
   );
 

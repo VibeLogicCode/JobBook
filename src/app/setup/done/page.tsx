@@ -122,17 +122,17 @@ export default async function DoneStepPage() {
       <ActionForm action={finishSetup} submitLabel="Finish setup">
         <TableWrap minWidth="30rem">
           <caption className="sr-only">What first-run setup created</caption>
-          <thead>
-            <tr>
-              <th scope="col">Setting</th>
-              <th scope="col">Stored value</th>
+          <thead role="rowgroup">
+            <tr role="row">
+              <th role="columnheader" scope="col">Setting</th>
+              <th role="columnheader" scope="col">Stored value</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody role="rowgroup">
             {rows.map((row) => (
-              <tr key={row.label}>
-                <td data-label="Setting">{row.label}</td>
-                <td data-label="Stored value" className="t-small">
+              <tr role="row" key={row.label}>
+                <td role="cell" data-label="Setting">{row.label}</td>
+                <td role="cell" data-label="Stored value" className="t-small">
                   {row.value}
                 </td>
               </tr>

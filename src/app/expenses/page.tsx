@@ -820,23 +820,23 @@ export default async function ExpensesPage({
             {chosenProject.number} — {chosenProject.name}, by cost code
           </h2>
           <TableWrap minWidth="32rem">
-            <thead>
-              <tr>
-                <th scope="col">Cost code</th>
-                <th scope="col">Entries</th>
-                <th scope="col">Cost</th>
+            <thead role="rowgroup">
+              <tr role="row">
+                <th role="columnheader" scope="col">Cost code</th>
+                <th role="columnheader" scope="col">Entries</th>
+                <th role="columnheader" scope="col">Cost</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody role="rowgroup">
               {codeGroups.map((group) => (
-                <tr key={group.label}>
-                  <td data-label="Cost code">{group.label}</td>
+                <tr role="row" key={group.label}>
+                  <td role="cell" data-label="Cost code">{group.label}</td>
                   <AmountCell data-label="Entries">{group.count}</AmountCell>
                   <AmountCell data-label="Cost" cents={group.cents} />
                 </tr>
               ))}
-              <tr>
-                <td data-label="Cost code" className="font-semibold">
+              <tr role="row">
+                <td role="cell" data-label="Cost code" className="font-semibold">
                   Total spent
                 </td>
                 <AmountCell data-label="Entries">{live.length}</AmountCell>
@@ -875,34 +875,34 @@ export default async function ExpensesPage({
         )
       ) : (
         <TableWrap minWidth="72rem">
-          <thead>
-            <tr>
-              <th scope="col">Date</th>
-              <th scope="col">Job</th>
-              <th scope="col">What</th>
-              <th scope="col">Cost code</th>
-              <th scope="col">Paid by</th>
-              <th scope="col">Subtotal</th>
-              <th scope="col">Tax</th>
-              <th scope="col">Total</th>
-              <th scope="col">Status</th>
-              <th scope="col">Manage</th>
+          <thead role="rowgroup">
+            <tr role="row">
+              <th role="columnheader" scope="col">Date</th>
+              <th role="columnheader" scope="col">Job</th>
+              <th role="columnheader" scope="col">What</th>
+              <th role="columnheader" scope="col">Cost code</th>
+              <th role="columnheader" scope="col">Paid by</th>
+              <th role="columnheader" scope="col">Subtotal</th>
+              <th role="columnheader" scope="col">Tax</th>
+              <th role="columnheader" scope="col">Total</th>
+              <th role="columnheader" scope="col">Status</th>
+              <th role="columnheader" scope="col">Manage</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody role="rowgroup">
             {rows.map((row) => {
               const isVoid = row.recordStatus === 'void';
               const isMileage = row.kind === 'mileage';
 
               return (
-                <tr key={row.id}>
-                  <td data-label="Date" className="num">
+                <tr role="row" key={row.id}>
+                  <td role="cell" data-label="Date" className="num">
                     {row.expenseDate}
                   </td>
-                  <td data-label="Job" className="t-small text-muted">
+                  <td role="cell" data-label="Job" className="t-small text-muted">
                     {row.projectNumber} — {row.projectName}
                   </td>
-                  <td data-label="What">
+                  <td role="cell" data-label="What">
                     {row.description}
                     <span className="block t-small text-subtle">
                       {isMileage
@@ -911,16 +911,16 @@ export default async function ExpensesPage({
                           'No vendor recorded'}
                     </span>
                   </td>
-                  <td data-label="Cost code" className="t-small text-muted">
+                  <td role="cell" data-label="Cost code" className="t-small text-muted">
                     {row.costCode === null ? 'Not coded' : `${row.costCode} — ${row.costCodeName}`}
                   </td>
-                  <td data-label="Paid by" className="t-small text-muted">
+                  <td role="cell" data-label="Paid by" className="t-small text-muted">
                     {isMileage ? 'An allowance, not a payment' : (row.paymentMethodName ?? '—')}
                   </td>
                   <AmountCell data-label="Subtotal" cents={row.subtotalCents} />
                   <AmountCell data-label="Tax" cents={row.taxTotalCents} />
                   <AmountCell data-label="Total" cents={row.totalCents} />
-                  <td data-label="Status">
+                  <td role="cell" data-label="Status">
                     <span className="flex flex-wrap items-center gap-1">
                       {isVoid ? <Pill tone="negative">Void</Pill> : null}
                       {!isVoid && row.status === 'posted' ? (
@@ -940,7 +940,7 @@ export default async function ExpensesPage({
                       ) : null}
                     </span>
                   </td>
-                  <td data-label="Manage">
+                  <td role="cell" data-label="Manage">
                     <SheetButton
                       trigger="Open…"
                       label={`Open ${row.description}`}

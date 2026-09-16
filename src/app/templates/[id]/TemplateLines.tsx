@@ -235,26 +235,26 @@ export function TemplateLines({
       </p>
 
       <TableWrap minWidth="78rem">
-        <thead>
-          <tr>
-            <th scope="col">Item</th>
-            <th scope="col">Group</th>
-            <th scope="col">Quantity from</th>
-            <th scope="col" className="cell-num">
+        <thead role="rowgroup">
+          <tr role="row">
+            <th role="columnheader" scope="col">Item</th>
+            <th role="columnheader" scope="col">Group</th>
+            <th role="columnheader" scope="col">Quantity from</th>
+            <th role="columnheader" scope="col" className="cell-num">
               Multiplier
             </th>
-            <th scope="col">Derivation</th>
-            <th scope="col">Flags</th>
-            <th scope="col" className="cell-num">
+            <th role="columnheader" scope="col">Derivation</th>
+            <th role="columnheader" scope="col">Flags</th>
+            <th role="columnheader" scope="col" className="cell-num">
               Order
             </th>
-            <th scope="col">Change</th>
+            <th role="columnheader" scope="col">Change</th>
           </tr>
         </thead>
-        <tbody>
+        <tbody role="rowgroup">
           {lines.length === 0 ? (
-            <tr>
-              <td data-label="Item" colSpan={8}>
+            <tr role="row">
+              <td role="cell" data-label="Item" colSpan={8}>
                 No lines yet. Add one from the button above — until then, this template
                 generates an empty quote.
               </td>
@@ -275,19 +275,19 @@ export function TemplateLines({
                 : null;
 
             return (
-              <tr key={line.id}>
-                <td data-label="Item">
+              <tr role="row" key={line.id}>
+                <td role="cell" data-label="Item">
                   {line.description}
                   <span className="ml-2 num t-small text-subtle">{line.code}</span>
                 </td>
-                <td data-label="Group" className="t-small text-muted">
+                <td role="cell" data-label="Group" className="t-small text-muted">
                   {line.lineGroup}
                 </td>
-                <td data-label="Quantity from" className="t-small text-muted">
+                <td role="cell" data-label="Quantity from" className="t-small text-muted">
                   {quantityFromText(line)}
                 </td>
                 <AmountCell data-label="Multiplier">{multiplierText(line)}</AmountCell>
-                <td data-label="Derivation" className="t-small">
+                <td role="cell" data-label="Derivation" className="t-small">
                   {!readsQuantity ? (
                     <span className="text-muted">
                       {line.calcMode === 'flat'
@@ -327,7 +327,7 @@ export function TemplateLines({
                     </>
                   )}
                 </td>
-                <td data-label="Flags">
+                <td role="cell" data-label="Flags">
                   {line.isOptional || line.isAllowance ? (
                     <span className="flex flex-wrap gap-1">
                       {line.isOptional ? <Pill tone="info">Optional</Pill> : null}
@@ -338,7 +338,7 @@ export function TemplateLines({
                   )}
                 </td>
                 <AmountCell data-label="Order">{line.sortOrder}</AmountCell>
-                <td data-label="Change">
+                <td role="cell" data-label="Change">
                   {/* The same press-then-panel every row control in the
                       product uses. The title names the item, because the
                       table behind the sheet is dimmed and the sheet is now

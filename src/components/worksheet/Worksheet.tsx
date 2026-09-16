@@ -90,8 +90,8 @@ export function Worksheet({
   const [raising, setRaising] = useState(false);
   /** The line a trash press wants to void, held here rather than in the row
    *  itself so the confirmation renders once, outside the `<table>` -- a
-   *  `Sheet` is a fixed-position overlay, and a `<tbody>` may only contain
-   *  `<tr>`s. */
+   *  `Sheet` is a fixed-position overlay, and a `<tbody role="rowgroup">` may only contain
+   *  `<tr role="row">`s. */
   const [voidingLine, setVoidingLine] = useState<WireLine | null>(null);
   /**
    * Which header status button is asking to be confirmed.
@@ -451,21 +451,21 @@ export function Worksheet({
           <caption className="sr-only">
             Quote lines for {quote.quoteNumber}, grouped by trade
           </caption>
-          <thead>
-            <tr>
-              <th scope="col">Description</th>
-              <th scope="col" className="present-hide">Code</th>
-              <th scope="col" className="cell-num">Qty</th>
-              <th scope="col">Unit</th>
-              <th scope="col" className="cell-num">Rate</th>
-              <th scope="col" className="cell-num present-hide">Cost</th>
-              <th scope="col" className="cell-num">Amount</th>
-              <th scope="col" className="no-print">
+          <thead role="rowgroup">
+            <tr role="row">
+              <th role="columnheader" scope="col">Description</th>
+              <th role="columnheader" scope="col" className="present-hide">Code</th>
+              <th role="columnheader" scope="col" className="cell-num">Qty</th>
+              <th role="columnheader" scope="col">Unit</th>
+              <th role="columnheader" scope="col" className="cell-num">Rate</th>
+              <th role="columnheader" scope="col" className="cell-num present-hide">Cost</th>
+              <th role="columnheader" scope="col" className="cell-num">Amount</th>
+              <th role="columnheader" scope="col" className="no-print">
                 <span className="sr-only">Actions</span>
               </th>
             </tr>
           </thead>
-          <tbody>
+          <tbody role="rowgroup">
             {[...groups.byGroup.entries()].map(([group, groupLines]) => (
               <GroupRows
                 key={group}
@@ -733,7 +733,7 @@ function GroupRows({
   return (
     <>
       <tr className="group-band" role="row">
-        <td colSpan={7} data-label="Group">
+        <td role="cell" colSpan={7} data-label="Group">
           <button
             type="button"
             aria-expanded={open}
@@ -752,7 +752,7 @@ function GroupRows({
             </span>
           </button>
         </td>
-        <td className="no-print" aria-hidden />
+        <td role="cell" className="no-print" aria-hidden />
       </tr>
       {/* Collapsed rows leave the DOM rather than hiding: an input the owner
           cannot see is an input Enter must not descend into, and the descent

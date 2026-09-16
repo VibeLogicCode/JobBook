@@ -334,20 +334,20 @@ export default async function SyncSettingsPage() {
           <caption className="sr-only">
             The five environment variables the mirror reads, and whether each is set
           </caption>
-          <thead>
-            <tr>
-              <th scope="col">Variable</th>
-              <th scope="col">Set</th>
-              <th scope="col">What it is for</th>
+          <thead role="rowgroup">
+            <tr role="row">
+              <th role="columnheader" scope="col">Variable</th>
+              <th role="columnheader" scope="col">Set</th>
+              <th role="columnheader" scope="col">What it is for</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody role="rowgroup">
             {SYNC_ENVIRONMENT_VARIABLES.map((variable) => (
-              <tr key={variable}>
-                <td data-label="Variable" className="num t-small">
+              <tr role="row" key={variable}>
+                <td role="cell" data-label="Variable" className="num t-small">
                   {variable}
                 </td>
-                <td data-label="Set">
+                <td role="cell" data-label="Set">
                   <StatusPill
                     status={
                       variable === 'SHAREPOINT_SYNC_ENABLED'
@@ -360,7 +360,7 @@ export default async function SyncSettingsPage() {
                     }
                   />
                 </td>
-                <td data-label="What it is for" className="t-small text-muted">
+                <td role="cell" data-label="What it is for" className="t-small text-muted">
                   {VARIABLE_PURPOSE[variable]}
                 </td>
               </tr>
@@ -464,22 +464,22 @@ export default async function SyncSettingsPage() {
           <caption className="sr-only">
             Which document library each kind of attachment is mirrored to
           </caption>
-          <thead>
-            <tr>
-              <th scope="col">Attached to</th>
-              <th scope="col">Library</th>
+          <thead role="rowgroup">
+            <tr role="row">
+              <th role="columnheader" scope="col">Attached to</th>
+              <th role="columnheader" scope="col">Library</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody role="rowgroup">
             {entityTypeEnum.enumValues.map((kind) => {
               const library = LIBRARY_FOR_ATTACHMENT[kind];
               return (
-                <tr key={kind}>
-                  <td data-label="Attached to">
+                <tr role="row" key={kind}>
+                  <td role="cell" data-label="Attached to">
                     {ATTACHMENT_LABEL[kind] ?? kind}
                     <span className="block num t-micro text-subtle">{kind}</span>
                   </td>
-                  <td data-label="Library" className="t-small">
+                  <td role="cell" data-label="Library" className="t-small">
                     {library ? (
                       config.libraries[library]
                     ) : (
@@ -581,26 +581,26 @@ export default async function SyncSettingsPage() {
           <caption className="sr-only">
             Every mirrored list, its health verdict, its cursor position and its last error
           </caption>
-          <thead>
-            <tr>
-              <th scope="col">List</th>
-              <th scope="col">Verdict</th>
-              <th scope="col">Last success</th>
-              <th scope="col">Last run</th>
-              <th scope="col" className="cell-num">
+          <thead role="rowgroup">
+            <tr role="row">
+              <th role="columnheader" scope="col">List</th>
+              <th role="columnheader" scope="col">Verdict</th>
+              <th role="columnheader" scope="col">Last success</th>
+              <th role="columnheader" scope="col">Last run</th>
+              <th role="columnheader" scope="col" className="cell-num">
                 Rows
               </th>
-              <th scope="col" className="cell-num">
+              <th role="columnheader" scope="col" className="cell-num">
                 Failures
               </th>
-              <th scope="col">Cursor</th>
-              <th scope="col">Last error</th>
+              <th role="columnheader" scope="col">Cursor</th>
+              <th role="columnheader" scope="col">Last error</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody role="rowgroup">
             {[...report.rows, ...report.orphans].map((row) => (
-              <tr key={row.listName}>
-                <td data-label="List">
+              <tr role="row" key={row.listName}>
+                <td role="cell" data-label="List">
                   {row.listName}
                   {row.table === null ? (
                     <span className="ml-2">
@@ -608,28 +608,28 @@ export default async function SyncSettingsPage() {
                     </span>
                   ) : null}
                 </td>
-                <td data-label="Verdict">
+                <td role="cell" data-label="Verdict">
                   <span className="flex flex-wrap items-center gap-1">
                     <Pill tone={HEALTH_TONE[row.health]}>{HEALTH_LABEL[row.health]}</Pill>
                     {row.escalated ? <Pill tone="negative">Escalated</Pill> : null}
                   </span>
                 </td>
-                <td data-label="Last success" className="t-small">
+                <td role="cell" data-label="Last success" className="t-small">
                   {describeAge(row.sinceSuccessMs)}
                   <span className="block num t-micro text-subtle">
                     {stamp(row.lastSuccessAt)}
                   </span>
                 </td>
-                <td data-label="Last run" className="num t-small text-muted">
+                <td role="cell" data-label="Last run" className="num t-small text-muted">
                   {stamp(row.lastRunAt)}
                 </td>
-                <td data-label="Rows" className="cell-num">
+                <td role="cell" data-label="Rows" className="cell-num">
                   {row.rowsSynced}
                 </td>
-                <td data-label="Failures" className="cell-num">
+                <td role="cell" data-label="Failures" className="cell-num">
                   {row.consecutiveFailures}
                 </td>
-                <td data-label="Cursor" className="num t-micro text-subtle">
+                <td role="cell" data-label="Cursor" className="num t-micro text-subtle">
                   {row.cursorUpdatedAt ? (
                     <>
                       {stamp(row.cursorUpdatedAt)}
@@ -639,7 +639,7 @@ export default async function SyncSettingsPage() {
                     'not started'
                   )}
                 </td>
-                <td data-label="Last error" className="t-small text-muted">
+                <td role="cell" data-label="Last error" className="t-small text-muted">
                   {row.lastError ?? <span className="text-subtle">—</span>}
                 </td>
               </tr>

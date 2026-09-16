@@ -200,22 +200,22 @@ export default async function CostCodesPage() {
         </Notice>
 
         <TableWrap minWidth="70rem" className="mt-4">
-          <thead>
-            <tr>
-              <th scope="col">Code</th>
-              <th scope="col">Name</th>
-              <th scope="col">Sits under</th>
-              <th scope="col">Spend category</th>
-              <th scope="col" className="cell-num">Order</th>
-              <th scope="col">Used by</th>
-              <th scope="col">Status</th>
-              <th scope="col">Manage</th>
+          <thead role="rowgroup">
+            <tr role="row">
+              <th role="columnheader" scope="col">Code</th>
+              <th role="columnheader" scope="col">Name</th>
+              <th role="columnheader" scope="col">Sits under</th>
+              <th role="columnheader" scope="col">Spend category</th>
+              <th role="columnheader" scope="col" className="cell-num">Order</th>
+              <th role="columnheader" scope="col">Used by</th>
+              <th role="columnheader" scope="col">Status</th>
+              <th role="columnheader" scope="col">Manage</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody role="rowgroup">
             {rows.length === 0 ? (
-              <tr>
-                <td data-label="Code" colSpan={8}>
+              <tr role="row">
+                <td role="cell" data-label="Code" colSpan={8}>
                   No cost codes yet. Add the divisions you already think in — the trades you
                   write cheques for — and leave the sections until one division needs
                   splitting.
@@ -232,23 +232,23 @@ export default async function CostCodesPage() {
               const options = parentOptions(row);
 
               return (
-                <tr key={row.id}>
-                  <td data-label="Code" className="num">
+                <tr role="row" key={row.id}>
+                  <td role="cell" data-label="Code" className="num">
                     {/* The indent is decoration; the "Sits under" column is the
                         answer, and it is the one that survives the stack into
                         cards on a phone. */}
                     {row.parentId ? <span aria-hidden className="text-subtle">└ </span> : null}
                     {row.code}
                   </td>
-                  <td data-label="Name">{row.name}</td>
-                  <td data-label="Sits under" className="t-small text-muted">
+                  <td role="cell" data-label="Name">{row.name}</td>
+                  <td role="cell" data-label="Sits under" className="t-small text-muted">
                     {parent ? `${parent.code} — ${parent.name}` : '—'}
                   </td>
-                  <td data-label="Spend category" className="t-small text-muted">
+                  <td role="cell" data-label="Spend category" className="t-small text-muted">
                     {isCategory(row.category) ? CATEGORY_LABELS[row.category] : (row.category ?? '—')}
                   </td>
                   <AmountCell data-label="Order">{row.sortOrder}</AmountCell>
-                  <td data-label="Used by" className="t-small text-muted">
+                  <td role="cell" data-label="Used by" className="t-small text-muted">
                     {rateUses === 0 && documentUses === 0 && sections === 0
                       ? 'Nothing yet'
                       : [
@@ -265,7 +265,7 @@ export default async function CostCodesPage() {
                           .filter(Boolean)
                           .join(' · ')}
                   </td>
-                  <td data-label="Status">
+                  <td role="cell" data-label="Status">
                     <span className="flex flex-wrap items-center gap-1">
                       {isVoid ? <Pill tone="negative">Void</Pill> : null}
                       {!isVoid && row.isActive ? <Pill tone="positive">On the list</Pill> : null}
@@ -273,7 +273,7 @@ export default async function CostCodesPage() {
                       {row.parentId === null ? <Pill tone="info">Division</Pill> : null}
                     </span>
                   </td>
-                  <td data-label="Manage">
+                  <td role="cell" data-label="Manage">
                     {/* The same press-then-panel the rate list takes, and for
                         the same reason: a disclosure here pushed every code
                         below this one off the screen, and the list is the

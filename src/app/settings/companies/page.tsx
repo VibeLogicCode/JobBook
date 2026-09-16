@@ -158,19 +158,19 @@ export default async function CompaniesPage() {
         )}
 
         <TableWrap minWidth="52rem" className="mt-4">
-          <thead>
-            <tr>
-              <th scope="col">Company</th>
-              <th scope="col">Document code</th>
-              <th scope="col" className="cell-num">Jobs</th>
-              <th scope="col">Status</th>
-              <th scope="col">Manage</th>
+          <thead role="rowgroup">
+            <tr role="row">
+              <th role="columnheader" scope="col">Company</th>
+              <th role="columnheader" scope="col">Document code</th>
+              <th role="columnheader" scope="col" className="cell-num">Jobs</th>
+              <th role="columnheader" scope="col">Status</th>
+              <th role="columnheader" scope="col">Manage</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody role="rowgroup">
             {rows.length === 0 ? (
-              <tr>
-                <td data-label="Company" colSpan={5}>
+              <tr role="row">
+                <td role="cell" data-label="Company" colSpan={5}>
                   No company yet. Finish first-run setup, which creates one.
                 </td>
               </tr>
@@ -181,8 +181,8 @@ export default async function CompaniesPage() {
               const isLastActive = row.isActive && activeCount <= 1;
 
               return (
-                <tr key={row.id}>
-                  <td data-label="Company">
+                <tr role="row" key={row.id}>
+                  <td role="cell" data-label="Company">
                     <span className="flex flex-col">
                       <span>{row.displayName}</span>
                       {row.legalName === row.displayName ? null : (
@@ -190,7 +190,7 @@ export default async function CompaniesPage() {
                       )}
                     </span>
                   </td>
-                  <td data-label="Document code" className="num t-small">
+                  <td role="cell" data-label="Document code" className="num t-small">
                     {row.documentPrefix ? (
                       `${row.documentPrefix}_QT-2026-0001`
                     ) : (
@@ -198,14 +198,14 @@ export default async function CompaniesPage() {
                     )}
                   </td>
                   <AmountCell data-label="Jobs">{held}</AmountCell>
-                  <td data-label="Status">
+                  <td role="cell" data-label="Status">
                     <span className="flex flex-wrap items-center gap-1">
                       {row.isActive
                         ? <Pill tone="positive">Issuing</Pill>
                         : <Pill tone="neutral">Retired</Pill>}
                     </span>
                   </td>
-                  <td data-label="Manage">
+                  <td role="cell" data-label="Manage">
                     {row.isActive ? (
                       <RowAction
                         action={retireCompany}

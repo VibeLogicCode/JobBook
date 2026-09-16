@@ -41,8 +41,15 @@ export default async function SignInPage({
         <p className="t-small text-muted">Quotes, jobs and documents</p>
       </div>
 
+      {/*
+        * `status`, not `alert`. This is server-rendered and present at first
+        * paint, and an assertive live region on load either fires before the
+        * page settles -- where it is unreliable -- or talks over somebody who
+        * is already reading it. Nothing here interrupts: it explains why the
+        * sign-in screen appeared.
+        */}
       {reason ? (
-        <p role="alert" className="rounded-panel border border-warning bg-warning-soft px-3 py-2 t-small text-warning-soft-fg">
+        <p role="status" className="rounded-panel border border-warning bg-warning-soft px-3 py-2 t-small text-warning-soft-fg">
           {reason}
         </p>
       ) : null}

@@ -306,14 +306,14 @@ function AcceptanceSheet({
             <caption className="sr-only">
               Lines on {quote.quoteNumber}, to tick as accepted
             </caption>
-            <thead>
-              <tr>
-                <th scope="col">Line</th>
-                <th scope="col" className="present-hide">Code</th>
-                <th scope="col" className="cell-num">Amount</th>
+            <thead role="rowgroup">
+              <tr role="row">
+                <th role="columnheader" scope="col">Line</th>
+                <th role="columnheader" scope="col" className="present-hide">Code</th>
+                <th role="columnheader" scope="col" className="cell-num">Amount</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody role="rowgroup">
               {quoted.map((line) => (
                 <PickRow
                   key={line.id}
@@ -340,17 +340,17 @@ function AcceptanceSheet({
               ))}
 
               {automatic.map((line) => (
-                <tr key={line.id}>
-                  <td data-label="Line">
+                <tr role="row" key={line.id}>
+                  <td role="cell" data-label="Line">
                     <span className="text-muted">{line.description}</span>
                     <span className="ml-2">
                       <Pill>Carried</Pill>
                     </span>
                   </td>
-                  <td data-label="Code" className="present-hide num t-small text-muted">
+                  <td role="cell" data-label="Code" className="present-hide num t-small text-muted">
                     {line.code}
                   </td>
-                  <td data-label="Amount" className="cell-num text-muted">
+                  <td role="cell" data-label="Amount" className="cell-num text-muted">
                     {formatCents(priced.amounts.get(line.id) ?? line.lineTotalCents)}
                   </td>
                 </tr>
@@ -475,8 +475,8 @@ function PickRow({
   upgrade?: boolean;
 }) {
   return (
-    <tr>
-      <td data-label="Line">
+    <tr role="row">
+      <td role="cell" data-label="Line">
         <label className="flex min-h-11 items-center gap-2">
           <input
             type="checkbox"
@@ -499,10 +499,10 @@ function PickRow({
           </span>
         </label>
       </td>
-      <td data-label="Code" className="present-hide num t-small text-muted">
+      <td role="cell" data-label="Code" className="present-hide num t-small text-muted">
         {line.code}
       </td>
-      <td data-label="Amount" className={`cell-num ${checked ? '' : 'text-subtle'}`}>
+      <td role="cell" data-label="Amount" className={`cell-num ${checked ? '' : 'text-subtle'}`}>
         {formatCents(amountCents)}
       </td>
     </tr>

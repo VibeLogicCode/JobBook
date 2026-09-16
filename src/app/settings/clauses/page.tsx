@@ -112,19 +112,19 @@ export default async function ClausesPage() {
         </Notice>
 
         <TableWrap minWidth="52rem" className="mt-4">
-          <thead>
-            <tr>
-              <th scope="col">Kind</th>
-              <th scope="col">Wording</th>
-              <th scope="col" className="cell-num">Order</th>
-              <th scope="col">Status</th>
-              <th scope="col">Manage</th>
+          <thead role="rowgroup">
+            <tr role="row">
+              <th role="columnheader" scope="col">Kind</th>
+              <th role="columnheader" scope="col">Wording</th>
+              <th role="columnheader" scope="col" className="cell-num">Order</th>
+              <th role="columnheader" scope="col">Status</th>
+              <th role="columnheader" scope="col">Manage</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody role="rowgroup">
             {rows.length === 0 ? (
-              <tr>
-                <td data-label="Kind" colSpan={5}>
+              <tr role="row">
+                <td role="cell" data-label="Kind" colSpan={5}>
                   Nothing saved yet. Start with what you always tell a customer is extra — permit
                   fees, painting, anything found behind a wall — and add to it the next time a job
                   surprises you.
@@ -137,18 +137,18 @@ export default async function ClausesPage() {
               const label = CLAUSE_KIND_LABELS[row.kind as ClauseKind] ?? row.kind;
 
               return (
-                <tr key={row.id}>
-                  <td data-label="Kind">{label}</td>
-                  <td data-label="Wording">{row.clauseText}</td>
+                <tr role="row" key={row.id}>
+                  <td role="cell" data-label="Kind">{label}</td>
+                  <td role="cell" data-label="Wording">{row.clauseText}</td>
                   <AmountCell data-label="Order">{row.sortOrder}</AmountCell>
-                  <td data-label="Status">
+                  <td role="cell" data-label="Status">
                     <span className="flex flex-wrap items-center gap-1">
                       {isVoid ? <Pill tone="negative">Void</Pill> : null}
                       {!isVoid && row.isActive ? <Pill tone="positive">Offered</Pill> : null}
                       {!isVoid && !row.isActive ? <Pill tone="neutral">Retired</Pill> : null}
                     </span>
                   </td>
-                  <td data-label="Manage">
+                  <td role="cell" data-label="Manage">
                     <SheetButton
                       trigger="Change…"
                       label={`Change this ${label.toLowerCase()} clause`}

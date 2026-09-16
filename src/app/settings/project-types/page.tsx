@@ -148,19 +148,19 @@ export default async function ProjectTypesPage() {
         </Notice>
 
         <TableWrap minWidth="52rem" className="mt-4">
-          <thead>
-            <tr>
-              <th scope="col">Name</th>
-              <th scope="col" className="cell-num">Order</th>
-              <th scope="col">Used by</th>
-              <th scope="col">Status</th>
-              <th scope="col">Manage</th>
+          <thead role="rowgroup">
+            <tr role="row">
+              <th role="columnheader" scope="col">Name</th>
+              <th role="columnheader" scope="col" className="cell-num">Order</th>
+              <th role="columnheader" scope="col">Used by</th>
+              <th role="columnheader" scope="col">Status</th>
+              <th role="columnheader" scope="col">Manage</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody role="rowgroup">
             {rows.length === 0 ? (
-              <tr>
-                <td data-label="Name" colSpan={5}>
+              <tr role="row">
+                <td role="cell" data-label="Name" colSpan={5}>
                   No project types yet. Add the kinds of work you actually quote — custom
                   homes, basements, kitchens, whatever your business calls a job.
                 </td>
@@ -173,20 +173,20 @@ export default async function ProjectTypesPage() {
               const total = (u?.projects ?? 0) + (u?.scopeTemplates ?? 0) + (u?.scheduleTemplates ?? 0);
 
               return (
-                <tr key={row.id}>
-                  <td data-label="Name">{row.name}</td>
+                <tr role="row" key={row.id}>
+                  <td role="cell" data-label="Name">{row.name}</td>
                   <AmountCell data-label="Order">{row.sortOrder}</AmountCell>
-                  <td data-label="Used by" className="t-small text-muted">
+                  <td role="cell" data-label="Used by" className="t-small text-muted">
                     {usedByText(row.id)}
                   </td>
-                  <td data-label="Status">
+                  <td role="cell" data-label="Status">
                     <span className="flex flex-wrap items-center gap-1">
                       {isVoid ? <Pill tone="negative">Void</Pill> : null}
                       {!isVoid && row.isActive ? <Pill tone="positive">On the list</Pill> : null}
                       {!isVoid && !row.isActive ? <Pill tone="neutral">Retired</Pill> : null}
                     </span>
                   </td>
-                  <td data-label="Manage">
+                  <td role="cell" data-label="Manage">
                     <SheetButton
                       trigger="Change…"
                       label={`Change ${row.name}`}

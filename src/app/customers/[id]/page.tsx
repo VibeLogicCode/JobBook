@@ -358,30 +358,30 @@ export default async function CustomerPage({
         ) : (
           <TableWrap minWidth="44rem" bare>
             <caption className="sr-only">Jobs for {customer.name}</caption>
-            <thead>
-              <tr>
-                <th scope="col">Job</th>
-                <th scope="col">Number</th>
-                <th scope="col">Stage</th>
-                <th scope="col">Starts</th>
-                <th scope="col" className="cell-num">Contract</th>
+            <thead role="rowgroup">
+              <tr role="row">
+                <th role="columnheader" scope="col">Job</th>
+                <th role="columnheader" scope="col">Number</th>
+                <th role="columnheader" scope="col">Stage</th>
+                <th role="columnheader" scope="col">Starts</th>
+                <th role="columnheader" scope="col" className="cell-num">Contract</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody role="rowgroup">
               {jobs.map((job) => (
-                <tr key={job.id}>
-                  <td data-label="Job">
+                <tr role="row" key={job.id}>
+                  <td role="cell" data-label="Job">
                     <Link href={`/projects/${job.id}`} className="text-accent-text hover:underline">
                       {job.name}
                     </Link>
                   </td>
-                  <td data-label="Number" className="num t-small text-muted">
+                  <td role="cell" data-label="Number" className="num t-small text-muted">
                     {job.projectNumber}
                   </td>
-                  <td data-label="Stage">
+                  <td role="cell" data-label="Stage">
                     <Pill tone={stageTone(job.stage)}>{PROJECT_STAGES[job.stage]}</Pill>
                   </td>
-                  <td data-label="Starts" className="num t-small">
+                  <td role="cell" data-label="Starts" className="num t-small">
                     {job.actualStart ?? job.scheduledStart ?? '—'}
                   </td>
                   <AmountCell data-label="Contract" cents={Number(job.contractValueCents)} />
@@ -400,33 +400,33 @@ export default async function CustomerPage({
         ) : (
           <TableWrap minWidth="44rem" bare>
             <caption className="sr-only">Quotes for {customer.name}</caption>
-            <thead>
-              <tr>
-                <th scope="col">Job</th>
-                <th scope="col">Number</th>
-                <th scope="col">Dated</th>
-                <th scope="col">Status</th>
-                <th scope="col" className="cell-num">Total</th>
+            <thead role="rowgroup">
+              <tr role="row">
+                <th role="columnheader" scope="col">Job</th>
+                <th role="columnheader" scope="col">Number</th>
+                <th role="columnheader" scope="col">Dated</th>
+                <th role="columnheader" scope="col">Status</th>
+                <th role="columnheader" scope="col" className="cell-num">Total</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody role="rowgroup">
               {history.map((quote) => {
                 // Expiry is derived from valid_until, never stored: a stored
                 // 'expired' status is wrong the moment the clock passes it.
                 const expired = quote.status === 'sent' && quote.validUntil < today;
                 return (
-                  <tr key={quote.id}>
-                    <td data-label="Job">
+                  <tr role="row" key={quote.id}>
+                    <td role="cell" data-label="Job">
                       <Link href={`/quotes/${quote.id}`} className="text-accent-text hover:underline">
                         {quote.projectName}
                       </Link>
                     </td>
-                    <td data-label="Number" className="num t-small text-muted">
+                    <td role="cell" data-label="Number" className="num t-small text-muted">
                       {quote.quoteNumber} v{quote.version}
                       {quote.kind === 'change_order' ? ' CO' : ''}
                     </td>
-                    <td data-label="Dated" className="num t-small">{quote.quoteDate}</td>
-                    <td data-label="Status">
+                    <td role="cell" data-label="Dated" className="num t-small">{quote.quoteDate}</td>
+                    <td role="cell" data-label="Status">
                       <Pill tone={statusTone(quote.status, expired)}>
                         {expired ? 'Expired' : quote.status}
                       </Pill>

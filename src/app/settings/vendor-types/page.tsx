@@ -142,20 +142,20 @@ export default async function VendorTypesPage() {
         </Notice>
 
         <TableWrap minWidth="58rem" className="mt-4">
-          <thead>
-            <tr>
-              <th scope="col">Name</th>
-              <th scope="col">Counts as</th>
-              <th scope="col" className="cell-num">Order</th>
-              <th scope="col">Used by</th>
-              <th scope="col">Status</th>
-              <th scope="col">Manage</th>
+          <thead role="rowgroup">
+            <tr role="row">
+              <th role="columnheader" scope="col">Name</th>
+              <th role="columnheader" scope="col">Counts as</th>
+              <th role="columnheader" scope="col" className="cell-num">Order</th>
+              <th role="columnheader" scope="col">Used by</th>
+              <th role="columnheader" scope="col">Status</th>
+              <th role="columnheader" scope="col">Manage</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody role="rowgroup">
             {rows.length === 0 ? (
-              <tr>
-                <td data-label="Name" colSpan={6}>
+              <tr role="row">
+                <td role="cell" data-label="Name" colSpan={6}>
                   No vendor types yet. Add the kinds of counterparty you already write
                   cheques to.
                 </td>
@@ -167,9 +167,9 @@ export default async function VendorTypesPage() {
               const uses = used.get(row.id) ?? 0;
 
               return (
-                <tr key={row.id}>
-                  <td data-label="Name">{row.name}</td>
-                  <td data-label="Counts as" className="t-small text-muted">
+                <tr role="row" key={row.id}>
+                  <td role="cell" data-label="Name">{row.name}</td>
+                  <td role="cell" data-label="Counts as" className="t-small text-muted">
                     {row.isSubcontractor ? (
                       <Pill tone="info">Subcontractor</Pill>
                     ) : (
@@ -177,17 +177,17 @@ export default async function VendorTypesPage() {
                     )}
                   </td>
                   <AmountCell data-label="Order">{row.sortOrder}</AmountCell>
-                  <td data-label="Used by" className="t-small text-muted">
+                  <td role="cell" data-label="Used by" className="t-small text-muted">
                     {uses === 0 ? 'Nothing yet' : `${uses} ${uses === 1 ? 'vendor' : 'vendors'}`}
                   </td>
-                  <td data-label="Status">
+                  <td role="cell" data-label="Status">
                     <span className="flex flex-wrap items-center gap-1">
                       {isVoid ? <Pill tone="negative">Void</Pill> : null}
                       {!isVoid && row.isActive ? <Pill tone="positive">On the list</Pill> : null}
                       {!isVoid && !row.isActive ? <Pill tone="neutral">Retired</Pill> : null}
                     </span>
                   </td>
-                  <td data-label="Manage">
+                  <td role="cell" data-label="Manage">
                     {/* The same press-then-panel the cost code list takes, and
                         for the same reason: a disclosure here pushed every
                         type below this one off the screen, and the list is the

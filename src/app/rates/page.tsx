@@ -153,23 +153,23 @@ export default async function RatesPage() {
           )}
 
           <TableWrap minWidth="72rem">
-            <thead>
-              <tr>
-                <th scope="col">Description</th>
-                <th scope="col">Code</th>
-                <th scope="col">Cost code</th>
-                <th scope="col">Unit</th>
-                <th scope="col" className="cell-num">Cost</th>
-                <th scope="col" className="cell-num">Sell</th>
-                <th scope="col" className="cell-num">Margin</th>
-                <th scope="col">Status</th>
-                <th scope="col">Manage</th>
+            <thead role="rowgroup">
+              <tr role="row">
+                <th role="columnheader" scope="col">Description</th>
+                <th role="columnheader" scope="col">Code</th>
+                <th role="columnheader" scope="col">Cost code</th>
+                <th role="columnheader" scope="col">Unit</th>
+                <th role="columnheader" scope="col" className="cell-num">Cost</th>
+                <th role="columnheader" scope="col" className="cell-num">Sell</th>
+                <th role="columnheader" scope="col" className="cell-num">Margin</th>
+                <th role="columnheader" scope="col">Status</th>
+                <th role="columnheader" scope="col">Manage</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody role="rowgroup">
               {rows.length === 0 ? (
-                <tr>
-                  <td data-label="Description" colSpan={9}>
+                <tr role="row">
+                  <td role="cell" data-label="Description" colSpan={9}>
                     Nothing priced yet. Add one above, or paste a whole price list into the
                     importer — a quote can still be built line by line without any.
                   </td>
@@ -188,16 +188,16 @@ export default async function RatesPage() {
                         ? 'retired'
                         : null;
                 return (
-                  <tr key={item.id}>
-                    <td data-label="Description">{item.description}</td>
-                    <td data-label="Code" className="num t-small text-muted">{item.code}</td>
-                    <td data-label="Cost code" className="t-small text-muted">
+                  <tr role="row" key={item.id}>
+                    <td role="cell" data-label="Description">{item.description}</td>
+                    <td role="cell" data-label="Code" className="num t-small text-muted">{item.code}</td>
+                    <td role="cell" data-label="Cost code" className="t-small text-muted">
                       {costCode ?? '—'}
                       {costCodeNote ? (
                         <span className="text-subtle"> ({costCodeNote})</span>
                       ) : null}
                     </td>
-                    <td data-label="Unit" className="t-small text-muted">
+                    <td role="cell" data-label="Unit" className="t-small text-muted">
                       {item.unitLabel || (item.calcMode === 'percent' ? '%' : '—')}
                     </td>
                     {/* Rates are ten-thousandths, not cents, so these take the
@@ -207,7 +207,7 @@ export default async function RatesPage() {
                     <AmountCell data-label="Margin" className={margin < 0 ? 'text-negative' : ''}>
                       {formatBasisPoints(margin)}
                     </AmountCell>
-                    <td data-label="Status">
+                    <td role="cell" data-label="Status">
                       <span className="flex flex-wrap items-center gap-1">
                         {isVoid ? <Pill tone="negative">Void</Pill> : null}
                         {!isVoid && item.isActive ? <Pill tone="positive">On the list</Pill> : null}
@@ -216,7 +216,7 @@ export default async function RatesPage() {
                         {!item.isTaxable ? <Pill tone="warning">No tax</Pill> : null}
                       </span>
                     </td>
-                    <td data-label="Manage">
+                    <td role="cell" data-label="Manage">
                       {/* A press, then the form over a blurred page -- not a
                           disclosure that shoves the rest of the list down
                           the screen the moment somebody opens it. The title

@@ -453,24 +453,24 @@ export default async function ProjectPage({
         ) : (
           <TableWrap minWidth="46rem" bare>
             <caption className="sr-only">Quote versions for {project.projectNumber}</caption>
-            <thead>
-              <tr>
-                <th scope="col">Quote</th>
-                <th scope="col">Version</th>
-                <th scope="col">Dated</th>
-                <th scope="col">Status</th>
-                <th scope="col" className="cell-num">Total</th>
-                <th scope="col" className="present-hide cell-num">Margin</th>
+            <thead role="rowgroup">
+              <tr role="row">
+                <th role="columnheader" scope="col">Quote</th>
+                <th role="columnheader" scope="col">Version</th>
+                <th role="columnheader" scope="col">Dated</th>
+                <th role="columnheader" scope="col">Status</th>
+                <th role="columnheader" scope="col" className="cell-num">Total</th>
+                <th role="columnheader" scope="col" className="present-hide cell-num">Margin</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody role="rowgroup">
               {versions.map((quote) => {
                 // Expiry derives from valid_until; there is no stored
                 // 'expired' status to go stale.
                 const expired = quote.status === 'sent' && quote.validUntil < today;
                 return (
-                  <tr key={quote.id}>
-                    <td data-label="Quote">
+                  <tr role="row" key={quote.id}>
+                    <td role="cell" data-label="Quote">
                       <Link href={`/quotes/${quote.id}`} className="text-accent-text hover:underline">
                         {quote.quoteNumber}
                       </Link>
@@ -480,11 +480,11 @@ export default async function ProjectPage({
                         </span>
                       ) : null}
                     </td>
-                    <td data-label="Version" className="num t-small text-muted">
+                    <td role="cell" data-label="Version" className="num t-small text-muted">
                       v{quote.version}
                     </td>
-                    <td data-label="Dated" className="num t-small">{quote.quoteDate}</td>
-                    <td data-label="Status">
+                    <td role="cell" data-label="Dated" className="num t-small">{quote.quoteDate}</td>
+                    <td role="cell" data-label="Status">
                       <Pill tone={statusTone(quote.status, expired)}>
                         {expired ? 'Expired' : quote.status}
                       </Pill>

@@ -132,20 +132,20 @@ export default async function PaymentMethodsPage() {
         </Notice>
 
         <TableWrap minWidth="52rem" className="mt-4">
-          <thead>
-            <tr>
-              <th scope="col">Name</th>
-              <th scope="col">Settles</th>
-              <th scope="col" className="cell-num">Order</th>
-              <th scope="col">Used by</th>
-              <th scope="col">Status</th>
-              <th scope="col">Manage</th>
+          <thead role="rowgroup">
+            <tr role="row">
+              <th role="columnheader" scope="col">Name</th>
+              <th role="columnheader" scope="col">Settles</th>
+              <th role="columnheader" scope="col" className="cell-num">Order</th>
+              <th role="columnheader" scope="col">Used by</th>
+              <th role="columnheader" scope="col">Status</th>
+              <th role="columnheader" scope="col">Manage</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody role="rowgroup">
             {rows.length === 0 ? (
-              <tr>
-                <td data-label="Name" colSpan={6}>
+              <tr role="row">
+                <td role="cell" data-label="Name" colSpan={6}>
                   No payment methods yet. Add the ways this company actually gets paid.
                 </td>
               </tr>
@@ -156,9 +156,9 @@ export default async function PaymentMethodsPage() {
               const uses = used.get(row.id) ?? 0;
 
               return (
-                <tr key={row.id}>
-                  <td data-label="Name">{row.name}</td>
-                  <td data-label="Settles" className="t-small text-muted">
+                <tr role="row" key={row.id}>
+                  <td role="cell" data-label="Name">{row.name}</td>
+                  <td role="cell" data-label="Settles" className="t-small text-muted">
                     {row.isOnAccount ? (
                       <Pill tone="info">Not yet paid</Pill>
                     ) : (
@@ -166,17 +166,17 @@ export default async function PaymentMethodsPage() {
                     )}
                   </td>
                   <AmountCell data-label="Order">{row.sortOrder}</AmountCell>
-                  <td data-label="Used by" className="t-small text-muted">
+                  <td role="cell" data-label="Used by" className="t-small text-muted">
                     {uses === 0 ? 'Nothing yet' : `${uses} ${uses === 1 ? 'expense' : 'expenses'}`}
                   </td>
-                  <td data-label="Status">
+                  <td role="cell" data-label="Status">
                     <span className="flex flex-wrap items-center gap-1">
                       {isVoid ? <Pill tone="negative">Void</Pill> : null}
                       {!isVoid && row.isActive ? <Pill tone="positive">On the list</Pill> : null}
                       {!isVoid && !row.isActive ? <Pill tone="neutral">Retired</Pill> : null}
                     </span>
                   </td>
-                  <td data-label="Manage">
+                  <td role="cell" data-label="Manage">
                     {/* The same press-then-panel every list in Settings takes. */}
                     <SheetButton
                       trigger="Change…"

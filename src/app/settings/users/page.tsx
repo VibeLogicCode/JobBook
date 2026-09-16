@@ -225,20 +225,20 @@ export default async function UsersPage({
         </div>
 
         <TableWrap minWidth="60rem" className="mt-2">
-          <thead>
-            <tr>
-              <th scope="col">Name</th>
-              <th scope="col">Email</th>
-              <th scope="col">Role</th>
-              <th scope="col">Sign-in</th>
-              <th scope="col">Status</th>
-              <th scope="col">Account</th>
+          <thead role="rowgroup">
+            <tr role="row">
+              <th role="columnheader" scope="col">Name</th>
+              <th role="columnheader" scope="col">Email</th>
+              <th role="columnheader" scope="col">Role</th>
+              <th role="columnheader" scope="col">Sign-in</th>
+              <th role="columnheader" scope="col">Status</th>
+              <th role="columnheader" scope="col">Account</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody role="rowgroup">
             {visible.length === 0 ? (
-              <tr>
-                <td data-label="Name" colSpan={6}>
+              <tr role="row">
+                <td role="cell" data-label="Name" colSpan={6}>
                   No users to show. Add the first one above.
                 </td>
               </tr>
@@ -259,17 +259,17 @@ export default async function UsersPage({
                     : undefined;
 
               return (
-                <tr key={user.id}>
-                  <td data-label="Name">
+                <tr role="row" key={user.id}>
+                  <td role="cell" data-label="Name">
                     <span className="flex flex-wrap items-center gap-2">
                       {user.displayName}
                       {isSelf ? <Pill tone="accent">You</Pill> : null}
                     </span>
                   </td>
-                  <td data-label="Email" className="t-small text-muted">
+                  <td role="cell" data-label="Email" className="t-small text-muted">
                     {user.email}
                   </td>
-                  <td data-label="Role">
+                  <td role="cell" data-label="Role">
                     {/* One wrapper, not two loose children. Below `sm` the cell
                         is a flex row, so the form and the summary under it were
                         competing for the same line: the select collapsed to
@@ -291,7 +291,7 @@ export default async function UsersPage({
                       <span className="block t-small text-subtle">{ROLE_SUMMARY[user.role]}</span>
                     </span>
                   </td>
-                  <td data-label="Sign-in" className="t-small text-muted">
+                  <td role="cell" data-label="Sign-in" className="t-small text-muted">
                     {mode === 'access' ? (
                       'Managed by Cloudflare Access'
                     ) : mode === 'local' ? (
@@ -315,14 +315,14 @@ export default async function UsersPage({
                       </>
                     )}
                   </td>
-                  <td data-label="Status">
+                  <td role="cell" data-label="Status">
                     {user.isActive ? (
                       <Pill tone="positive">Active</Pill>
                     ) : (
                       <Pill tone="neutral">Inactive</Pill>
                     )}
                   </td>
-                  <td data-label="Account">
+                  <td role="cell" data-label="Account">
                     <RowAction
                       action={setUserActive}
                       label={user.isActive ? 'Deactivate' : 'Reactivate'}

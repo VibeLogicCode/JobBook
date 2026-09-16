@@ -213,7 +213,15 @@ export function Sheet({
         // header, the toolbar and the footer are all `shrink-0` and the body
         // between them is the only thing that grows, so the save button stays
         // on screen at 720px of viewport and the form scrolls under it.
-        className={`flex max-h-[85dvh] w-full flex-col rounded-t-panel border-t border-line-strong bg-surface shadow-pop outline-none sm:rounded-panel sm:border ${WIDTHS[size]}`}
+        /**
+         * `outline-none` was hiding the focus landing: this panel takes
+         * programmatic focus when the sheet opens, so with the outline
+         * suppressed a keyboard user was given focus with nothing on screen
+         * saying where it went. `focus-visible:outline-none` keeps the panel
+         * itself quiet for a POINTER open -- where the ring would be noise --
+         * while the browser still draws it for anything focus-visible inside.
+         */
+        className={`flex max-h-[85dvh] w-full flex-col rounded-t-panel border-t border-line-strong bg-surface shadow-pop focus-visible:outline-none sm:rounded-panel sm:border ${WIDTHS[size]}`}
       >
         <div
           aria-hidden

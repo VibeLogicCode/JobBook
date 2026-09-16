@@ -159,22 +159,22 @@ export default async function TemplatesPage() {
           )}
 
           <TableWrap minWidth="52rem">
-            <thead>
-              <tr>
-                <th scope="col">Name</th>
-                <th scope="col">Kind</th>
-                <th scope="col">Project type</th>
-                <th scope="col" className="cell-num">
+            <thead role="rowgroup">
+              <tr role="row">
+                <th role="columnheader" scope="col">Name</th>
+                <th role="columnheader" scope="col">Kind</th>
+                <th role="columnheader" scope="col">Project type</th>
+                <th role="columnheader" scope="col" className="cell-num">
                   Lines / tasks
                 </th>
-                <th scope="col">Status</th>
-                <th scope="col">Manage</th>
+                <th role="columnheader" scope="col">Status</th>
+                <th role="columnheader" scope="col">Manage</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody role="rowgroup">
               {rows.length === 0 ? (
-                <tr>
-                  <td data-label="Name" colSpan={6}>
+                <tr role="row">
+                  <td role="cell" data-label="Name" colSpan={6}>
                     No templates yet. Create one above — a quote can still be built line by
                     line without any.
                   </td>
@@ -185,8 +185,8 @@ export default async function TemplatesPage() {
                 const href =
                   row.kind === 'quote' ? `/templates/${row.id}` : `/templates/schedule/${row.id}`;
                 return (
-                  <tr key={`${row.kind}-${row.id}`}>
-                    <td data-label="Name">
+                  <tr role="row" key={`${row.kind}-${row.id}`}>
+                    <td role="cell" data-label="Name">
                       <Link
                         href={href}
                         className="text-accent-text underline decoration-1 underline-offset-2"
@@ -197,25 +197,25 @@ export default async function TemplatesPage() {
                         <span className="block t-small text-subtle">{row.description}</span>
                       ) : null}
                     </td>
-                    <td data-label="Kind">
+                    <td role="cell" data-label="Kind">
                       <Pill tone={row.kind === 'quote' ? 'accent' : 'info'}>
                         {row.kind === 'quote' ? 'Quote' : 'Schedule'}
                       </Pill>
                     </td>
-                    <td data-label="Project type" className="t-small text-muted">
+                    <td role="cell" data-label="Project type" className="t-small text-muted">
                       {row.projectTypeName}
                     </td>
                     <AmountCell data-label={row.kind === 'quote' ? 'Lines' : 'Tasks'}>
                       {row.count}
                     </AmountCell>
-                    <td data-label="Status">
+                    <td role="cell" data-label="Status">
                       {row.isActive ? (
                         <Pill tone="positive">Available</Pill>
                       ) : (
                         <Pill tone="neutral">Retired</Pill>
                       )}
                     </td>
-                    <td data-label="Manage">
+                    <td role="cell" data-label="Manage">
                       <span className="flex flex-wrap gap-2">
                         <Link href={href} className={buttonClass('secondary', { className: 't-small' })}>
                           Open

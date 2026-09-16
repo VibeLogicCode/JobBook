@@ -198,15 +198,15 @@ export function ImportTemplateSheet({
               <caption className="sr-only">
                 Tasks on {selected?.name ?? 'this template'}, to tick as imported
               </caption>
-              <thead>
-                <tr>
-                  <th scope="col">Task</th>
-                  <th scope="col">Duration</th>
-                  <th scope="col">Waits on</th>
-                  <th scope="col">Start – Finish</th>
+              <thead role="rowgroup">
+                <tr role="row">
+                  <th role="columnheader" scope="col">Task</th>
+                  <th role="columnheader" scope="col">Duration</th>
+                  <th role="columnheader" scope="col">Waits on</th>
+                  <th role="columnheader" scope="col">Start – Finish</th>
                 </tr>
               </thead>
-              <tbody aria-busy={pending}>
+              <tbody role="rowgroup" aria-busy={pending}>
                 {tasks.map((row) => {
                   const engineTask = byId.get(row.id)!;
                   const outcome = conditionOutcome(engineTask, evidence);
@@ -223,8 +223,8 @@ export function ImportTemplateSheet({
                   const days = durationDaysOf(engineTask, evidence.scope);
 
                   return (
-                    <tr key={row.id} className={isTicked ? '' : 'opacity-60'}>
-                      <td data-label="Task">
+                    <tr role="row" key={row.id} className={isTicked ? '' : 'opacity-60'}>
+                      <td role="cell" data-label="Task">
                         <label className="flex min-h-11 items-start gap-2">
                           <input
                             type="checkbox"
@@ -241,10 +241,10 @@ export function ImportTemplateSheet({
                           </span>
                         </label>
                       </td>
-                      <td data-label="Duration" className="t-small text-muted">
+                      <td role="cell" data-label="Duration" className="t-small text-muted">
                         {row.isMilestone ? 'Milestone' : `${days} ${days === 1 ? 'day' : 'days'}`}
                       </td>
-                      <td data-label="Waits on" className="t-small text-muted">
+                      <td role="cell" data-label="Waits on" className="t-small text-muted">
                         {predecessorName === null ? (
                           'Nothing'
                         ) : (
@@ -264,7 +264,7 @@ export function ImportTemplateSheet({
                           <span className="block t-small text-subtle">{LAG_CLAMPED_NOTE}</span>
                         ) : null}
                       </td>
-                      <td data-label="Start – Finish" className="t-small">
+                      <td role="cell" data-label="Start – Finish" className="t-small">
                         {isTicked && plan ? (
                           <span className="num">
                             {row.isMilestone ? day(plan.start) : `${day(plan.start)} – ${day(plan.end)}`}

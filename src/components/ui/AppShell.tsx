@@ -31,6 +31,24 @@ export function AppShell({
 
   return (
     <div className="flex min-h-dvh">
+      {/*
+        * Bypass blocks, WCAG 2.4.1. Eight rail destinations plus the Present
+        * and theme toggles sit before the content in the DOM, so a keyboard
+        * user paid about ten tab stops on EVERY page to reach the thing they
+        * came for.
+        *
+        * Visible only on focus -- `sr-only` until `focus:not-sr-only` -- which
+        * is the one pattern that serves a keyboard user without spending a
+        * line of the layout on everybody else. `z-50` because it must paint
+        * over the sticky header it sits behind in the source.
+        */}
+      <a
+        href="#content"
+        className="no-print sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:flex focus:min-h-11 focus:items-center focus:rounded-control focus:bg-accent focus:px-4 focus:font-semibold focus:text-accent-fg"
+      >
+        Skip to content
+      </a>
+
       <nav
         aria-label="Main"
         className="no-print hidden shrink-0 flex-col border-r border-line bg-surface sm:flex sm:w-16 xl:w-56"
@@ -125,7 +143,7 @@ export function AppShell({
 
             The margin is on a spacer sibling, which cannot be swallowed the
             same way, and it clears the bar plus the home-indicator inset. */}
-        <main className="mx-auto min-w-0 w-full max-w-[100rem] flex-1">
+        <main id="content" className="mx-auto min-w-0 w-full max-w-[100rem] flex-1">
           {/* Mounted once, listening at the document, so a save made anywhere
               -- including inside a sheet that is closing as it fires -- has
               somewhere to be said. */}

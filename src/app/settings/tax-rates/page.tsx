@@ -145,27 +145,27 @@ export default async function TaxRatesPage() {
         </Notice>
 
         <TableWrap minWidth="64rem" className="mt-4">
-          <thead>
-            <tr>
-              <th scope="col">Label</th>
-              <th scope="col" className="cell-num">
+          <thead role="rowgroup">
+            <tr role="row">
+              <th role="columnheader" scope="col">Label</th>
+              <th role="columnheader" scope="col" className="cell-num">
                 Rate
               </th>
-              <th scope="col">In force from</th>
-              <th scope="col">Until</th>
-              <th scope="col">Registration</th>
-              <th scope="col">Compound</th>
-              <th scope="col" className="cell-num">
+              <th role="columnheader" scope="col">In force from</th>
+              <th role="columnheader" scope="col">Until</th>
+              <th role="columnheader" scope="col">Registration</th>
+              <th role="columnheader" scope="col">Compound</th>
+              <th role="columnheader" scope="col" className="cell-num">
                 Order
               </th>
-              <th scope="col">Status</th>
-              <th scope="col">Change</th>
+              <th role="columnheader" scope="col">Status</th>
+              <th role="columnheader" scope="col">Change</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody role="rowgroup">
             {rows.length === 0 ? (
-              <tr>
-                <td data-label="Label" colSpan={9}>
+              <tr role="row">
+                <td role="cell" data-label="Label" colSpan={9}>
                   No tax rates yet. Add the first one above. A deployment in a jurisdiction
                   with no sales tax leaves this list empty, and quotes simply carry no tax
                   line.
@@ -177,32 +177,32 @@ export default async function TaxRatesPage() {
               const isCurrent = current.has(row.id);
               const closed = row.effectiveTo !== null;
               return (
-                <tr key={row.id}>
-                  <td data-label="Label">
+                <tr role="row" key={row.id}>
+                  <td role="cell" data-label="Label">
                     {row.label}
                     {row.shortLabel ? (
                       <span className="ml-2 t-small text-subtle">{row.shortLabel}</span>
                     ) : null}
                   </td>
-                  <td data-label="Rate" className="cell-num">
+                  <td role="cell" data-label="Rate" className="cell-num">
                     {formatPercent(row.rateTenThou)}%
                   </td>
-                  <td data-label="In force from" className="cell-num">
+                  <td role="cell" data-label="In force from" className="cell-num">
                     {row.effectiveFrom}
                   </td>
-                  <td data-label="Until" className="cell-num">
+                  <td role="cell" data-label="Until" className="cell-num">
                     {row.effectiveTo ?? '—'}
                   </td>
-                  <td data-label="Registration" className="num t-small text-muted">
+                  <td role="cell" data-label="Registration" className="num t-small text-muted">
                     {row.registrationNumber ?? '—'}
                   </td>
-                  <td data-label="Compound" className="t-small text-muted">
+                  <td role="cell" data-label="Compound" className="t-small text-muted">
                     {row.isCompound ? 'On subtotal plus prior taxes' : 'On the subtotal'}
                   </td>
-                  <td data-label="Order" className="cell-num">
+                  <td role="cell" data-label="Order" className="cell-num">
                     {row.sortOrder}
                   </td>
-                  <td data-label="Status">
+                  <td role="cell" data-label="Status">
                     <span className="flex flex-wrap items-center gap-1">
                       {isCurrent ? <Pill tone="positive">In force today</Pill> : null}
                       {!row.isActive ? <Pill tone="neutral">Retired</Pill> : null}
@@ -215,7 +215,7 @@ export default async function TaxRatesPage() {
                       ) : null}
                     </span>
                   </td>
-                  <td data-label="Change">
+                  <td role="cell" data-label="Change">
                     {/* A press, then the form over a blurred page -- the same
                         control the rate list, the cost codes and the reminder
                         rules already use for "change this row". A disclosure

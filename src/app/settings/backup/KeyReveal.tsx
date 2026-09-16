@@ -45,7 +45,16 @@ export function KeyReveal({ hasKey }: { hasKey: boolean }) {
   if (state?.ok) {
     return (
       <div className="flex flex-col gap-4">
-        <Notice tone="warning" title="Copy this key now. It will not be shown again.">
+        {/*
+          * `alert`, explicitly. `Notice` only derives a live role for
+          * `negative` and `positive` tones, so this one -- the single most
+          * consequential result in the product -- was announced to nobody.
+          * The component swaps its whole tree on success, so a screen reader
+          * user got a silent replacement of the screen and a key they were
+          * never told was there. Losing it makes every future backup
+          * permanently unreadable.
+          */}
+        <Notice role="alert" tone="warning" title="Copy this key now. It will not be shown again.">
           This is the only copy. It is not saved on this machine — deliberately, because a
           machine that holds both halves gives up nothing when it is stolen. Without this key,
           every backup taken from now on is permanently unreadable, including by the person who
@@ -53,7 +62,16 @@ export function KeyReveal({ hasKey }: { hasKey: boolean }) {
         </Notice>
 
         <div className="flex flex-col gap-2">
-          <p className="t-small font-semibold">Private key — keep this somewhere safe</p>
+          {/*
+            * A real <label>, not a <p>. This is the one control in the product
+            * that bypasses both shared field components, and it holds the one
+            * value that is never shown again: announced as an unlabelled edit
+            * box, it is a screen reader user copying something they were never
+            * told the name of.
+            */}
+          <label htmlFor="backup-private-key" className="t-small font-semibold">
+            Private key — keep this somewhere safe
+          </label>
           {/*
             * `readOnly` rather than disabled: a disabled control is not
             * selectable, and selecting the text by hand is the fallback when
@@ -61,6 +79,7 @@ export function KeyReveal({ hasKey }: { hasKey: boolean }) {
             * origin in some browsers, i.e. exactly this deployment.
             */}
           <textarea
+            id="backup-private-key"
             readOnly
             rows={2}
             value={state.privateKey}
@@ -97,7 +116,7 @@ export function KeyReveal({ hasKey }: { hasKey: boolean }) {
         </div>
 
         {state.replaced ? (
-          <Notice tone="warning" title="This replaced an earlier key">
+          <Notice role="alert" tone="warning" title="This replaced an earlier key">
             Backups taken before now are still encrypted to the OLD key and can only be opened
             with the old private half. Keep both, or those backups become unreadable.
           </Notice>

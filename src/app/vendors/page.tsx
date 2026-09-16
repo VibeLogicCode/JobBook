@@ -547,19 +547,19 @@ export default async function VendorsPage({
         )
       ) : (
         <TableWrap minWidth="62rem">
-          <thead>
-            <tr>
-              <th scope="col">Name</th>
-              <th scope="col">Kind</th>
-              <th scope="col">Contact</th>
-              <th scope="col">Usual cost code</th>
-              <th scope="col">Terms</th>
-              <th scope="col">Numbers</th>
-              <th scope="col">Status</th>
-              <th scope="col">Manage</th>
+          <thead role="rowgroup">
+            <tr role="row">
+              <th role="columnheader" scope="col">Name</th>
+              <th role="columnheader" scope="col">Kind</th>
+              <th role="columnheader" scope="col">Contact</th>
+              <th role="columnheader" scope="col">Usual cost code</th>
+              <th role="columnheader" scope="col">Terms</th>
+              <th role="columnheader" scope="col">Numbers</th>
+              <th role="columnheader" scope="col">Status</th>
+              <th role="columnheader" scope="col">Manage</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody role="rowgroup">
             {rows.map((row) => {
               const isVoid = row.recordStatus === 'void';
               const code = row.defaultCostCodeId ? codeById.get(row.defaultCostCodeId) : undefined;
@@ -573,30 +573,30 @@ export default async function VendorsPage({
               };
 
               return (
-                <tr key={row.id}>
-                  <td data-label="Name">
+                <tr role="row" key={row.id}>
+                  <td role="cell" data-label="Name">
                     {row.name}
                     {row.legalName && row.legalName !== row.name ? (
                       <span className="block t-small text-subtle">{row.legalName}</span>
                     ) : null}
                   </td>
-                  <td data-label="Kind" className="t-small text-muted">
+                  <td role="cell" data-label="Kind" className="t-small text-muted">
                     {vendorKindLabel(kindOf)}
                   </td>
-                  <td data-label="Contact" className="t-small text-muted">
+                  <td role="cell" data-label="Contact" className="t-small text-muted">
                     {[row.contactName, row.phone, row.city].filter(Boolean).join(' · ') || '—'}
                   </td>
-                  <td data-label="Usual cost code" className="t-small text-muted">
+                  <td role="cell" data-label="Usual cost code" className="t-small text-muted">
                     {row.defaultCostCodeId === null
                       ? '—'
                       : code
                         ? `${code.code} — ${code.name}${code.isActive ? '' : ' (retired)'}`
                         : 'A code that has since been voided'}
                   </td>
-                  <td data-label="Terms" className="t-small text-muted">
+                  <td role="cell" data-label="Terms" className="t-small text-muted">
                     {paymentTermsLabel(row.paymentTermsDays)}
                   </td>
-                  <td data-label="Numbers" className="t-small text-muted">
+                  <td role="cell" data-label="Numbers" className="t-small text-muted">
                     {/* Named rather than printed bare. Two numbers that look
                         alike and mean different things are exactly the pair a
                         reader gets backwards, and the T5018 half is the one
@@ -619,14 +619,14 @@ export default async function VendorsPage({
                       '—'
                     )}
                   </td>
-                  <td data-label="Status">
+                  <td role="cell" data-label="Status">
                     <span className="flex flex-wrap items-center gap-1">
                       {isVoid ? <Pill tone="negative">Void</Pill> : null}
                       {!isVoid && row.isActive ? <Pill tone="positive">On the list</Pill> : null}
                       {!isVoid && !row.isActive ? <Pill tone="neutral">Retired</Pill> : null}
                     </span>
                   </td>
-                  <td data-label="Manage">
+                  <td role="cell" data-label="Manage">
                     {/* The same press-then-panel the rate list and the cost
                         code list take, and for the same reason: a disclosure
                         here pushed every vendor below this one off the screen,

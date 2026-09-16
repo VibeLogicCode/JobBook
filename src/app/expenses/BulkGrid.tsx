@@ -145,27 +145,27 @@ export function BulkGrid({
       </div>
 
       <TableWrap minWidth="72rem" bare>
-        <thead>
-          <tr>
-            <th scope="col">Date</th>
-            <th scope="col">Vendor</th>
-            <th scope="col">Cost code</th>
-            <th scope="col">Description</th>
-            <th scope="col">Receipt no.</th>
-            <th scope="col">Subtotal</th>
-            <th scope="col">Tax</th>
-            <th scope="col">Paid by</th>
+        <thead role="rowgroup">
+          <tr role="row">
+            <th role="columnheader" scope="col">Date</th>
+            <th role="columnheader" scope="col">Vendor</th>
+            <th role="columnheader" scope="col">Cost code</th>
+            <th role="columnheader" scope="col">Description</th>
+            <th role="columnheader" scope="col">Receipt no.</th>
+            <th role="columnheader" scope="col">Subtotal</th>
+            <th role="columnheader" scope="col">Tax</th>
+            <th role="columnheader" scope="col">Paid by</th>
           </tr>
         </thead>
-        <tbody>
+        <tbody role="rowgroup">
           {Array.from({ length: BATCH_ROWS }, (_unused, index) => {
             const row = index + 1;
             return (
-              <tr key={index}>
-                <td data-label="Date">
+              <tr role="row" key={index}>
+                <td role="cell" data-label="Date">
                   <input type="date" {...cell(`r${index}_date`, `Row ${row} date`)} />
                 </td>
-                <td data-label="Vendor">
+                <td role="cell" data-label="Vendor">
                   <select {...cell(`r${index}_vendor`, `Row ${row} vendor`)}>
                     <option value="">Nobody on the list</option>
                     {vendorOptions.map((option) => (
@@ -175,7 +175,7 @@ export function BulkGrid({
                     ))}
                   </select>
                 </td>
-                <td data-label="Cost code">
+                <td role="cell" data-label="Cost code">
                   <select {...cell(`r${index}_code`, `Row ${row} cost code`)}>
                     <option value="">Not coded yet</option>
                     {codeOptions.map((option) => (
@@ -185,21 +185,21 @@ export function BulkGrid({
                     ))}
                   </select>
                 </td>
-                <td data-label="Description">
+                <td role="cell" data-label="Description">
                   <input
                     type="text"
                     maxLength={500}
                     {...cell(`r${index}_desc`, `Row ${row} description`)}
                   />
                 </td>
-                <td data-label="Receipt no.">
+                <td role="cell" data-label="Receipt no.">
                   <input
                     type="text"
                     maxLength={100}
                     {...cell(`r${index}_ref`, `Row ${row} receipt number`)}
                   />
                 </td>
-                <td data-label="Subtotal">
+                <td role="cell" data-label="Subtotal">
                   <input
                     type="text"
                     inputMode="decimal"
@@ -207,7 +207,7 @@ export function BulkGrid({
                     {...cell(`r${index}_sub`, `Row ${row} subtotal`, 'field-num')}
                   />
                 </td>
-                <td data-label="Tax">
+                <td role="cell" data-label="Tax">
                   <input
                     type="text"
                     inputMode="decimal"
@@ -215,7 +215,7 @@ export function BulkGrid({
                     {...cell(`r${index}_tax`, `Row ${row} tax`, 'field-num')}
                   />
                 </td>
-                <td data-label="Paid by">
+                <td role="cell" data-label="Paid by">
                   <select {...cell(`r${index}_pay`, `Row ${row} paid by`)}>
                     <option value="">Not said</option>
                     {paymentMethodOptions.map((option) => (

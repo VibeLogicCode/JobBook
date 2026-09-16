@@ -165,29 +165,29 @@ export default async function LocaleSettingsPage() {
           </ul>
 
           <TableWrap minWidth="32rem">
-            <thead>
-              <tr>
-                <th scope="col">Clock</th>
-                <th scope="col">Calendar date now</th>
-                <th scope="col">Full local time</th>
+            <thead role="rowgroup">
+              <tr role="row">
+                <th role="columnheader" scope="col">Clock</th>
+                <th role="columnheader" scope="col">Calendar date now</th>
+                <th role="columnheader" scope="col">Full local time</th>
               </tr>
             </thead>
-            <tbody>
-              <tr>
-                <td data-label="Clock">Your timezone ({timezone})</td>
-                <td data-label="Calendar date now" className="cell-num">
+            <tbody role="rowgroup">
+              <tr role="row">
+                <td role="cell" data-label="Clock">Your timezone ({timezone})</td>
+                <td role="cell" data-label="Calendar date now" className="cell-num">
                   {tenantDate}
                 </td>
-                <td data-label="Full local time" className="t-small text-muted">
+                <td role="cell" data-label="Full local time" className="t-small text-muted">
                   {clockIn(timezone, locale, now)}
                 </td>
               </tr>
-              <tr>
-                <td data-label="Clock">The container (UTC)</td>
-                <td data-label="Calendar date now" className="cell-num">
+              <tr role="row">
+                <td role="cell" data-label="Clock">The container (UTC)</td>
+                <td role="cell" data-label="Calendar date now" className="cell-num">
                   {utcDate}
                 </td>
-                <td data-label="Full local time" className="t-small text-muted">
+                <td role="cell" data-label="Full local time" className="t-small text-muted">
                   {clockIn('UTC', locale, now)}
                 </td>
               </tr>
