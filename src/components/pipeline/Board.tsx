@@ -127,7 +127,7 @@ export function Board({ cards, reminderOf, today, basePath, filters, showClosed 
                 // into a list of stages.
                 className={`min-w-0 ${column.cards.length === 0 ? 'max-sm:hidden' : ''}`}
               >
-                <section className="flex flex-col rounded-panel border border-line bg-surface-2">
+                <section className="flex flex-col rounded-panel card-surface-2">
                   {/* Sticky at EVERY width. It was `max-sm:` only, on the
                       reasoning that stacked columns are the case where one
                       fills the screen -- but a desktop column of fifteen leads
@@ -216,7 +216,7 @@ function ProjectCard({
   const starts = spellStarts(card, today);
 
   return (
-    <li className="rounded-panel border border-line bg-surface p-3">
+    <li className="rounded-panel card-surface p-3">
       {/* h4 because the column heading is the h3 and the band heading the h2. */}
       <h4 className="t-small font-semibold">
         <Link href={`/projects/${card.id}`} className="break-words text-accent-text hover:underline">

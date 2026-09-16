@@ -31,7 +31,14 @@ export function Card({
   // clipping turns the card into a scrollport, and the data table's sticky
   // `thead` and the sticky `.sum-bar` both stop sticking inside one. A child
   // that needs its corners clipped carries its own radius.
-  return <Tag className={`rounded-panel border border-line bg-surface ${className}`.trim()}>{children}</Tag>;
+  /**
+   * `card-surface` rather than `border border-line`: one declaration of
+   * elevation per theme. A shadow lifts the card off the canvas in light, a
+   * border does the same job in dark where a shadow has no light to occlude,
+   * and neither theme gets both -- a hairline under a soft shadow is two
+   * devices saying one thing. See the class in `globals.css`.
+   */
+  return <Tag className={`rounded-panel card-surface ${className}`.trim()}>{children}</Tag>;
 }
 
 export function CardHeader({

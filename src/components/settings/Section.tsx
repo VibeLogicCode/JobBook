@@ -28,7 +28,7 @@ export function Section({
 }) {
   return (
     // The surface treatment comes from `Card` rather than a third copy of
-    // `rounded-panel border border-line bg-surface`. The header is still
+    // `rounded-panel card-surface`. The header is still
     // written here rather than through `CardHeader`: a settings section runs
     // its title, its reason and its form together in one padded block, and
     // `CardHeader`'s ruled band would draw a line between the reason and the

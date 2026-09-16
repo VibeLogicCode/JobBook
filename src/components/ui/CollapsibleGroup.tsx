@@ -69,7 +69,7 @@ export function CollapsibleGroup({
       // has on that and it is not in every engine, so this is a mitigation
       // rather than a guarantee -- the document a customer receives still
       // comes from /print, never from printing a working screen.
-      className={`min-w-0 rounded-panel border border-line bg-surface print:[&::details-content]:[content-visibility:visible] ${className}`.trim()}
+      className={`min-w-0 rounded-panel card-surface print:[&::details-content]:[content-visibility:visible] ${className}`.trim()}
     >
       <summary
         aria-expanded={open}

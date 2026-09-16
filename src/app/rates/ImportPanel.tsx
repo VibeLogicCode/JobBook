@@ -187,7 +187,7 @@ export function ImportPanel({
 
       {grid.length > 0 ? (
         <>
-          <div className="flex flex-col gap-3 rounded-panel border border-line bg-surface-2 p-3">
+          <div className="flex flex-col gap-3 rounded-panel card-surface-2 p-3">
             <label className="flex min-h-11 items-center gap-2 t-small font-semibold">
               <input
                 type="checkbox"

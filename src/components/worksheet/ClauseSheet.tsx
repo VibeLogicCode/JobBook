@@ -144,7 +144,17 @@ function ClauseField({
           value={value}
           placeholder={placeholder}
           onChange={(event) => onChange(event.target.value)}
-          className="w-full rounded border border-line bg-surface px-2 py-1.5 t-body"
+          /**
+           * `field`, not a hand-rolled box.
+           *
+           * This carried `t-body` -- a class that does not exist anywhere in
+           * the stylesheet -- so it silently fell back to 14px and, worse,
+           * bypassed `.field`, which is what sets 16px below `sm` for one
+           * reason: iOS Safari zooms the whole page when a control under 16px
+           * takes focus. This is the box somebody types site exclusions into,
+           * one-handed, on a phone.
+           */
+          className="field w-full px-2 py-1.5"
         />
         <span className="t-small text-subtle">{hint}</span>
       </label>

@@ -88,8 +88,25 @@ export const SETTINGS_GROUPS: NavGroup[] = [
       },
     ],
   },
+  /**
+   * ---------------------------------------------------------------------------
+   * WHY "LISTS" IS GONE
+   * ---------------------------------------------------------------------------
+   *
+   * It held ten items and named none of them. Tax rates, cost codes, vendor
+   * types, trades, starter lists, exclusions, line groups, project types, lead
+   * sources and payment methods have nothing in common except the shape of
+   * their screens -- which is a fact about how they were BUILT, not about what
+   * an owner came here to do. A heading that describes the implementation is a
+   * heading somebody reads ten labels under.
+   *
+   * So the three groups below are named for the question being asked: what the
+   * work costs and how it is charged, what the company sells, and who it deals
+   * with. Each is three or four items, which is a group you take in at a glance
+   * rather than scan.
+   */
   {
-    heading: 'Lists',
+    heading: 'Money and tax',
     items: [
       {
         href: '/settings/tax-rates',
@@ -102,6 +119,53 @@ export const SETTINGS_GROUPS: NavGroup[] = [
         summary: 'How spend is categorised. Retiring one is not voiding it, and nothing is deleted.',
       },
       {
+        href: '/settings/payment-methods',
+        label: 'Payment methods',
+        summary: 'How money leaves. One of them means the money has not left yet.',
+      },
+    ],
+  },
+  {
+    heading: 'The work you sell',
+    items: [
+      {
+        /**
+         * First, because it is how every other list in this group gets
+         * populated -- and because it answers a question the wizard leaves an
+         * owner with: the trade is asked once, by a screen that closes for
+         * good.
+         */
+        href: '/settings/starter-lists',
+        label: 'Starter lists',
+        summary: 'Add another trade’s job types, cost codes, rate book and templates. Adds only.',
+      },
+      {
+        href: '/settings/project-types',
+        label: 'Project types',
+        summary: 'What kind of work a job is. Retiring one never blanks the job that has it.',
+      },
+      {
+        href: '/settings/line-groups',
+        label: 'Line groups',
+        summary: 'The section heading a quote prints. Retiring one never touches what already printed.',
+      },
+      {
+        /**
+         * Here rather than under The company: it is content the owner
+         * maintains and taps from, and it is per DEPLOYMENT, not per company
+         * -- `quote_clauses` has no company column, and an exclusion about
+         * permit fees is not a fact about which corporation issued the paper.
+         */
+        href: '/settings/clauses',
+        label: 'Not included, and assumed',
+        summary: 'The sentences you put on nearly every quote about what the price does not cover.',
+      },
+    ],
+  },
+  {
+    heading: 'People you work with',
+    items: [
+      {
         href: '/settings/vendor-types',
         label: 'Vendor types',
         summary: 'What kind of counterparty a vendor is, and which kinds count as subcontractors.',
@@ -112,46 +176,9 @@ export const SETTINGS_GROUPS: NavGroup[] = [
         summary: 'What kind of subcontractor somebody is. Retiring one never blanks the sub who has it.',
       },
       {
-        /**
-         * First in Lists, because it is how the other lists get populated --
-         * and because it answers a question the wizard leaves an owner with:
-         * the trade is asked once, by a screen that then closes for good.
-         */
-        href: '/settings/starter-lists',
-        label: 'Starter lists',
-        summary: 'Add another trade’s job types, cost codes, rate book and templates. Adds only.',
-      },
-      {
-        /**
-         * With the lists rather than under The company, because it is content
-         * the owner maintains and taps from, exactly like line groups -- and
-         * because it is per DEPLOYMENT, not per company: `quote_clauses` has
-         * no company column, and an exclusion about permit fees is not a fact
-         * about which corporation issued the paper.
-         */
-        href: '/settings/clauses',
-        label: 'Not included, and assumed',
-        summary: 'The sentences you put on nearly every quote about what the price does not cover.',
-      },
-      {
-        href: '/settings/line-groups',
-        label: 'Line groups',
-        summary: 'The section heading a quote prints. Retiring one never touches what already printed.',
-      },
-      {
-        href: '/settings/project-types',
-        label: 'Project types',
-        summary: 'What kind of work a job is. Retiring one never blanks the job that has it.',
-      },
-      {
         href: '/settings/lead-sources',
         label: 'Lead sources',
         summary: 'How a customer found you. Retiring one never blanks the customer who has it.',
-      },
-      {
-        href: '/settings/payment-methods',
-        label: 'Payment methods',
-        summary: 'How money leaves. One of them means the money has not left yet.',
       },
     ],
   },

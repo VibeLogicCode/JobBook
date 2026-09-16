@@ -53,9 +53,25 @@ export function AppShell({
                   // block of its own: `.sr-only` is `position: absolute`, and
                   // an unpositioned ancestor hands it the page instead, which
                   // is how an off-screen span ends up widening the document.
-                  className={`relative flex min-h-11 items-center gap-3 rounded-control px-3 ${
+                  /**
+                   * The 120ms is on COLOUR only, and it is the whole of the
+                   * animation budget for the navigation.
+                   *
+                   * A rail is pressed dozens of times an hour by somebody who
+                   * is not looking at it -- they are looking at where they are
+                   * going. Anything that slides, grows or fades in delays the
+                   * answer to "did that register". A colour that settles over
+                   * two frames says the press landed without asking for a
+                   * moment of attention; a transform would take one.
+                   *
+                   * `font-medium` on the current page rather than a coloured
+                   * spine: weight is the system's own emphasis device, and a
+                   * 2px accent border on a list item is the decoration this
+                   * design does not otherwise use.
+                   */
+                  className={`relative flex min-h-11 items-center gap-3 rounded-control px-3 transition-colors duration-[120ms] ${
                     active
-                      ? 'bg-accent-soft text-accent-soft-fg'
+                      ? 'bg-accent-soft font-medium text-accent-soft-fg'
                       : 'text-muted hover:bg-surface-2 hover:text-ink'
                   }`}
                 >
@@ -169,8 +185,10 @@ function BottomBar({ pathname }: { pathname: string }) {
   // screens, which reads as "you are nowhere".
   const inOverflow = OVERFLOW.some((entry) => isActive(entry.href));
 
+  // Same 120ms colour settle as the rail, so the two navigations agree about
+  // what a press feels like.
   const seat =
-    'flex min-h-12 flex-1 flex-col items-center justify-center gap-0.5 py-2 t-micro';
+    'flex min-h-12 flex-1 flex-col items-center justify-center gap-0.5 py-2 t-micro transition-colors duration-[120ms]';
 
   return (
     <>
@@ -183,7 +201,9 @@ function BottomBar({ pathname }: { pathname: string }) {
             key={href}
             href={href}
             aria-current={isActive(href) ? 'page' : undefined}
-            className={`${seat} ${isActive(href) ? 'text-accent-text' : 'text-muted'}`}
+            className={`${seat} ${
+              isActive(href) ? 'font-semibold text-accent-text' : 'text-muted'
+            }`}
           >
             <Icon size={20} aria-hidden />
             <span>{label}</span>

@@ -48,7 +48,7 @@ export default async function SignInPage({
       ) : null}
 
       {providers.length === 0 ? (
-        <p className="rounded-panel border border-line bg-surface p-4 t-small text-muted">
+        <p className="rounded-panel card-surface p-4 t-small text-muted">
           No sign-in provider is configured on this installation. An operator sets one in the
           container environment; nothing about it is stored in the database.
         </p>

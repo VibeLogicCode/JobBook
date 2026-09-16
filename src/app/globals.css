@@ -43,8 +43,12 @@
 
   --ink: #16162b;
   --muted: #5a5a72;
-  --subtle: #6e6e88;
-  --placeholder: #8c8ca6;
+  /* 4.59:1 on --surface-2, where hint text actually sits. #6e6e88 measured
+     4.32:1 there -- under AA for normal text on every shaded band and table
+     header in the app, while passing on plain white. Measured, not eyeballed. */
+  --subtle: #6a6a83;
+  /* 4.55:1 on white. Placeholder text is text: the old #8c8ca6 was 3.27:1. */
+  --placeholder: #74748b;
 
   --accent: #4b49d6;
   --accent-hover: #3f3dbf;
@@ -99,7 +103,8 @@
   --ink: #ededf5;
   --muted: #a9adc4;
   --subtle: #868ba6;
-  --placeholder: #63687f;
+  /* 4.62:1 on --field-bg. The old #63687f was 3.41:1. */
+  --placeholder: #787d95;
 
   --accent: #5d59e8;
   --accent-hover: #6f6bf2;
@@ -189,7 +194,7 @@
      numbers until a band began overlapping the header it was supposed to sit
      under; the border is excluded because `border-bottom` sits outside the
      content box the padding and line-height describe. */
-  --table-head-pad-y: 8px;
+  --table-head-pad-y: 10px;
   --table-head-line: 14px;
   --table-head-h: calc(var(--table-head-line) + 2 * var(--table-head-pad-y));
 
@@ -229,6 +234,50 @@
     outline-offset: 2px;
   }
 
+  /* ---- The surfaces we did not draw ----
+     A caret, a scrollbar and an underline all ship with a browser default that
+     belongs to no design system, and on a screen this dense they are the parts
+     a person stares at longest. Theming them is the cheapest signal that the
+     page was built rather than assembled. */
+  :where(input, textarea, [contenteditable]) {
+    caret-color: var(--accent);
+  }
+
+  html {
+    scrollbar-color: var(--line-strong) transparent;
+    scrollbar-width: thin;
+  }
+
+  /* Chrome and Safari ignore `scrollbar-width`, so the same intent again. The
+     track stays transparent: a dense table already carries enough lines. */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: var(--line-strong);
+    border: 2px solid transparent;
+    background-clip: content-box;
+    border-radius: 999px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--subtle);
+    background-clip: content-box;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  /* An underline that collides with the descenders of a quote number is the
+     default nobody chooses. */
+  :where(a) {
+    text-underline-offset: 0.2em;
+    text-decoration-thickness: from-font;
+  }
+
   ::selection {
     background: var(--accent-soft);
     color: var(--accent-soft-fg);
@@ -249,9 +298,24 @@
     letter-spacing: -0.02em;
     font-weight: 600;
   }
+  /* ---- The document voice ----
+     IBM Plex Serif was installed, tokenised at `--font-serif`, and used exactly
+     nowhere. It belongs here, and only here: this class names RECORDS AND
+     DOCUMENTS -- every page's <h1>, and the quote number at the head of the
+     worksheet. This product's whole output is paper somebody signs, so the
+     thing that names the paper should not be the same voice as the toolbar.
+
+     Three voices, each with one job: serif names documents, sans runs the
+     interface, mono carries every number. Money stays mono -- `.t-display` is
+     used only with `.num` -- so a total is never set in a face whose figures
+     do not align in a column. */
   .t-title {
-    font-size: 20px;
+    font-family: var(--font-serif);
+    font-size: 21px;
     line-height: 28px;
+    /* Plex Serif sets a shade wider than Plex Sans at the same size; a hair of
+       negative tracking keeps a long job name on one line at 390px. */
+    letter-spacing: -0.01em;
     font-weight: 600;
   }
   .t-heading {
@@ -268,6 +332,29 @@
     line-height: 14px;
     letter-spacing: 0.04em;
     font-weight: 600;
+  }
+
+  /* ---- Card ----
+     ONE declaration of elevation per theme, never both. A hairline border
+     under a soft shadow is the ghost card: two devices saying the same thing
+     and neither committing.
+
+     In LIGHT the shadow does it. `--elev-card` carries a real offset and a
+     wide soft blur, so a card sits above the canvas instead of being drawn on
+     it -- which is the whole difference between this reading as a document
+     surface and reading as a form.
+
+     In DARK a shadow is invisible: there is no light to occlude. So the border
+     does the same job, and the shadow stands down rather than being spent on
+     nothing. */
+  .card-surface {
+    background: var(--surface);
+    box-shadow: var(--elev-card);
+  }
+
+  .dark .card-surface {
+    box-shadow: none;
+    border: 1px solid var(--line);
   }
 
   /* ---- Data table ----
@@ -325,6 +412,13 @@
     border-top: 1px solid var(--line-strong);
     border-bottom: 1px solid var(--line-strong);
     font-weight: 600;
+  }
+
+  @media (min-width: 640px) {
+    /* No compact nav above this width, so nothing to clear. */
+    .sum-bar {
+      bottom: 0;
+    }
   }
 
   @media (max-width: 639px) {
@@ -454,9 +548,20 @@
   }
 
   /* ---- Sum bar: pinned to the bottom edge, square corners ---- */
+  /* The quote's own bottom line, and on a phone it used to be painted UNDER
+     the tab bar: this is `z-index: 5` and `AppShell`'s compact nav is a fixed
+     `z-index: 10`, both pinned to the bottom of the same stacking context. The
+     total, the cost, the margin gauge and the PDF link were only visible at the
+     very end of the scroll, where this bar reaches its natural position above
+     the page's 80px spacer.
+
+     `SaveBanner` already had the answer -- `calc(5rem + env(safe-area-inset-
+     bottom))` -- so this is that same house rule, applied where it was missed
+     rather than invented again. From `sm` up the compact nav is gone and the
+     bar pins to the bottom of the viewport as before. */
   .sum-bar {
     position: sticky;
-    bottom: 0;
+    bottom: calc(5rem + env(safe-area-inset-bottom));
     z-index: 5;
     background: var(--surface);
     border-top: 1px solid var(--line-strong);
