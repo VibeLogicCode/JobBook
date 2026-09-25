@@ -181,6 +181,65 @@ export async function saveIdentity(
 }
 
 // ---------------------------------------------------------------------------
+// What this deployment uses
+// ---------------------------------------------------------------------------
+
+const moduleLabels = {
+  modulePipeline: 'Pipeline',
+  moduleCalendar: 'Calendar and schedule',
+  moduleExpenses: 'Expenses',
+  moduleVendors: 'Vendors and subcontractors',
+  moduleTemplates: 'Templates',
+  moduleReminders: 'Reminders',
+};
+
+/**
+ * Six checkboxes, and absence is off.
+ *
+ * A browser sends nothing for a box that is not ticked, which is exactly the
+ * meaning wanted here -- unlike most of this file, where absence means "the
+ * control was not on the page" and has to be told apart from a deliberate
+ * blank. `checkbox` already resolves an unsent key to `false`.
+ */
+const modulesSchema = z.object({
+  modulePipeline: checkbox,
+  moduleCalendar: checkbox,
+  moduleExpenses: checkbox,
+  moduleVendors: checkbox,
+  moduleTemplates: checkbox,
+  moduleReminders: checkbox,
+});
+
+/**
+ * Switches a part of the product on or off for the whole deployment.
+ *
+ * NOT A MODE. See `db/schema/organization.ts` for the argument, and
+ * `lib/modules/types.ts` for why six screens are not offered as choices at
+ * all.
+ *
+ * Nothing is migrated either way. Turning something off hides its entry point
+ * and leaves every row it ever wrote exactly where it is; turning it back on
+ * shows the same screens over the same data. That is what makes this safe to
+ * change on a whim, which is the point -- somebody who starts with quotes and
+ * invoices should be able to try the pipeline on a wet Tuesday and switch it
+ * off again.
+ */
+export async function saveModules(
+  _previous: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  const guard = await requireCapability('organization.edit');
+  if (!guard.ok) return guard.result;
+
+  const parsed = modulesSchema.safeParse(formValues(formData));
+  if (!parsed.success) return invalid(parsed.error, moduleLabels);
+
+  // Organization columns only, so the company half of the patch is empty and
+  // `patchOrganization` takes its no-op path for `companies`.
+  return patchOrganization(parsed.data, 'Saved. The menu follows on your next screen.', null);
+}
+
+// ---------------------------------------------------------------------------
 // The kind of work
 // ---------------------------------------------------------------------------
 

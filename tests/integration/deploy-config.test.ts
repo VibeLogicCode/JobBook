@@ -182,7 +182,12 @@ async function runStepsThroughFirstUser(): Promise<void> {
    * all nine of migration 0018's project types, so nothing this file asserts
    * later is standing on a list a pack quietly retired.
    */
-  expect((await saveTradeStep(null, form({ workPosture: 'both', trade: 'general' }))).ok)
+  // `scope` is required and has no default on the form: there is no sensible
+  // guess at how much of the product a stranger wants.
+  expect(
+    (await saveTradeStep(null, form({ workPosture: 'both', trade: 'general', scope: 'everything' })))
+      .ok,
+  )
     .toBe(true);
   expect((await saveLocaleStep(null, form(LOCALE))).ok).toBe(true);
   expect((await saveFinancialStep(null, form(FINANCIAL))).ok).toBe(true);

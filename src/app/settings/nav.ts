@@ -1,3 +1,4 @@
+import type { ModuleKey, ModuleState } from '@/lib/modules/types';
 import type { NavGroup } from '@/components/settings/SettingsNav';
 
 /**
@@ -65,6 +66,17 @@ export const SETTINGS_GROUPS: NavGroup[] = [
         href: '/settings/work',
         label: 'The kind of work',
         summary: 'Service work, contract work or both. Decides which job types and fields you get.',
+      },
+      {
+        /**
+         * Beside "The kind of work", because the two are the same shape of
+         * question asked at different heights: that one is what paperwork a
+         * job needs, this is how much of the product the business wants in
+         * front of it.
+         */
+        href: '/settings/modules',
+        label: 'What this deployment uses',
+        summary: 'Put away the parts you do not want. Quotes, invoices, people and rates always stay.',
       },
       {
         href: '/settings/contact',
@@ -212,3 +224,38 @@ export const SETTINGS_GROUPS: NavGroup[] = [
 
 /** The flat list, for anything that genuinely has no use for the grouping. */
 export const SETTINGS_SECTIONS = SETTINGS_GROUPS.flatMap((group) => group.items);
+
+/**
+ * Which optional part of the product each settings screen belongs to.
+ *
+ * Only these three: the pipeline, the calendar and expenses have no settings
+ * of their own, and everything else here configures the core -- the company,
+ * its tax, its job types, its users, its backups.
+ */
+const MODULE_OF: Partial<Record<string, ModuleKey>> = {
+  '/settings/vendor-types': 'vendors',
+  '/settings/trades': 'vendors',
+  '/settings/reminder-rules': 'reminders',
+};
+
+/**
+ * The settings menu for a deployment, without the screens that configure parts
+ * it does not use.
+ *
+ * One rule, derived from the map above, rather than a second list of what to
+ * show -- a second list is how a screen ends up on one and not the other. A
+ * group that loses every item disappears with them; a group that keeps one
+ * stays, which is why "People you work with" survives on lead sources alone
+ * when vendors are switched off.
+ *
+ * The screens themselves keep working. This decides what is OFFERED.
+ */
+export function settingsGroupsFor(modules: ModuleState): NavGroup[] {
+  return SETTINGS_GROUPS.map((group) => ({
+    ...group,
+    items: group.items.filter((item) => {
+      const key = MODULE_OF[item.href];
+      return key === undefined || modules[key];
+    }),
+  })).filter((group) => group.items.length > 0);
+}

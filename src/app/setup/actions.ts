@@ -302,11 +302,22 @@ export async function saveContactStep(
 const tradeLabels = {
   workPosture: 'Kind of work',
   trade: 'Trade',
+  scope: 'What to start with',
 };
 
 const tradeSchema = z.object({
   workPosture: z.enum(['both', 'service', 'contract'], 'choose what kind of work you do'),
-  trade: z.enum(['general', 'electrical', 'plumbing', 'hvac', 'none'], 'choose a trade'),
+  trade: z.enum(['general', 'electrical', 'plumbing', 'hvac', 'machining', 'none'], 'choose a trade'),
+  /**
+   * How much of the product to start with.
+   *
+   * REQUIRED, with no default on the form, for the same reason the trade field
+   * has none: there is no sensible guess at a stranger's business, and a
+   * pre-selected answer to "how much of this do you want" is one nobody reads.
+   * Contrast `workPosture`, which defaults to `both` because that is the
+   * answer that changes least.
+   */
+  scope: z.enum(['quotes', 'everything'], 'choose what to start with'),
 });
 
 /**
@@ -341,13 +352,38 @@ export async function saveTradeStep(
 ): Promise<ActionResult> {
   const parsed = tradeSchema.safeParse(formValues(formData));
   if (!parsed.success) return invalid(parsed.error, tradeLabels);
-  const { workPosture, trade } = parsed.data;
+  const { workPosture, trade, scope } = parsed.data;
 
   return persistStep('trade', async (tx) => {
     await tx
       .update(companies)
       .set({ workPosture })
       .where(eq(companies.id, FIRST_COMPANY_ID));
+
+    /**
+     * How much of the product this deployment starts with.
+     *
+     * Written only when the installer asks for less: the columns already
+     * default to true, so "everything" is the absence of a decision rather
+     * than a second set of writes -- and a deployment migrated forward from
+     * before this question existed keeps every screen it had.
+     *
+     * On `organization` and not on the company: two sister corporations share
+     * one rail and one settings menu.
+     */
+    if (scope === 'quotes') {
+      await tx
+        .update(organization)
+        .set({
+          modulePipeline: false,
+          moduleCalendar: false,
+          moduleExpenses: false,
+          moduleVendors: false,
+          moduleTemplates: false,
+          moduleReminders: false,
+        })
+        .where(eq(organization.id, 1));
+    }
 
     // The posture just saved above, so a `both`-tagged row arrives with the
     // paperwork this kind of outfit actually needs. Without it, "Service

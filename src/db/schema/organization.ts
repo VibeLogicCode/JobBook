@@ -52,6 +52,50 @@ export const organization = pgTable('organization', {
    */
   timezone: text('timezone').notNull().default('America/Toronto'),
   areaUnit: areaUnitEnum('area_unit').notNull().default('sqft'),
+
+  /**
+   * ---------------------------------------------------------------------------
+   * WHICH PARTS OF THE PRODUCT THIS DEPLOYMENT USES
+   * ---------------------------------------------------------------------------
+   *
+   * The owner's question: can this be a quote-and-invoice tool for somebody
+   * who is not ready for the rest, "maybe this is a setting that user can
+   * disable"?
+   *
+   * NOT A MODE, and that distinction is the whole design. A mode is a second
+   * product: every future feature needs a "which mode is this in" decision,
+   * every bug report starts with "which mode are you in", and the two paths
+   * drift until one of them is quietly broken. These are switches over one
+   * product -- the same rule `2026-09-09-service-and-contract-work-design.md`
+   * §1 reached when it refused a third posture.
+   *
+   * A DIFFERENT AXIS FROM POSTURE, and they must not be folded together.
+   * `work_posture` answers what paperwork a JOB needs; this answers how much
+   * of the product a BUSINESS uses. A one-van electrician may well want
+   * expenses and job costing, and a builder may want nothing but quotes for
+   * his first month. Deriving one from the other would deny both.
+   *
+   * ON THE DEPLOYMENT, not on `companies`. Two sister corporations under one
+   * owner share one rail and one settings menu; whether this office tracks
+   * expenses is not a fact about which legal person issued a document.
+   *
+   * DEFAULT TRUE, which makes the change backward compatible by construction:
+   * every existing install keeps every screen it has, and only the first-run
+   * wizard writes `false`. The same trick `work_posture` used by defaulting to
+   * `both`.
+   *
+   * SWITCHED OFF MEANS NOT OFFERED, NEVER FORBIDDEN. The routes keep working
+   * for a bookmark or a link in a reminder -- the rule this product already
+   * follows for a retired list row, which the pickers stop offering and the
+   * actions still accept. Nothing is migrated when one is turned back on,
+   * because every table is already there.
+   */
+  modulePipeline: boolean('module_pipeline').notNull().default(true),
+  moduleCalendar: boolean('module_calendar').notNull().default(true),
+  moduleExpenses: boolean('module_expenses').notNull().default(true),
+  moduleVendors: boolean('module_vendors').notNull().default(true),
+  moduleTemplates: boolean('module_templates').notNull().default(true),
+  moduleReminders: boolean('module_reminders').notNull().default(true),
   /**
    * What a kilometre driven on a job costs, in ten-thousandths of a currency
    * unit: $0.7200/km is 7200.

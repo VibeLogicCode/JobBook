@@ -92,6 +92,39 @@ export default async function TradeSetupStep() {
             />
           </FieldGrid>
 
+          <FieldGrid>
+            {/*
+              * NO DEFAULT, deliberately, like the trade above it and unlike
+              * the posture: there is no sensible guess at how much of a
+              * product a stranger wants, and a pre-selected answer to that is
+              * one nobody reads.
+              *
+              * It is a different question from the kind of work. That decides
+              * what paperwork a job carries; this decides how much of the
+              * product is in front of you. Both are changeable afterwards.
+              */}
+            <SelectField
+              name="scope"
+              label="What do you want to start with?"
+              idPrefix="setup-trade"
+              required
+              defaultValue=""
+              blankLabel="Choose one"
+              options={[
+                {
+                  value: 'quotes',
+                  label: 'Just quotes and invoices — price work, send it, bill it',
+                },
+                {
+                  value: 'everything',
+                  label: 'Everything — jobs, schedule, expenses, subcontractors, templates',
+                },
+              ]}
+              wide
+              hint="Nothing is lost either way. Turning a part on later shows it over everything already recorded."
+            />
+          </FieldGrid>
+
           <Notice tone="warning" title="The rate book arrives with no prices in it">
             <p>
               Deliberately. A rate book of numbers this software guessed looks authoritative,

@@ -4,6 +4,7 @@ import {
   Ruler, Settings, Users,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import type { ModuleKey, ModuleState } from '@/lib/modules/types';
 
 export interface Destination {
   href: string;
@@ -100,3 +101,56 @@ export const BOTTOM_BAR_SEATS = 5;
  */
 export const BOTTOM_BAR: readonly Destination[] = DESTINATIONS.slice(0, BOTTOM_BAR_SEATS - 1);
 export const OVERFLOW: readonly Destination[] = DESTINATIONS.slice(BOTTOM_BAR_SEATS - 1);
+
+/**
+ * Which optional part of the product each destination belongs to.
+ *
+ * A destination with no entry here is CORE and cannot be switched off: Today,
+ * Quotes, Invoices, People, Rates, Settings. See `lib/modules/types.ts` for
+ * why those six are not offered as choices.
+ */
+const MODULE_OF: Partial<Record<string, ModuleKey>> = {
+  '/reminders': 'reminders',
+  '/projects': 'pipeline',
+  '/calendar': 'calendar',
+  '/vendors': 'vendors',
+  '/expenses': 'expenses',
+  '/templates': 'templates',
+};
+
+/**
+ * The rail for a deployment, with the parts it does not use left out.
+ *
+ * Filtered rather than hidden with CSS, because a link that is not offered
+ * must also not be in the tab order -- `sr-only` on a destination is how eight
+ * links came to be announced as "link" once before.
+ *
+ * The routes themselves keep working. This decides what is OFFERED, exactly as
+ * a retired list row stops being offered and is still accepted if submitted.
+ */
+export function destinationsFor(modules: ModuleState): Destination[] {
+  return DESTINATIONS.filter((destination) => {
+    const key = MODULE_OF[destination.href];
+    return key === undefined || modules[key];
+  });
+}
+
+/**
+ * The phone bar and its overflow, SPLIT AFTER FILTERING.
+ *
+ * This is the trap the constants above would have walked into: they slice the
+ * full list, so a deployment with the pipeline switched off would have kept a
+ * seat for a destination that is not there, and one of the remaining screens
+ * would have silently lost its place on the bar. Derived from whatever list is
+ * actually being rendered, so the bar is always full and the overflow always
+ * holds the rest.
+ */
+export function barFor(list: readonly Destination[]): {
+  bar: Destination[];
+  overflow: Destination[];
+} {
+  return {
+    bar: list.slice(0, BOTTOM_BAR_SEATS - 1),
+    overflow: list.slice(BOTTOM_BAR_SEATS - 1),
+  };
+}

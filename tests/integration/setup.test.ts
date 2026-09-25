@@ -13,7 +13,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('next/cache', () => ({ revalidatePath: () => {} }));
 
 import { db } from '@/db/client';
-import { organization, settings, taxRates, users } from '@/db/schema';
+import { costCodes, organization, settings, taxRates, users } from '@/db/schema';
 // After the mocks above, deliberately: this pulls in the database client,
 // and the module under test must not be loaded before they are installed.
 import { readDeployment, seedDeployment } from '../support/organization';
@@ -91,6 +91,9 @@ const CONTACT = {
 const TRADE = {
   workPosture: 'both',
   trade: 'general',
+  // Required, with no default on the form: there is no sensible guess at how
+  // much of the product a stranger wants.
+  scope: 'everything',
 };
 
 const LOCALE = {
@@ -777,3 +780,61 @@ async function* walk(dir: string): AsyncGenerator<string> {
     else if (/\.tsx?$/.test(entry.name)) yield full;
   }
 }
+
+/**
+ * How much of the product a deployment starts with.
+ *
+ * The owner's question was whether this could be a quote-and-invoice tool for
+ * somebody not ready for the rest, switched on when they are. The answer is a
+ * set of switches rather than a mode -- see `db/schema/organization.ts` -- and
+ * the wizard is where the first value is written.
+ */
+describe('what the deployment starts with', () => {
+  it('leaves every part on when the installer asks for everything', async () => {
+    expect(messageOf(await saveCompanyStep(null, form(COMPANY)))).toContain('created');
+    expect((await saveContactStep(null, form(CONTACT))).ok).toBe(true);
+    expect((await saveTradeStep(null, form({ ...TRADE, scope: 'everything' }))).ok).toBe(true);
+
+    const [row] = await db.select().from(organization).where(eq(organization.id, 1));
+    expect(row!.modulePipeline).toBe(true);
+    expect(row!.moduleCalendar).toBe(true);
+    expect(row!.moduleExpenses).toBe(true);
+    expect(row!.moduleVendors).toBe(true);
+    expect(row!.moduleTemplates).toBe(true);
+    expect(row!.moduleReminders).toBe(true);
+  });
+
+  it('puts the optional parts away for a quotes-and-invoices start', async () => {
+    expect(messageOf(await saveCompanyStep(null, form(COMPANY)))).toContain('created');
+    expect((await saveContactStep(null, form(CONTACT))).ok).toBe(true);
+    expect((await saveTradeStep(null, form({ ...TRADE, scope: 'quotes' }))).ok).toBe(true);
+
+    const [row] = await db.select().from(organization).where(eq(organization.id, 1));
+    expect(row!.modulePipeline).toBe(false);
+    expect(row!.moduleCalendar).toBe(false);
+    expect(row!.moduleExpenses).toBe(false);
+    expect(row!.moduleVendors).toBe(false);
+    expect(row!.moduleTemplates).toBe(false);
+    expect(row!.moduleReminders).toBe(false);
+  });
+
+  it('refuses the step when the question is left unanswered', async () => {
+    // No default on the form, so an unanswered select sends nothing -- and the
+    // step must refuse rather than pick for him.
+    expect(messageOf(await saveCompanyStep(null, form(COMPANY)))).toContain('created');
+    const { scope: _scope, ...withoutScope } = TRADE;
+    expect((await saveTradeStep(null, form(withoutScope))).ok).toBe(false);
+  });
+
+  it('loads the trade pack either way', async () => {
+    // The parts that are put away are the MENU. A quotes-only start still gets
+    // its job types, cost codes and rate book -- it is quoting that needs them.
+    expect(messageOf(await saveCompanyStep(null, form(COMPANY)))).toContain('created');
+    expect((await saveContactStep(null, form(CONTACT))).ok).toBe(true);
+    expect((await saveTradeStep(null, form({ ...TRADE, trade: 'electrical', scope: 'quotes' }))).ok)
+      .toBe(true);
+
+    const codes = (await db.select().from(costCodes)).map((row) => row.code);
+    expect(codes).toContain('E-10');
+  });
+});

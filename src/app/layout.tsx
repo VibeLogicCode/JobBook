@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { ThemeScript } from '@/components/theme/theme-script';
 import { AppShell } from '@/components/ui/AppShell';
 import { loadOrganization } from '@/lib/organization/load';
+import { modulesOf } from '@/lib/modules/read';
 import { primaryCompany } from '@/lib/company/load';
 import './globals.css';
 
@@ -94,6 +95,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <AppShell
           displayName={org?.displayName ?? 'Not set up'}
           ownerName={company?.ownerName ?? null}
+          // Which parts of the product this deployment uses. Derived from the
+          // organization row the layout has already read, so the rail costs no
+          // query of its own.
+          modules={modulesOf(org)}
         >
           {children}
         </AppShell>

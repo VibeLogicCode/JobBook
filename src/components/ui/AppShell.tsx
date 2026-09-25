@@ -5,7 +5,8 @@ import { SaveBanner } from '@/components/ui/SaveBanner';
 import { usePathname } from 'next/navigation';
 import { Menu, Moon, Sun } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { BOTTOM_BAR, DESTINATIONS, OVERFLOW } from '@/components/ui/destinations';
+import { barFor, destinationsFor, type Destination } from '@/components/ui/destinations';
+import { ALL_MODULES_ON, type ModuleState } from '@/lib/modules/types';
 import { Sheet } from '@/components/ui/Sheet';
 
 /**
@@ -16,14 +17,30 @@ import { Sheet } from '@/components/ui/Sheet';
 export function AppShell({
   displayName,
   ownerName,
+  modules = ALL_MODULES_ON,
   children,
 }: {
   displayName: string;
   ownerName: string | null;
+  /**
+   * Which parts of the product this deployment uses. Resolved by the layout
+   * and passed down, because this is a client component and the answer lives
+   * in the organization row.
+   *
+   * Defaulted to everything on, which is both the column default and the
+   * fail-open direction: a shell that hides destinations because a prop did
+   * not arrive is a shell that loses half the product on a blip.
+   */
+  modules?: ModuleState;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
   const isPrint = pathname?.startsWith('/print');
+
+  // Filtered once, here, so the rail and the phone bar cannot disagree about
+  // which screens exist.
+  const destinations = destinationsFor(modules);
+  const { bar, overflow } = barFor(destinations);
 
   // The print route renders inside headless Chromium, where the shell would
   // print a navigation rail onto a customer's contract.
@@ -60,7 +77,7 @@ export function AppShell({
           </span>
         </div>
         <ul className="flex flex-1 flex-col gap-1 p-2">
-          {DESTINATIONS.map(({ href, label, icon: Icon }) => {
+          {destinations.map(({ href, label, icon: Icon }) => {
             const active = href === '/' ? pathname === '/' : pathname?.startsWith(href);
             return (
               <li key={href}>
@@ -156,7 +173,7 @@ export function AppShell({
           />
         </main>
 
-        <BottomBar pathname={pathname ?? ''} />
+        <BottomBar pathname={pathname ?? ''} bar={bar} overflow={overflow} />
       </div>
     </div>
   );
@@ -194,14 +211,23 @@ export function AppShell({
  * distinctly and exactly one is ever rendered, since each hides at the width
  * the other appears.
  */
-function BottomBar({ pathname }: { pathname: string }) {
+function BottomBar({
+  pathname,
+  bar,
+  overflow,
+}: {
+  pathname: string;
+  /** Already filtered and split by `barFor`, so this cannot disagree with the rail. */
+  bar: Destination[];
+  overflow: Destination[];
+}) {
   const [more, setMore] = useState(false);
   const isActive = (href: string) => (href === '/' ? pathname === '/' : pathname.startsWith(href));
 
   // Whether the thing the person is currently looking at lives behind the
   // button. Without this the bar shows nothing highlighted on six of eleven
   // screens, which reads as "you are nowhere".
-  const inOverflow = OVERFLOW.some((entry) => isActive(entry.href));
+  const inOverflow = overflow.some((entry) => isActive(entry.href));
 
   // Same 120ms colour settle as the rail, so the two navigations agree about
   // what a press feels like.
@@ -214,7 +240,7 @@ function BottomBar({ pathname }: { pathname: string }) {
         aria-label="Main, compact"
         className="no-print fixed inset-x-0 bottom-0 z-10 flex border-t border-line-strong bg-surface sm:hidden"
       >
-        {BOTTOM_BAR.map(({ href, label, icon: Icon }) => (
+        {bar.map(({ href, label, icon: Icon }) => (
           <Link
             key={href}
             href={href}
@@ -228,7 +254,7 @@ function BottomBar({ pathname }: { pathname: string }) {
           </Link>
         ))}
 
-        {OVERFLOW.length > 0 ? (
+        {overflow.length > 0 ? (
           <button
             type="button"
             aria-haspopup="dialog"
@@ -245,7 +271,7 @@ function BottomBar({ pathname }: { pathname: string }) {
       {more ? (
         <Sheet label="More screens" title="More" onClose={() => setMore(false)}>
           <ul className="flex flex-col gap-1 pb-2">
-            {OVERFLOW.map(({ href, label, icon: Icon }) => (
+            {overflow.map(({ href, label, icon: Icon }) => (
               <li key={href}>
                 <Link
                   href={href}
