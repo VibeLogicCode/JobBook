@@ -1,5 +1,6 @@
 import {
   BellRing, CalendarDays, ClipboardList, FileText, HardHat, Home, LayoutTemplate, Receipt,
+  ReceiptText,
   Ruler, Settings, Users,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -28,6 +29,20 @@ export const DESTINATIONS: readonly Destination[] = [
   { href: '/', label: 'Today', icon: Home },
   { href: '/reminders', label: 'Reminders', icon: BellRing },
   { href: '/quotes', label: 'Quotes', icon: FileText },
+  /**
+   * Directly under Quotes, and that position is a decision with a cost.
+   *
+   * These are the two documents the business runs on -- one asks for the work,
+   * the other asks for the money -- and reading them as a pair is how an owner
+   * checks whether what he sold has been billed. Anywhere below the fold they
+   * become a screen he opens when he already suspects something is wrong.
+   *
+   * The cost is that it takes the fourth bottom-bar seat and PIPELINE MOVES TO
+   * "More" on a phone. Paid knowingly: a job board is read at a desk while
+   * planning a week, and "has that been invoiced" is asked standing in a
+   * merchant's car park.
+   */
+  { href: '/invoices', label: 'Invoices', icon: ReceiptText },
   { href: '/projects', label: 'Pipeline', icon: ClipboardList },
   // Directly after the pipeline, because it is the same book of work read by
   // the day instead of by the job -- and because that position puts it on the

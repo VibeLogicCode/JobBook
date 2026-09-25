@@ -57,16 +57,9 @@ import { isUuid } from '@/lib/ids';
  * every figure again inside the writing transaction.
  */
 
-export const dynamic = 'force-dynamic';
+import { INVOICE_KINDS } from '@/lib/invoice/labels';
 
-/** Every kind the engine can bill, so a row written by another path still reads. */
-const INVOICE_KINDS: Record<InvoiceKind, string> = {
-  deposit: 'Deposit',
-  progress: 'Progress',
-  final: 'Final',
-  holdback_release: 'Holdback release',
-  change_order: 'Change order',
-};
+export const dynamic = 'force-dynamic';
 
 /**
  * A subtraction row's figure, without ever printing `-$0.00`.
