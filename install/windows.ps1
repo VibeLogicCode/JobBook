@@ -218,11 +218,12 @@ if ($Ready) {
 }
 
 Say ''
-Say '  Stop:     docker compose -f "' + $ComposePath + '" down'
-Say '  Start:    docker compose -f "' + $ComposePath + '" up -d'
-Say '  Update:   irm https://raw.githubusercontent.com/' + $Repo + '/' + $Branch + '/install/update.ps1 | iex'
+$DataPath = Join-Path $Root 'data'
+Say "  Stop:     docker compose -f `"$ComposePath`" down"
+Say "  Start:    docker compose -f `"$ComposePath`" up -d"
+Say "  Update:   irm https://raw.githubusercontent.com/$Repo/$Branch/install/update.ps1 | iex"
 Say ''
-Say '  Your data is in ' + (Join-Path $Root 'data') + '. Back that folder up.'
+Say "  Your data is in $DataPath. Back that folder up."
 Say ''
 
 if ($Ready) { Start-Process $Url }
