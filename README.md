@@ -33,7 +33,25 @@ line on it has no price, which is what makes shipping an unpriced rate book
 safe. Another trade's lists can be added later from Settings; that path adds
 only, and never retires or reprices anything.
 
-## Running it
+## Installing it
+
+One line, on Windows:
+
+```powershell
+irm https://raw.githubusercontent.com/VibeLogicCode/JobBook/main/install/windows.ps1 | iex
+```
+
+One line, on a Synology, QNAP or any Linux box:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/VibeLogicCode/JobBook/main/install/nas.sh | sh
+```
+
+Both check Docker, generate the two passwords, pull the image, start it and hand
+you an address. [INSTALL.md](INSTALL.md) has the no-terminal Synology path, what
+the first run asks you, updating, backups and the x86_64 requirement.
+
+## Running it from source
 
 ```bash
 cp .env.example .env          # then set INTERNAL_RENDER_SECRET to something long

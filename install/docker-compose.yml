@@ -1,0 +1,128 @@
+# JobBook, ready to run. Nothing to build.
+#
+# ---------------------------------------------------------------------------
+# WHAT THIS IS
+# ---------------------------------------------------------------------------
+#
+# Two containers and a folder: PostgreSQL, and JobBook itself. Drop this file
+# in a folder beside a `.env`, run `docker compose up -d`, and open the port.
+# The installers in this directory write both files for you.
+#
+# It works unchanged on Synology Container Manager, QNAP Container Station,
+# Unraid, TrueNAS SCALE, a Windows or Mac Docker Desktop, or any plain Linux
+# box. Nothing here is Synology-specific.
+#
+# The fuller compose file at `deploy/synology/docker-compose.yml` adds the
+# encrypted backup sidecar and the Caddy/tunnel options. This one is the short
+# road in.
+#
+# ---------------------------------------------------------------------------
+# x86_64 ONLY
+# ---------------------------------------------------------------------------
+#
+# The image carries a real Chromium, because the PDF a customer signs is
+# rendered by one. That build is amd64, so the ARM Synology models (DS220j,
+# DS223, and the other Realtek/ARM units) cannot run this image. An x86_64 NAS
+# -- anything with a Celeron, Pentium, i3 or Ryzen -- is fine, and so is any
+# ordinary PC.
+#
+# ---------------------------------------------------------------------------
+# NOTHING IS PUBLISHED BUT THE APP
+# ---------------------------------------------------------------------------
+#
+# PostgreSQL has no `ports:` section at all. It is reachable only by the app,
+# over the private network compose creates, so the database is not exposed to
+# the LAN even by accident.
+
+name: jobbook
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: quote
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is missing from .env}
+      POSTGRES_DB: quote
+    volumes:
+      # A bind mount rather than a named volume, so the data is a folder you
+      # can see, copy and back up with the NAS's own tools.
+      - ${JOBBOOK_DATA:-./data}/db:/var/lib/postgresql/data
+    healthcheck:
+      # The app waits for this. Without it the first boot races the database
+      # and the migration fails on a connection that was never going to answer
+      # yet.
+      test: ['CMD-SHELL', 'pg_isready -U quote -d quote']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  app:
+    image: ${JOBBOOK_IMAGE:-ghcr.io/vibelogiccode/jobbook:latest}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://quote:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is missing from .env}@db:5432/quote
+
+      # Signs the internal request that renders a PDF. It never leaves the
+      # compose network; it exists so that nothing else can ask the app to
+      # render a document.
+      INTERNAL_RENDER_SECRET: ${INTERNAL_RENDER_SECRET:?INTERNAL_RENDER_SECRET is missing from .env}
+      INTERNAL_BASE_URL: http://127.0.0.1:3000
+
+      # AUTH_MODE=local AUTHENTICATES NOBODY. Every visitor is treated as the
+      # owner, which is correct for a machine on your own network and wrong for
+      # anything reachable from the internet. Do not port-forward this. When
+      # you are ready to reach it from outside, `docker/README-access.md`
+      # covers Cloudflare Tunnel and in-app sign-in; the app refuses to run two
+      # modes at once rather than quietly trusting a stranger.
+      AUTH_MODE: ${AUTH_MODE:-local}
+
+      # Files live in the folder below, not inside the container, so an update
+      # never touches them.
+      FILES_ROOT: /data/files
+
+      # A fictional demo tenant on first boot, for a look around. Off by
+      # default: this is somebody's real business, and demo rows in it are
+      # rows they have to find and delete.
+      SEED_DEMO: ${SEED_DEMO:-0}
+
+      # Unset means no backups are taken and the boot log says so. Generate a
+      # keypair on a workstation with `age-keygen`, put the PUBLIC half here,
+      # and keep the private half in a password manager -- the machine then
+      # writes backups it cannot itself read.
+      BACKUP_AGE_PUBLIC_KEY: ${BACKUP_AGE_PUBLIC_KEY:-}
+    volumes:
+      - ${JOBBOOK_DATA:-./data}/files:/data/files
+      - ${JOBBOOK_DATA:-./data}/config:/data/config
+    ports:
+      # LEFT of the colon is the port on your machine; right is fixed.
+      # 38080 by default because a NAS already uses 80, 443, 5000 and 5001 for
+      # its own interface.
+      - '${APP_BIND:-0.0.0.0}:${APP_PORT:-38080}:3000'
+
+  # The hourly job that writes reminders from your rules. Same image, one
+  # command: without it the reminder screen stays empty and nothing is chased.
+  reminders:
+    image: ${JOBBOOK_IMAGE:-ghcr.io/vibelogiccode/jobbook:latest}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    # The loop lives in this shell script, not in the Node process: one pass
+    # per hour, and the process exits between them rather than holding a
+    # database connection open all night for work that takes a second.
+    entrypoint: ['/usr/local/bin/reminder-loop.sh']
+    # The image's healthcheck pings the web server's /api/health, and this
+    # container runs no web server -- it would report unhealthy forever, a
+    # permanent false alarm sitting beside the real signal.
+    healthcheck:
+      disable: true
+    environment:
+      DATABASE_URL: postgres://quote:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is missing from .env}@db:5432/quote
+      # Lower it to watch the thing work on a new install. There is no cost to
+      # running it more often: an evaluation that finds nothing new inserts
+      # nothing.
+      REMINDER_INTERVAL_MINUTES: ${REMINDER_INTERVAL_MINUTES:-60}
