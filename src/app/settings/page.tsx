@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { loadSettings } from '@/app/settings/load';
 import { SETTINGS_GROUPS } from '@/app/settings/nav';
+import { deploymentModules } from '@/lib/modules/read';
 import { Notice } from '@/components/ui/Notice';
 import { Section } from '@/components/settings/Section';
 
@@ -10,6 +11,7 @@ export const dynamic = 'force-dynamic';
 export const metadata: Metadata = { title: 'Settings' };
 
 export default async function SettingsIndexPage() {
+  const modules = await deploymentModules();
   const context = await loadSettings('settings.read');
 
   return (
@@ -65,6 +67,10 @@ export default async function SettingsIndexPage() {
         </div>
 
         <ul className="mt-4 flex flex-col gap-2">
+          {/* Both of these point at screens that can be switched off, so both
+              go when they are. A settings index offering a link the rail does
+              not is the switch half-working. */}
+          {modules.templates ? (
           <li>
             {/* Scope templates are their own screen rather than a settings
                 section: a template is edited while quoting, not while
@@ -80,6 +86,8 @@ export default async function SettingsIndexPage() {
               </span>
             </Link>
           </li>
+          ) : null}
+          {modules.vendors ? (
           <li>
             {/* Vendors are their own screen for the same reason scope templates
                 are: a subcontractor is added the day one is hired, which is
@@ -97,6 +105,7 @@ export default async function SettingsIndexPage() {
               </span>
             </Link>
           </li>
+          ) : null}
         </ul>
       </Section>
     </div>

@@ -10,6 +10,7 @@ import { loadRelations } from '@/app/quotes/[id]/related';
 import { loadAcceptanceSiblings } from '@/app/quotes/[id]/siblings';
 import { PageParentLink } from '@/components/ui/PageHeader';
 import { Worksheet } from '@/components/worksheet/Worksheet';
+import { deploymentModules } from '@/lib/modules/read';
 import { flagsForQuote } from '@/lib/posture/read';
 import { loadQuote } from '@/lib/quote/load';
 
@@ -41,12 +42,13 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
   // stacking round trips in front of the first paint. `flagsForQuote` joins
   // through to the project type rather than waiting on `loadQuote` for the
   // project id, which is the only reason it exists as its own reader.
-  const [data, relations, siblings, owner, flags, clauses] = await Promise.all([
+  const [data, relations, siblings, owner, flags, modules, clauses] = await Promise.all([
     loadQuote(id),
     loadRelations(id),
     loadAcceptanceSiblings(id),
     loadOwningProject(id),
     flagsForQuote(db, id),
+    deploymentModules(),
     /**
      * The saved exclusions and assumptions, as suggestions for the sheet.
      *
@@ -124,13 +126,17 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
           nothing at all once a quote is won, declined or superseded. Chasing
           is exactly what a quote sitting unanswered needs, and "remind me
           about this one" outlives the decision it was waiting on. */}
-      <section className="no-print border-t border-line px-4 py-3 sm:px-6">
-        <AddReminderForm
-          entityType="quote"
-          entityId={data.quote.id}
-          label={data.quote.quoteNumber}
-        />
-      </section>
+      {/* A form that files a reminder is an entry point to the reminders
+          screen, so it goes when that screen does. */}
+      {modules.reminders ? (
+        <section className="no-print border-t border-line px-4 py-3 sm:px-6">
+          <AddReminderForm
+            entityType="quote"
+            entityId={data.quote.id}
+            label={data.quote.quoteNumber}
+          />
+        </section>
+      ) : null}
 
       {/* Below the document, because the lines are what the decision is about:
           the owner reads down the quote and converts it at the end of it. The

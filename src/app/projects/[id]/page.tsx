@@ -25,6 +25,7 @@ import { tenantIsoToday } from '@/components/detail/dates';
 import { AddReminderForm } from '@/components/reminders/AddReminderForm';
 import { LogActivityForm } from '@/components/timeline/LogActivityForm';
 import { Timeline } from '@/components/timeline/Timeline';
+import { deploymentModules } from '@/lib/modules/read';
 import { listTimeline } from '@/lib/reminders/repository';
 import {
   CONTRACT_TYPES, PROJECT_STAGES, stageTone, workNoun,
@@ -181,8 +182,17 @@ export default async function ProjectPage({
    * is keyed on its id, so none of them depended on another -- they were
    * simply waiting their turn.
    */
-  const [orgRows, province, flags, versions, history, customerList, projectTypeList, timeline] =
-    await Promise.all([
+  const [
+    orgRows,
+    province,
+    flags,
+    versions,
+    history,
+    customerList,
+    projectTypeList,
+    timeline,
+    modules,
+  ] = await Promise.all([
       orgQuery,
       provinceQuery,
       flagsQuery,
@@ -191,6 +201,7 @@ export default async function ProjectPage({
       customerQuery,
       projectTypeQuery,
       listTimeline('project', id),
+      deploymentModules(),
     ]);
 
   const [org] = orgRows;
@@ -446,11 +457,16 @@ export default async function ProjectPage({
                 reminder control anywhere else is one the owner has to go
                 looking for. Secondary, so it does not compete with the
                 primary action next to it. */}
-            <AddReminderForm
-              entityType="project"
-              entityId={project.id}
-              label={project.name}
-            />
+            {/* Gone when reminders are switched off: a control that files
+                something onto a screen this deployment does not have writes
+                into a drawer nobody opens. */}
+            {modules.reminders ? (
+              <AddReminderForm
+                entityType="project"
+                entityId={project.id}
+                label={project.name}
+              />
+            ) : null}
           </div>
         ) : null}
         <Timeline

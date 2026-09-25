@@ -16,6 +16,7 @@ import { readSetupGate } from '@/app/setup/state';
 import { loadOrganization } from '@/lib/organization/load';
 import { formatCents } from '@/lib/money/format';
 import { tenantToday } from '@/lib/quote/dates';
+import { deploymentModules } from '@/lib/modules/read';
 import { listReminders, type ReminderRow } from '@/lib/reminders/repository';
 import { NEEDS_ATTENTION, urgencyOf } from '@/components/reminders/urgency';
 
@@ -125,7 +126,16 @@ export default async function TodayPage() {
   const drafts = rows.filter((row) => row.status === 'draft');
   const outstanding = awaiting.reduce((sum, row) => sum + row.totalCents, 0);
 
-  const openReminders = await listReminders({ status: 'open' });
+  /**
+   * Skipped entirely when reminders are switched off.
+   *
+   * Not just hidden: a panel this deployment will not render is a query it
+   * should not run, and the rules keep firing in the background either way --
+   * what is switched off is the SCREEN, so the work waits on the reminders
+   * list for whenever it is turned back on.
+   */
+  const modules = await deploymentModules();
+  const openReminders = modules.reminders ? await listReminders({ status: 'open' }) : [];
   /**
    * Late or due today, and nothing else.
    *
@@ -160,7 +170,13 @@ export default async function TodayPage() {
 
       {/* First on the screen, above the money. The figure below is what the
           business is worth this week; this is what has to happen this morning,
-          and a panel underneath two lists is a panel nobody scrolls to. */}
+          and a panel underneath two lists is a panel nobody scrolls to.
+
+          Absent when reminders are switched off. A card advertising a screen
+          that is not on the rail -- with a button into it -- is the switch not
+          working: "off" has to mean not offered ANYWHERE, not merely missing
+          from the menu. */}
+      {modules.reminders ? (
       <Card className="mb-6">
         <CardHeader
           title="Reminders"
@@ -195,6 +211,7 @@ export default async function TodayPage() {
           </CardFooter>
         ) : null}
       </Card>
+      ) : null}
 
       {/* `from` rather than a comma: the figure is the sum of the quotes that
           are out, not a stored number, and MetricCard writes every derived
